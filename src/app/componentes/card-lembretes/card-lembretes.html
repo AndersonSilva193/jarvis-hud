@@ -1,0 +1,10 @@
+<ul class="lista">
+  @for (item of dados().itens; track item.hora + item.texto) {
+    <li class="item">
+      <span class="hora">{{ item.hora }}</span>
+      <span class="texto">{{ item.texto }}</span>
+    </li>
+  } @empty {
+    <li class="vazio">Nada marcado para hoje.</li>
+  }
+</ul>

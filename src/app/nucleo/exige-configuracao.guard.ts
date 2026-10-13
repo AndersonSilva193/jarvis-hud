@@ -1,0 +1,10 @@
+import { inject } from '@angular/core';
+import { Router, type CanActivateFn } from '@angular/router';
+
+import { ConfigStore } from './config.store';
+
+/** Sem URL e token não há HUD nenhum para mostrar: manda para a tela de configuração. */
+export const exigeConfiguracao: CanActivateFn = () => {
+  const config = inject(ConfigStore);
+  return config.configurado() ? true : inject(Router).createUrlTree(['/configuracao']);
+};

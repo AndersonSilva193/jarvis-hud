@@ -1,0 +1,72 @@
+@use '../../estilos/hud' as hud;
+
+:host {
+  display: block;
+}
+
+.sites {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'sinal nome'
+    '. resultado';
+  column-gap: 0.75rem;
+  row-gap: 0.15rem;
+  align-items: center;
+}
+
+.sinal {
+  grid-area: sinal;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: hud.$ok;
+  box-shadow: 0 0 10px rgba(77, 255, 168, 0.8);
+}
+
+.nome {
+  grid-area: nome;
+  font-size: 1.02rem;
+  color: hud.$texto;
+}
+
+.resultado {
+  grid-area: resultado;
+  font-size: 0.78rem;
+  color: hud.$texto-fraco;
+}
+
+.site--caido {
+  .sinal {
+    background: hud.$erro;
+    box-shadow: 0 0 10px rgba(255, 107, 125, 0.8);
+    animation: hud-pulsar 1.2s ease-in-out infinite;
+  }
+
+  .resultado {
+    color: hud.$erro;
+  }
+}
+
+.vazio {
+  @include hud.rotulo(0.66rem);
+  color: hud.$texto-fraco;
+}
+
+.servidor {
+  margin: 1.3rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(95, 242, 255, 0.14);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: hud.$ciano;
+}

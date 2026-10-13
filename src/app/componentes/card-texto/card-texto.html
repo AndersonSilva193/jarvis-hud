@@ -1,0 +1,5 @@
+<div class="linhas" [class.linhas--falha]="comFalha()">
+  @for (linha of linhas(); track $index) {
+    <p class="linha">{{ linha }}</p>
+  }
+</div>

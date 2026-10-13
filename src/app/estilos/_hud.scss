@@ -1,0 +1,54 @@
+// Tokens e moldura do HUD. Importado pelo styles.scss global e por cada card.
+
+// Azuis do fundo, do mais escuro (borda da tela) ao mais claro (centro).
+$fundo-abissal: #01050e;
+$fundo: #030a18;
+$fundo-claro: #07162c;
+
+// O ciano é a tinta do HUD: borda, texto de rótulo e brilho.
+$ciano: #5ff2ff;
+$ciano-forte: #a6f8ff;
+$ciano-fraco: rgba(95, 242, 255, 0.28);
+$azul-energia: #2d7dff;
+
+$texto: #dff4ff;
+$texto-fraco: rgba(223, 244, 255, 0.55);
+$alerta: #ffb545;
+$erro: #ff6b7d;
+$ok: #4dffa8;
+
+$mono: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
+
+// O canto cortado é o que dá a cara de painel de HUD em vez de card de site.
+@mixin moldura($corte: 18px) {
+  position: relative;
+  background: linear-gradient(160deg, rgba(10, 32, 62, 0.72), rgba(3, 12, 26, 0.86));
+  border: 1px solid $ciano-fraco;
+  clip-path: polygon(
+    $corte 0,
+    100% 0,
+    100% calc(100% - #{$corte}),
+    calc(100% - #{$corte}) 100%,
+    0 100%,
+    0 $corte
+  );
+  backdrop-filter: blur(10px) saturate(130%);
+  box-shadow:
+    0 0 0 1px rgba(3, 12, 26, 0.8),
+    0 18px 60px rgba(0, 0, 0, 0.55),
+    0 0 42px rgba(45, 125, 255, 0.14);
+}
+
+// Rótulo mono, caixa alta e espaçado: o texto "de instrumento" da tela.
+@mixin rotulo($tamanho: 0.72rem) {
+  font-family: $mono;
+  font-size: $tamanho;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: $ciano;
+}
+
+@mixin brilho-texto($cor: $ciano, $forca: 0.55) {
+  text-shadow: 0 0 18px rgba($cor, $forca);
+}

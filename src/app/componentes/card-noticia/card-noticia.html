@@ -1,0 +1,18 @@
+<figure class="foto">
+  @if (comImagem()) {
+    <img
+      class="imagem"
+      [src]="dados().imagemUrl"
+      [alt]="dados().titulo"
+      referrerpolicy="no-referrer"
+      loading="eager"
+      (error)="aoFalharImagem()"
+    />
+  } @else {
+    <span class="sem-foto" aria-hidden="true">// sem imagem no feed</span>
+  }
+  <span class="veu" aria-hidden="true"></span>
+</figure>
+
+<p class="fonte">{{ fonte() }}</p>
+<h2 class="manchete">{{ dados().titulo }}</h2>

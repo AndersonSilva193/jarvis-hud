@@ -1,0 +1,56 @@
+@use './app/estilos/hud' as hud;
+
+// Tela cheia de monitor: nada de scroll, nada de barra, nada de seleção acidental.
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: hud.$fundo-abissal;
+  color: hud.$texto;
+  font-family: hud.$mono;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  user-select: none;
+}
+
+// Esconde o cursor depois de um tempo parado: o HUD fica num monitor, sem mouse.
+body.sem-cursor,
+body.sem-cursor * {
+  cursor: none;
+}
+
+app-root {
+  display: block;
+  height: 100%;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hud.$ciano-fraco;
+}
+
+::selection {
+  background: hud.$ciano-fraco;
+}
+
+@keyframes hud-pulsar {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}

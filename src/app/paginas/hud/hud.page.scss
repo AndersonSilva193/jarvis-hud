@@ -1,0 +1,206 @@
+@use '../../estilos/hud' as hud;
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+.hud {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.vinheta {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 44%,
+    hud.$fundo-claro 0%,
+    hud.$fundo 45%,
+    hud.$fundo-abissal 78%
+  );
+}
+
+// A grade some nas bordas, senão parece papel milimetrado em vez de instrumento.
+.grade {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(to right, rgba(95, 242, 255, 0.055) 0 1px, transparent 1px 58px),
+    repeating-linear-gradient(to bottom, rgba(95, 242, 255, 0.055) 0 1px, transparent 1px 58px);
+  mask-image: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0.95) 20%, transparent 80%);
+}
+
+.falando {
+  position: absolute;
+  top: 2.6rem;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0;
+  transform: translateX(-50%);
+  @include hud.rotulo(0.8rem);
+  @include hud.brilho-texto(hud.$ciano, 0.8);
+  color: hud.$ciano-forte;
+}
+
+.ponto {
+  width: 0.46rem;
+  height: 0.46rem;
+  border-radius: 50%;
+  background: hud.$ciano-forte;
+  box-shadow: 0 0 14px hud.$ciano;
+  animation: hud-pulsar 1s ease-in-out infinite;
+}
+
+.orbe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(74vh, 52rem);
+  height: min(74vh, 52rem);
+  transform: translate(-50%, -54%);
+}
+
+.palco {
+  // Quantos blocos já foram falados: é o que centraliza a fileira enquanto ela cresce.
+  --total: 0;
+  // Distância entre os cards da fileira, no tamanho que eles aparecem na tela.
+  --passo: min(12.4rem, 13vw);
+
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.slot {
+  @include hud.moldura(20px);
+
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(39rem, 78vw);
+  max-height: 72vh;
+  padding: 1.9rem 2.1rem;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.86);
+  // Só transform e opacity: a animação roda na GPU e não repagina nada.
+  transition:
+    transform 0.95s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.55s ease;
+}
+
+.slot--palco {
+  opacity: 1;
+  transform: translate(-50%, -52%) scale(1);
+}
+
+.slot--fileira {
+  --desvio: calc((var(--ordem) - (var(--total) - 1) / 2) * var(--passo));
+
+  opacity: 0.62;
+  transform: translate(calc(-50% + var(--desvio)), calc(-50% + 30vh)) scale(0.3);
+}
+
+.rotulo-bloco {
+  margin: 0 0 1.1rem;
+  @include hud.rotulo(0.62rem);
+  color: hud.$ciano-fraco;
+}
+
+.rodape {
+  position: absolute;
+  right: 2.2rem;
+  bottom: 1.6rem;
+  left: 2.2rem;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.conexao {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  @include hud.rotulo(0.6rem);
+  color: hud.$texto-fraco;
+}
+
+.luz {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: hud.$texto-fraco;
+}
+
+.luz--online {
+  background: hud.$ok;
+  box-shadow: 0 0 10px rgba(77, 255, 168, 0.75);
+}
+
+.luz--conectando {
+  background: hud.$ciano;
+  animation: hud-pulsar 1.1s ease-in-out infinite;
+}
+
+.luz--reconectando {
+  background: hud.$alerta;
+  animation: hud-pulsar 0.8s ease-in-out infinite;
+}
+
+.erro {
+  color: hud.$erro;
+  letter-spacing: 0.18em;
+}
+
+.acoes {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+}
+
+.elo {
+  @include hud.rotulo(0.58rem);
+  color: hud.$texto-fraco;
+  text-decoration: none;
+  transition: color 0.2s ease;
+
+  &:hover,
+  &:focus-visible {
+    color: hud.$ciano;
+  }
+}
+
+// Discreto de propósito: o botão existe porque o Chrome exige um clique, não para ser o centro.
+.bom-dia {
+  padding: 0.6rem 1.5rem;
+  background: rgba(7, 22, 44, 0.6);
+  border: 1px solid hud.$ciano-fraco;
+  color: hud.$ciano;
+  cursor: pointer;
+  @include hud.rotulo(0.64rem);
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    color 0.2s ease;
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: rgba(95, 242, 255, 0.12);
+    color: hud.$ciano-forte;
+    box-shadow: 0 0 24px rgba(95, 242, 255, 0.22);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}

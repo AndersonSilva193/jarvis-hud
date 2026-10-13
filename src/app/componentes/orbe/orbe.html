@@ -1,0 +1,5 @@
+<canvas #tela class="tela" aria-hidden="true"></canvas>
+
+@if (legenda()) {
+  <p class="legenda" [class.legenda--trabalhando]="estado() === 'gerando'">{{ legenda() }}</p>
+}

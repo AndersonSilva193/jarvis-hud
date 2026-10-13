@@ -1,0 +1,13 @@
+<ul class="sites">
+  @for (site of dados().sites; track site.nome) {
+    <li class="site" [class.site--caido]="!estaDePe(site.resultado)">
+      <span class="sinal" aria-hidden="true"></span>
+      <span class="nome">{{ site.nome }}</span>
+      <span class="resultado">{{ site.resultado }}</span>
+    </li>
+  } @empty {
+    <li class="vazio">Nenhum site monitorado</li>
+  }
+</ul>
+
+<p class="servidor">{{ dados().servidor }}</p>

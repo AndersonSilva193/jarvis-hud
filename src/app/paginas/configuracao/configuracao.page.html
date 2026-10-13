@@ -1,0 +1,62 @@
+<section class="tela">
+  <div class="vinheta" aria-hidden="true"></div>
+  <div class="grade" aria-hidden="true"></div>
+
+  <form class="painel" (submit)="conectar($event)">
+    <p class="marca">Jarvis</p>
+    <h1 class="titulo">HUD de briefing</h1>
+    <p class="explicacao">
+      Onde está a API do Jarvis e qual é o token dela. Fica guardado neste navegador.
+    </p>
+
+    <label class="campo">
+      <span class="rotulo">URL da API</span>
+      <input
+        class="entrada"
+        type="url"
+        name="url"
+        placeholder="https://seu-dominio  ou  http://localhost:8090"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="url()"
+        (input)="aoDigitarUrl($event)"
+      />
+    </label>
+
+    <label class="campo">
+      <span class="rotulo">HUD_TOKEN</span>
+      <input
+        class="entrada"
+        type="password"
+        name="token"
+        placeholder="o valor de HUD_TOKEN no .env"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="token()"
+        (input)="aoDigitarToken($event)"
+      />
+    </label>
+
+    @if (avisoDeConteudoMisto()) {
+      <p class="aviso">
+        Esta página está em HTTPS e a API em HTTP — o navegador vai bloquear. Ponha a API atrás de
+        HTTPS ou abra o HUD em http://localhost.
+      </p>
+    }
+
+    @if (mensagem()) {
+      <p class="falha">{{ mensagem() }}</p>
+    }
+
+    <button class="conectar" type="submit" [disabled]="!podeConectar()">
+      {{ testando() ? 'testando' : 'Conectar' }}
+    </button>
+
+    <p class="voz">
+      voz: {{ voz.nomeDaVoz() }}
+      @if (semVozEmPortugues()) {
+        <span class="voz-aviso">— nenhuma voz pt-BR instalada neste sistema</span>
+      }
+    </p>
+  </form>
+</section>

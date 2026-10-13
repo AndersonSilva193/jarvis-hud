@@ -1,0 +1,149 @@
+@use '../../estilos/hud' as hud;
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+.tela {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.vinheta {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 45%,
+    hud.$fundo-claro 0%,
+    hud.$fundo 48%,
+    hud.$fundo-abissal 80%
+  );
+}
+
+.grade {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(to right, rgba(95, 242, 255, 0.05) 0 1px, transparent 1px 58px),
+    repeating-linear-gradient(to bottom, rgba(95, 242, 255, 0.05) 0 1px, transparent 1px 58px);
+  mask-image: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0.9) 10%, transparent 75%);
+}
+
+.painel {
+  @include hud.moldura(22px);
+
+  position: relative;
+  width: min(30rem, 88vw);
+  padding: 2.6rem 2.4rem;
+}
+
+.marca {
+  margin: 0;
+  @include hud.rotulo(0.68rem);
+  @include hud.brilho-texto(hud.$ciano, 0.6);
+}
+
+.titulo {
+  margin: 0.5rem 0 0.9rem;
+  font-size: 1.5rem;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  color: hud.$texto;
+}
+
+.explicacao {
+  margin: 0 0 2rem;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: hud.$texto-fraco;
+}
+
+.campo {
+  display: block;
+  margin-bottom: 1.4rem;
+}
+
+.rotulo {
+  display: block;
+  margin-bottom: 0.55rem;
+  @include hud.rotulo(0.58rem);
+  color: hud.$texto-fraco;
+}
+
+.entrada {
+  width: 100%;
+  padding: 0.8rem 0.9rem;
+  background: rgba(1, 7, 18, 0.7);
+  border: 1px solid rgba(95, 242, 255, 0.2);
+  color: hud.$texto;
+  font-family: hud.$mono;
+  font-size: 0.92rem;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+
+  &::placeholder {
+    color: rgba(223, 244, 255, 0.28);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: hud.$ciano;
+    box-shadow: 0 0 20px rgba(95, 242, 255, 0.18);
+  }
+}
+
+.aviso,
+.falha {
+  margin: 0 0 1.2rem;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.aviso {
+  color: hud.$alerta;
+}
+
+.falha {
+  color: hud.$erro;
+}
+
+.conectar {
+  width: 100%;
+  padding: 0.85rem;
+  background: rgba(95, 242, 255, 0.1);
+  border: 1px solid hud.$ciano-fraco;
+  color: hud.$ciano-forte;
+  cursor: pointer;
+  @include hud.rotulo(0.68rem);
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: rgba(95, 242, 255, 0.18);
+    box-shadow: 0 0 28px rgba(95, 242, 255, 0.24);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+.voz {
+  margin: 1.6rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.6;
+  color: rgba(223, 244, 255, 0.35);
+}
+
+.voz-aviso {
+  color: hud.$alerta;
+}

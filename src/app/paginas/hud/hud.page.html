@@ -1,0 +1,72 @@
+<section class="hud">
+  <div class="vinheta" aria-hidden="true"></div>
+  <div class="grade" aria-hidden="true"></div>
+
+  @if (voz.falando()) {
+    <p class="falando"><span class="ponto" aria-hidden="true"></span>falando</p>
+  }
+
+  <app-orbe
+    class="orbe"
+    [estado]="estadoOrbe()"
+    [intensidade]="voz.intensidade()"
+    [legenda]="player.legenda()"
+  />
+
+  <div class="palco" [style.--total]="player.indiceAtual()">
+    @for (bloco of player.blocos(); track bloco.id; let i = $index) {
+      <article
+        class="slot"
+        [class.slot--palco]="i === player.indiceAtual()"
+        [class.slot--fileira]="i < player.indiceAtual()"
+        [style.--ordem]="i"
+      >
+        <p class="rotulo-bloco">{{ bloco.rotulo }}</p>
+
+        @switch (bloco.tipo) {
+          @case ('clima') {
+            <app-card-clima [dados]="bloco.dados" />
+          }
+          @case ('lembretes') {
+            <app-card-lembretes [dados]="bloco.dados" />
+          }
+          @case ('sistemas') {
+            <app-card-sistemas [dados]="bloco.dados" />
+          }
+          @case ('noticia') {
+            <app-card-noticia [dados]="bloco.dados" />
+          }
+          @case ('abertura') {
+            <app-card-texto [linhas]="bloco.linhas" />
+          }
+          @default {
+            <app-card-texto [linhas]="bloco.linhas" [comFalha]="true" />
+          }
+        }
+      </article>
+    }
+  </div>
+
+  <footer class="rodape">
+    <div class="conexao">
+      <span
+        class="luz"
+        [class.luz--online]="eventos.status() === 'online'"
+        [class.luz--conectando]="eventos.status() === 'conectando'"
+        [class.luz--reconectando]="eventos.status() === 'reconectando'"
+        aria-hidden="true"
+      ></span>
+      <span class="estado">{{ estadoDaConexao() }}</span>
+      @if (erro()) {
+        <span class="erro">{{ erro() }}</span>
+      }
+    </div>
+
+    <div class="acoes">
+      <a class="elo" routerLink="/configuracao">configuração</a>
+      <button class="bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo()">
+        {{ pedindo() ? 'pedindo' : 'Bom dia' }}
+      </button>
+    </div>
+  </footer>
+</section>

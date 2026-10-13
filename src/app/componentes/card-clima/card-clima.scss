@@ -1,0 +1,76 @@
+@use '../../estilos/hud' as hud;
+
+:host {
+  display: block;
+}
+
+.cidade {
+  margin: 0;
+  @include hud.rotulo(0.7rem);
+  color: hud.$texto-fraco;
+}
+
+.agora {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  margin: 0.4rem 0 0;
+  line-height: 0.95;
+}
+
+.numero {
+  font-size: clamp(4rem, 9vw, 7rem);
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  color: hud.$ciano-forte;
+  @include hud.brilho-texto(hud.$ciano, 0.5);
+}
+
+.unidade {
+  margin-top: 0.8rem;
+  font-size: 1.4rem;
+  font-weight: 300;
+  color: hud.$ciano;
+}
+
+.descricao {
+  margin: 0.2rem 0 1.4rem;
+  font-size: 0.95rem;
+  color: hud.$texto;
+  text-transform: lowercase;
+}
+
+.faixa {
+  display: flex;
+  gap: 2.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(95, 242, 255, 0.16);
+}
+
+.medida {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.chave {
+  @include hud.rotulo(0.6rem);
+  color: hud.$texto-fraco;
+}
+
+.valor {
+  font-size: 1.5rem;
+  font-weight: 400;
+  color: hud.$texto;
+}
+
+.medida--alerta .valor {
+  color: hud.$alerta;
+  @include hud.brilho-texto(hud.$alerta, 0.45);
+}
+
+.aviso {
+  margin: 1rem 0 0;
+  @include hud.rotulo(0.64rem);
+  color: hud.$alerta;
+}

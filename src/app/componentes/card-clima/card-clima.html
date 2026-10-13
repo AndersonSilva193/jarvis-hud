@@ -1,0 +1,27 @@
+<p class="cidade">{{ dados().cidade }}</p>
+
+<p class="agora">
+  <span class="numero">{{ dados().temperaturaAtual }}</span
+  ><span class="unidade">°C</span>
+</p>
+
+<p class="descricao">{{ dados().descricao }}</p>
+
+<div class="faixa">
+  <div class="medida">
+    <span class="chave">mín</span>
+    <span class="valor">{{ dados().minima }}°</span>
+  </div>
+  <div class="medida">
+    <span class="chave">máx</span>
+    <span class="valor">{{ dados().maxima }}°</span>
+  </div>
+  <div class="medida" [class.medida--alerta]="vaiChover()">
+    <span class="chave">chuva</span>
+    <span class="valor">{{ dados().chanceChuvaPct }}%</span>
+  </div>
+</div>
+
+@if (vaiChover()) {
+  <p class="aviso">Vale levar guarda-chuva</p>
+}

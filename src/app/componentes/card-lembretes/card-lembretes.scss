@@ -1,0 +1,48 @@
+@use '../../estilos/hud' as hud;
+
+:host {
+  display: block;
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: baseline;
+  gap: 1.1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid rgba(95, 242, 255, 0.12);
+
+  &:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+}
+
+.hora {
+  flex: none;
+  min-width: 3.6rem;
+  font-size: 1.35rem;
+  font-weight: 500;
+  color: hud.$ciano-forte;
+  @include hud.brilho-texto(hud.$ciano, 0.4);
+}
+
+.texto {
+  font-size: 1.05rem;
+  line-height: 1.45;
+  color: hud.$texto;
+}
+
+.vazio {
+  @include hud.rotulo(0.7rem);
+  color: hud.$texto-fraco;
+  line-height: 1.8;
+}
