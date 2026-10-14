@@ -13,6 +13,7 @@ import { CardNoticiaComponent } from '../../componentes/card-noticia/card-notici
 import { CardSistemasComponent } from '../../componentes/card-sistemas/card-sistemas';
 import { CardTextoComponent } from '../../componentes/card-texto/card-texto';
 import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
+import { SondasComponent } from '../../componentes/sondas/sondas';
 import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
 import {
   normalizar,
@@ -53,6 +54,7 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
     DialogoConversaComponent,
     HistoricoConversaComponent,
     OrbeComponent,
+    SondasComponent,
     CardClimaComponent,
     CardLembretesComponent,
     CardNoticiaComponent,
@@ -84,6 +86,12 @@ export class HudPage implements OnInit, OnDestroy {
       return 'gerando';
     }
     return this.voz.falando() ? 'falando' : this.escuta.ouvindo() ? 'ouvindo' : 'ocioso';
+  });
+
+  /** O selo do cabeçalho: se a ativação por voz está de pé, e se há som entrando ou saindo agora. */
+  protected readonly sinalDeVoz = computed(() => {
+    if (!this.escuta.disponivel) return 'Só texto';
+    return this.escuta.ligada() ? 'Voz online' : 'Voz em espera';
   });
 
   protected readonly estadoDaConexao = computed(() => {

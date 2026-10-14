@@ -1,0 +1,1280 @@
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/README.md src/hud/jarvis-hud-main/README.md
+--- a/README.md	2026-10-14 14:23:24.746970295 -0300
++++ b/README.md	2026-10-14 14:49:33.858703476 -0300
+@@ -9,6 +9,16 @@
+ por dentro e uma mira nos pontos cardeais. Os anéis aceleram e acendem conforme o estado (ouvindo,
+ pensando, falando). Tudo isso para no `prefers-reduced-motion`.
+ 
++O orbe é um **reator**: anel luminoso com núcleo escuro e uma coroa de arcos segmentados. Uma
++**onda de voz** atravessa a tela de borda a borda na altura dele, com espectro nas pontas e
++partículas no fundo; ela cresce com a energia real da fala (o mesmo `intensidade` que já movia o
++orbe) e respira enquanto o microfone capta. Em volta, quatro **sondas** ligadas ao anel por fios
++mostram o caminho de um pedido — entrada de áudio, transcrição, processamento e síntese de voz — e
++cada uma acende só quando a sua etapa acontece; o texto pequeno é o estado real (microfone,
++ferramenta em curso, provedor e cota de voz). As sondas apagam quando há card no palco e somem
++abaixo de 1100 px. No cabeçalho, o selo **Voz online / Voz em espera** diz se a ativação por voz
++está ligada, e as barras dele mexem enquanto há som entrando ou saindo.
++
+ O palco tem **no máximo um card**, e só entra nele **o que se olha**: um bloco do briefing, uma
+ imagem ou arquivo anexado, um código de confirmação, um erro. Fala simples do Jarvis não vira card
+ — ela é falada, aparece na legenda embaixo do orbe e fica no histórico. Para ler a conversa, abra o
+@@ -227,7 +237,9 @@
+   paginas/configuracao/          tela 1
+   paginas/hud/                   tela 2: orbe, palco, fileira e controles (um .scss por área)
+   componentes/conversa/          barra, diálogo em curso, resposta, anexos e histórico
+-  componentes/orbe/              OrbeComponent (canvas de filamentos, anéis e mira; muda com o estado)
++  componentes/orbe/              OrbeComponent: ciclo de vida dos dois canvas (reator e campo da onda)
++  componentes/orbe/desenho-orbe.ts  o desenho em funções puras: reator, onda, espectro e partículas
++  componentes/sondas/            SondasComponent: os quatro cards-satélite e os fios até o reator
+   componentes/card-clima/        CardClimaComponent
+   componentes/card-lembretes/    CardLembretesComponent
+   componentes/card-noticia/      CardNoticiaComponent
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/componentes/orbe/desenho-orbe.spec.ts src/hud/jarvis-hud-main/src/app/componentes/orbe/desenho-orbe.spec.ts
+--- a/src/app/componentes/orbe/desenho-orbe.spec.ts	1969-12-31 21:00:00.000000000 -0300
++++ b/src/app/componentes/orbe/desenho-orbe.spec.ts	2026-10-14 14:40:12.236664019 -0300
+@@ -0,0 +1,42 @@
++import { describe, expect, it } from 'vitest';
++
++import { amplitudeAlvo, criarParticulas, suavizar } from './desenho-orbe';
++
++describe('o desenho do orbe', () => {
++  it('a onda cresce com a força da fala e fica baixa em repouso', () => {
++    const repouso = amplitudeAlvo('ocioso', 0, 0);
++    const fraca = amplitudeAlvo('falando', 0.1, 0);
++    const forte = amplitudeAlvo('falando', 1, 0);
++    expect(fraca).toBeGreaterThan(repouso);
++    expect(forte).toBeGreaterThan(fraca * 2);
++    // A força chega do VozService já entre 0 e 1, mas um pico fora disso não estoura a tela.
++    expect(amplitudeAlvo('falando', 5, 0)).toBe(forte);
++  });
++
++  it('a força só vale falando: ouvir ou pensar não depende dela', () => {
++    expect(amplitudeAlvo('pensando', 1, 0)).toBe(amplitudeAlvo('pensando', 0, 0));
++    expect(amplitudeAlvo('ouvindo', 1, 2)).toBe(amplitudeAlvo('ouvindo', 0, 2));
++  });
++
++  it('a suavização chega ao alvo sem passar dele, em qualquer taxa de quadros', () => {
++    let a = 0;
++    for (let i = 0; i < 60; i++) a = suavizar(a, 1, 1 / 60);
++    expect(a).toBeGreaterThan(0.99);
++    expect(a).toBeLessThanOrEqual(1);
++    expect(suavizar(0.4, 1, 0)).toBe(0.4);
++  });
++
++  it('as partículas nascem dentro do campo', () => {
++    let semente = 1;
++    const aleatorio = () => ((semente = (semente * 16807) % 2147483647) / 2147483647);
++    const particulas = criarParticulas(200, aleatorio);
++    expect(particulas).toHaveLength(200);
++    for (const p of particulas) {
++      expect(p.x).toBeGreaterThanOrEqual(0);
++      expect(p.x).toBeLessThan(1);
++      expect(p.y).toBeGreaterThan(0);
++      expect(p.y).toBeLessThan(1);
++      expect(p.raio).toBeGreaterThan(0);
++    }
++  });
++});
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/componentes/orbe/desenho-orbe.ts src/hud/jarvis-hud-main/src/app/componentes/orbe/desenho-orbe.ts
+--- a/src/app/componentes/orbe/desenho-orbe.ts	1969-12-31 21:00:00.000000000 -0300
++++ b/src/app/componentes/orbe/desenho-orbe.ts	2026-10-14 14:37:34.848667619 -0300
+@@ -0,0 +1,371 @@
++/**
++ * O desenho do orbe, separado do componente: funções puras sobre um `CanvasRenderingContext2D`.
++ *
++ * São duas camadas. O **campo** é a faixa larga que atravessa a tela — a onda de voz, o
++ * espectro nas pontas e as partículas. O **reator** é o anel luminoso no centro, com o núcleo
++ * escuro que apaga a onda por trás dele e os arcos segmentados em volta.
++ *
++ * Fica fora do componente para poder ser desenhado sem Angular (prévia, teste visual) e para o
++ * componente continuar sendo só ciclo de vida: tamanho, visibilidade e o laço de quadros.
++ */
++
++export type EstadoDesenho = 'ocioso' | 'ouvindo' | 'gerando' | 'pensando' | 'falando';
++
++export interface Quadro {
++  readonly largura: number;
++  readonly altura: number;
++  /** Segundos acumulados da animação; zero com `prefers-reduced-motion`. */
++  readonly tempo: number;
++  readonly estado: EstadoDesenho;
++  /** 0–1: energia da fala. Só tem valor no estado `falando`. */
++  readonly forca: number;
++  /** Altura da onda em fração da altura do campo, já suavizada pelo componente. */
++  readonly amplitude: number;
++}
++
++export interface Particula {
++  readonly x: number;
++  readonly y: number;
++  readonly raio: number;
++  readonly deriva: number;
++  readonly piscar: number;
++  readonly fase: number;
++}
++
++/** Raio do anel principal em fração do lado do quadrado do orbe. Os anéis de CSS contam com ele. */
++export const RAIO_DO_REATOR = 0.24;
++
++const CIANO = '95, 242, 255';
++const AZUL = '40, 170, 255';
++
++/** A amplitude-alvo da onda por estado; o componente aproxima a atual dela quadro a quadro. */
++export function amplitudeAlvo(estado: EstadoDesenho, forca: number, tempo: number): number {
++  switch (estado) {
++    case 'falando':
++      return 0.045 + Math.max(0, Math.min(1, forca)) * 0.14;
++    case 'ouvindo':
++      // Sem nível real do microfone: uma respiração curta diz "estou captando" sem fingir dado.
++      return 0.06 + Math.sin(tempo * 5.3) * 0.012 + Math.sin(tempo * 8.9) * 0.008;
++    case 'pensando':
++    case 'gerando':
++      return 0.05;
++    default:
++      return 0.04;
++  }
++}
++
++/** Aproxima `atual` de `alvo` sem depender da taxa de quadros. */
++export function suavizar(atual: number, alvo: number, delta: number): number {
++  const passo = 1 - Math.exp(-delta * 7);
++  return atual + (alvo - atual) * passo;
++}
++
++export function criarParticulas(quantidade: number, aleatorio: () => number = Math.random): Particula[] {
++  return Array.from({ length: quantidade }, () => {
++    const grande = aleatorio() < 0.12;
++    return {
++      x: aleatorio(),
++      y: 0.08 + aleatorio() * 0.84,
++      raio: grande ? 1.8 + aleatorio() * 2.2 : 0.5 + aleatorio() * 1.1,
++      deriva: (aleatorio() - 0.5) * 0.012,
++      piscar: 0.4 + aleatorio() * 1.4,
++      fase: aleatorio() * Math.PI * 2,
++    };
++  });
++}
++
++/** Quanto o estado acelera o giro dos arcos e a fase da onda. */
++function ritmo(estado: EstadoDesenho): number {
++  switch (estado) {
++    case 'pensando':
++    case 'gerando':
++      return 2.6;
++    case 'ouvindo':
++      return 1.5;
++    case 'falando':
++      return 1.2;
++    default:
++      return 0.55;
++  }
++}
++
++/**
++ * O campo: a onda que atravessa a tela pela altura do centro do orbe, o espectro nas duas pontas
++ * e as partículas. Desenhado por baixo do reator — o núcleo escuro dele cobre o miolo da onda.
++ */
++export function desenharCampo(
++  ctx: CanvasRenderingContext2D,
++  q: Quadro,
++  particulas: readonly Particula[],
++): void {
++  const { largura: w, altura: h } = q;
++  ctx.clearRect(0, 0, w, h);
++  if (!w || !h) return;
++  const cx = w / 2;
++  const cy = h / 2;
++  const t = q.tempo * ritmo(q.estado);
++  const amp = q.amplitude * h;
++  const raioReator = h * RAIO_DO_REATOR;
++
++  ctx.save();
++  ctx.globalCompositeOperation = 'lighter';
++
++  // A linha de base: um traço quase invisível que dá eixo ao instrumento.
++  const base = gradienteHorizontal(ctx, w, CIANO, 0.12);
++  ctx.strokeStyle = base;
++  ctx.lineWidth = 1;
++  ctx.setLineDash([2, 7]);
++  ctx.beginPath();
++  ctx.moveTo(0, cy);
++  ctx.lineTo(w, cy);
++  ctx.stroke();
++  ctx.setLineDash([]);
++
++  // O espectro: barras verticais simétricas nas pontas, longe do orbe, onde a onda já se acalma.
++  const passo = Math.max(5, w / 260);
++  ctx.lineWidth = Math.max(1, passo * 0.38);
++  for (const lado of [-1, 1]) {
++    for (let d = raioReator * 2.4; d < w / 2 - passo; d += passo) {
++      const x = cx + lado * d;
++      const borda = envelope(d, w, raioReator);
++      const ruido = Math.abs(Math.sin(d * 0.071 + t * 2.1) * Math.sin(d * 0.013 - t * 1.3 + lado));
++      const altura = amp * 1.7 * borda * (0.15 + 0.85 * ruido);
++      if (altura < 1) continue;
++      ctx.strokeStyle = `rgba(${AZUL}, ${0.1 + borda * 0.22})`;
++      ctx.beginPath();
++      ctx.moveTo(x, cy - altura);
++      ctx.lineTo(x, cy + altura);
++      ctx.stroke();
++    }
++  }
++
++  // A onda: seis fios com fase deslocada. O primeiro ganha um halo largo por baixo no lugar do
++  // shadowBlur, que num canvas da largura da tela custaria caro a cada quadro.
++  const fios = 7;
++  for (let fio = fios - 1; fio >= 0; fio--) {
++    const escala = fio === 0 ? 1 : 0.55 + ((fio * 37) % 10) / 15;
++    const principal = fio === 0;
++    const caminho = (): void => {
++      ctx.beginPath();
++      const amostras = Math.ceil(w / 4);
++      for (let i = 0; i <= amostras; i++) {
++        const x = (i / amostras) * w;
++        const y = cy + amp * escala * envelope(x - cx, w, raioReator) * ondaEm((x - cx) / h, t, fio);
++        if (i === 0) ctx.moveTo(x, y);
++        else ctx.lineTo(x, y);
++      }
++    };
++    if (principal) {
++      caminho();
++      ctx.strokeStyle = gradienteHorizontal(ctx, w, AZUL, 0.16 + q.forca * 0.12);
++      ctx.lineWidth = 7;
++      ctx.stroke();
++      ctx.strokeStyle = gradienteHorizontal(ctx, w, '175, 250, 255', 0.95);
++      ctx.lineWidth = 1.8;
++      ctx.stroke();
++    } else {
++      caminho();
++      ctx.strokeStyle = gradienteHorizontal(ctx, w, fio % 2 ? AZUL : CIANO, 0.5 - fio * 0.04 + q.forca * 0.15);
++      ctx.lineWidth = fio % 2 ? 0.9 : 1.2;
++      ctx.stroke();
++    }
++  }
++
++  // As partículas: poeira que deriva devagar e pisca; as maiores têm brilho difuso.
++  for (const p of particulas) {
++    const x = (((p.x + q.tempo * p.deriva) % 1) + 1) % 1 * w;
++    const y = p.y * h + Math.sin(q.tempo * 0.3 + p.fase) * 6;
++    const brilho = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(q.tempo * p.piscar + p.fase));
++    if (p.raio > 1.7) {
++      const halo = ctx.createRadialGradient(x, y, 0, x, y, p.raio * 3);
++      halo.addColorStop(0, `rgba(${CIANO}, ${brilho * 0.55})`);
++      halo.addColorStop(1, `rgba(${CIANO}, 0)`);
++      ctx.fillStyle = halo;
++      ctx.beginPath();
++      ctx.arc(x, y, p.raio * 3, 0, Math.PI * 2);
++      ctx.fill();
++    } else {
++      ctx.fillStyle = `rgba(${CIANO}, ${brilho})`;
++      ctx.beginPath();
++      ctx.arc(x, y, p.raio, 0, Math.PI * 2);
++      ctx.fill();
++    }
++  }
++
++  ctx.restore();
++}
++
++/**
++ * O reator: núcleo escuro, anel luminoso que pulsa com a voz e os arcos segmentados que giram
++ * conforme o estado. Desenhado num quadrado; `largura` e `altura` são o lado do canvas.
++ */
++export function desenharReator(ctx: CanvasRenderingContext2D, q: Quadro): void {
++  const { largura: w, altura: h } = q;
++  ctx.clearRect(0, 0, w, h);
++  if (!w || !h) return;
++  const x = w / 2;
++  const y = h / 2;
++  const lado = Math.min(w, h);
++  const t = q.tempo * ritmo(q.estado);
++  const forca = q.estado === 'falando' ? Math.max(0, Math.min(1, q.forca)) : 0;
++  const ouvindo = q.estado === 'ouvindo';
++  const trabalhando = q.estado === 'pensando' || q.estado === 'gerando';
++  const pulso = ouvindo ? Math.sin(q.tempo * 4) * 0.012 : 0;
++  const r = lado * RAIO_DO_REATOR * (1 + forca * 0.05 + pulso);
++
++  // Halo: o brilho que vaza do anel para o fundo.
++  const halo = ctx.createRadialGradient(x, y, r * 0.8, x, y, r * 2.1);
++  halo.addColorStop(0, `rgba(${AZUL}, ${0.16 + forca * 0.14})`);
++  halo.addColorStop(0.45, `rgba(${AZUL}, ${0.06 + forca * 0.06})`);
++  halo.addColorStop(1, `rgba(${AZUL}, 0)`);
++  ctx.fillStyle = halo;
++  ctx.fillRect(0, 0, w, h);
++
++  // Núcleo: escuro de propósito. É ele que apaga a onda por trás e faz o anel parecer aceso.
++  const nucleo = ctx.createRadialGradient(x, y, 0, x, y, r);
++  nucleo.addColorStop(0, 'rgba(1, 6, 14, 0.96)');
++  nucleo.addColorStop(0.8, 'rgba(2, 10, 22, 0.9)');
++  nucleo.addColorStop(1, 'rgba(6, 30, 52, 0.85)');
++  ctx.fillStyle = nucleo;
++  ctx.beginPath();
++  ctx.arc(x, y, r, 0, Math.PI * 2);
++  ctx.fill();
++
++  ctx.save();
++  ctx.globalCompositeOperation = 'lighter';
++
++  // Filamentos internos: herança do orbe antigo, discretos, e ainda respondem à fala.
++  for (let linha = 0; linha < 3; linha++) {
++    ctx.beginPath();
++    for (let i = 0; i <= 120; i++) {
++      const a = (i / 120) * Math.PI * 2;
++      const onda = Math.sin(a * 3 + t + linha * 0.9) * 0.03 + Math.sin(a * 5 - t * 0.7 + linha) * 0.015;
++      const raio = r * (0.8 + onda + forca * 0.08);
++      const px = x + Math.cos(a + t * 0.05) * raio;
++      const py = y + Math.sin(a + t * 0.05) * raio;
++      if (i === 0) ctx.moveTo(px, py);
++      else ctx.lineTo(px, py);
++    }
++    ctx.closePath();
++    ctx.lineWidth = 0.8;
++    ctx.strokeStyle = `rgba(${AZUL}, ${0.18 + forca * 0.3})`;
++    ctx.stroke();
++  }
++
++  // Aro interno pontilhado e o fio fino logo dentro do anel.
++  ctx.setLineDash([1.5, 6]);
++  circulo(ctx, x, y, r * 0.72, `rgba(${CIANO}, 0.35)`, 1);
++  ctx.setLineDash([]);
++  circulo(ctx, x, y, r * 0.88, `rgba(${CIANO}, 0.4)`, 1);
++
++  // O anel: três passadas, do brilho largo ao filete quase branco.
++  ctx.shadowColor = `rgba(${CIANO}, 0.9)`;
++  ctx.shadowBlur = lado * 0.05;
++  circulo(ctx, x, y, r, `rgba(${AZUL}, ${0.22 + forca * 0.2})`, r * 0.11);
++  ctx.shadowBlur = lado * 0.025;
++  circulo(ctx, x, y, r, `rgba(${CIANO}, ${0.85})`, r * 0.04);
++  ctx.shadowBlur = 0;
++  circulo(ctx, x, y, r, 'rgba(235, 253, 255, 0.95)', Math.max(1, r * 0.014));
++
++  // Arcos segmentados logo fora do anel: a coroa quebrada da referência.
++  const segmentos: readonly [number, number][] = [
++    [0.05, 0.95],
++    [1.15, 0.42],
++    [1.7, 0.9],
++    [2.75, 0.3],
++    [3.2, 1.15],
++    [4.5, 0.55],
++    [5.2, 0.8],
++  ];
++  const giro = t * 0.18;
++  ctx.lineWidth = Math.max(2, r * 0.035);
++  ctx.strokeStyle = `rgba(${CIANO}, ${0.5 + forca * 0.3})`;
++  for (const [inicio, comprimento] of segmentos) {
++    ctx.beginPath();
++    ctx.arc(x, y, r * 1.2, inicio + giro, inicio + giro + comprimento);
++    ctx.stroke();
++  }
++
++  // Arcos finos mais por fora, girando ao contrário, com um ponto na ponta de cada um.
++  const contra = -t * 0.11;
++  ctx.lineWidth = 1.2;
++  for (const [inicio, comprimento] of [
++    [0.4, 1.1],
++    [2.6, 0.7],
++    [4.1, 1.3],
++  ] as const) {
++    const a = inicio + contra;
++    ctx.strokeStyle = `rgba(${CIANO}, 0.45)`;
++    ctx.beginPath();
++    ctx.arc(x, y, r * 1.36, a, a + comprimento);
++    ctx.stroke();
++    ctx.fillStyle = `rgba(${CIANO}, 0.9)`;
++    ctx.beginPath();
++    ctx.arc(x + Math.cos(a + comprimento) * r * 1.36, y + Math.sin(a + comprimento) * r * 1.36, 2.2, 0, Math.PI * 2);
++    ctx.fill();
++  }
++
++  // O arco de trabalho: corre em volta enquanto ele pensa ou escuta, como antes.
++  if (trabalhando || ouvindo) {
++    ctx.beginPath();
++    ctx.arc(x, y, r * 1.28, q.tempo * 1.4, q.tempo * 1.4 + (trabalhando ? 0.8 : 1.8));
++    ctx.lineWidth = 2;
++    ctx.strokeStyle = ouvindo ? 'rgba(146, 249, 255, 0.7)' : 'rgba(78, 172, 255, 0.75)';
++    ctx.stroke();
++  }
++
++  ctx.restore();
++}
++
++/** Três senos sobrepostos: a forma da onda num ponto `u` (distância ao centro / altura). */
++function ondaEm(u: number, t: number, fio: number): number {
++  // Cada fio tem frequência e fase um pouco próprias: juntos eles abrem e fecham como uma fita.
++  const p = fio * 0.55;
++  const f = 1 + fio * 0.07;
++  return (
++    Math.sin(u * 9 * f + t * 1.6 + p) * 0.55 +
++    Math.sin(u * 17 * f - t * 2.3 + p * 1.7) * 0.3 +
++    Math.sin(u * 31 + t * 3.1 + p * 0.6) * 0.15
++  );
++}
++
++/**
++ * Quanto da amplitude vale a uma distância `d` do centro: cresce perto do orbe, onde a onda
++ * nasce, e morre nas bordas da tela para não terminar num corte seco.
++ */
++function envelope(d: number, largura: number, raioReator: number): number {
++  const distancia = Math.abs(d);
++  const borda = Math.max(0, Math.min(1, (largura / 2 - distancia) / (largura * 0.14)));
++  const perto = Math.exp(-(((distancia - raioReator * 1.5) / (largura * 0.16)) ** 2));
++  return borda * (0.35 + 0.65 * perto);
++}
++
++function gradienteHorizontal(
++  ctx: CanvasRenderingContext2D,
++  largura: number,
++  rgb: string,
++  alfa: number,
++): CanvasGradient {
++  const g = ctx.createLinearGradient(0, 0, largura, 0);
++  g.addColorStop(0, `rgba(${rgb}, 0)`);
++  g.addColorStop(0.18, `rgba(${rgb}, ${alfa * 0.8})`);
++  g.addColorStop(0.5, `rgba(${rgb}, ${alfa})`);
++  g.addColorStop(0.82, `rgba(${rgb}, ${alfa * 0.8})`);
++  g.addColorStop(1, `rgba(${rgb}, 0)`);
++  return g;
++}
++
++function circulo(
++  ctx: CanvasRenderingContext2D,
++  x: number,
++  y: number,
++  raio: number,
++  cor: string,
++  espessura: number,
++): void {
++  ctx.beginPath();
++  ctx.arc(x, y, raio, 0, Math.PI * 2);
++  ctx.strokeStyle = cor;
++  ctx.lineWidth = espessura;
++  ctx.stroke();
++}
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/componentes/orbe/orbe.html src/hud/jarvis-hud-main/src/app/componentes/orbe/orbe.html
+--- a/src/app/componentes/orbe/orbe.html	2026-10-14 14:23:24.747843012 -0300
++++ b/src/app/componentes/orbe/orbe.html	2026-10-14 14:38:09.088666836 -0300
+@@ -1,3 +1,4 @@
++<canvas #campo class="campo" aria-hidden="true"></canvas>
+ <canvas #tela class="tela" aria-hidden="true"></canvas>
+ <span class="anel anel--externo" aria-hidden="true"></span>
+ <span class="anel anel--tiques" aria-hidden="true"></span>
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/componentes/orbe/orbe.scss src/hud/jarvis-hud-main/src/app/componentes/orbe/orbe.scss
+--- a/src/app/componentes/orbe/orbe.scss	2026-10-14 14:23:24.747862935 -0300
++++ b/src/app/componentes/orbe/orbe.scss	2026-10-14 14:48:15.381583377 -0300
+@@ -1,4 +1,5 @@
+-// O orbe é o canvas; o resto são instrumentos ao redor dele — anéis, tiques e a retícula.
++// O orbe é o reator no canvas `tela`; por baixo dele, o `campo` leva a onda de voz de ponta a
++// ponta da tela. O resto são instrumentos de CSS em volta — anéis, tiques e a retícula.
+ :host {
+   position: relative;
+   display: block;
+@@ -6,14 +7,29 @@
+   height: 100%;
+ }
+ 
+-.tela {
++.tela,
++.campo {
+   position: absolute;
+-  inset: 0;
++  top: 0;
+   display: block;
+-  width: 100%;
+   height: 100%;
+ }
+ 
++.tela {
++  left: 0;
++  width: 100%;
++}
++
++// O campo sai do quadrado do orbe e cruza a tela. Quem diz a largura é a página, por
++// `--largura-campo` (no HUD, a largura exata dele, sem transbordar); sem ela, fica no quadrado.
++// A divisão desfaz o `scale(var(--escala))` que a página aplica no orbe: sem ela, o orbe livre
++// esticaria a onda 6% além das bordas. Tem de ser aqui, onde a `--escala` herdada já vale.
++.campo {
++  left: 50%;
++  width: calc(var(--largura-campo, 100%) / var(--escala, 1));
++  translate: -50% 0;
++}
++
+ .anel,
+ .mira {
+   position: absolute;
+@@ -25,30 +41,36 @@
+ }
+ 
+ .anel--externo {
+-  width: 80%;
+-  height: 80%;
+-  border: 1px dashed rgba(95, 242, 255, 0.2);
++  width: 84%;
++  height: 84%;
++  border: 1px dashed rgba(95, 242, 255, 0.16);
+   animation: orbe-girar 60s linear infinite;
+ }
+ 
+ // Tiques a cada 15°, recortados num aro fino: a escala de um instrumento, não um anel liso.
++// `repeating-`: com o conic simples só o primeiro tique aparecia.
+ .anel--tiques {
+-  width: 66%;
+-  height: 66%;
+-  background: conic-gradient(
+-    from 0deg,
+-    rgba(95, 242, 255, 0.45) 0 0.6deg,
++  width: 74%;
++  height: 74%;
++  background: repeating-conic-gradient(
++    from -0.3deg,
++    rgba(95, 242, 255, 0.4) 0 0.6deg,
+     transparent 0.6deg 15deg
+   );
+-  mask: radial-gradient(circle, transparent 0 calc(50% - 8px), #000 calc(50% - 8px));
++  mask: radial-gradient(
++    circle,
++    transparent 0 calc(50% - 7px),
++    #000 calc(50% - 7px) calc(50% - 1px),
++    transparent 50%
++  );
+   animation: orbe-girar 110s linear infinite reverse;
+ }
+ 
+ // Quatro traços nos pontos cardeais: a mira que enquadra o orbe.
+ .mira {
+-  width: 88%;
+-  height: 88%;
+-  opacity: 0.45;
++  width: 92%;
++  height: 92%;
++  opacity: 0.4;
+   background:
+     linear-gradient(#5ff2ff, #5ff2ff) 50% 0 / 1px 16px no-repeat,
+     linear-gradient(#5ff2ff, #5ff2ff) 50% 100% / 1px 16px no-repeat,
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/componentes/orbe/orbe.ts src/hud/jarvis-hud-main/src/app/componentes/orbe/orbe.ts
+--- a/src/app/componentes/orbe/orbe.ts	2026-10-14 14:23:24.747877713 -0300
++++ b/src/app/componentes/orbe/orbe.ts	2026-10-14 14:38:07.720666867 -0300
+@@ -1,58 +1,151 @@
+ import { AfterViewInit, Component, ElementRef, OnDestroy, effect, input, viewChild } from '@angular/core';
+ 
++import {
++  amplitudeAlvo,
++  criarParticulas,
++  desenharCampo,
++  desenharReator,
++  suavizar,
++  type Particula,
++  type Quadro,
++} from './desenho-orbe';
++
+ export type EstadoOrbe = 'ocioso' | 'ouvindo' | 'gerando' | 'pensando' | 'falando';
+ 
+-/** Filamentos orgânicos; uma única animação, suspensa fora da tela. */
+-@Component({selector:'app-orbe',templateUrl:'./orbe.html',styleUrl:'./orbe.scss',host:{'[attr.data-estado]':'estado()'}})
++/** O campo é largo como a tela: mais densidade que isso só custa GPU sem aparecer. */
++const DENSIDADE_MAXIMA_DO_CAMPO = 1.5;
++/** Uma partícula a cada tantos px² do campo, para a poeira ter a mesma cara em qualquer monitor. */
++const AREA_POR_PARTICULA = 11_000;
++
++/**
++ * O reator no centro e a onda de voz que atravessa a tela.
++ *
++ * São dois canvas num laço só: o `campo` (onda, espectro e partículas, da largura da tela) e a
++ * `tela` (o anel, quadrado). O desenho em si mora em `desenho-orbe.ts`; aqui fica só o ciclo de
++ * vida — tamanho, visibilidade da aba, `prefers-reduced-motion` e a suavização da amplitude.
++ */
++@Component({
++  selector: 'app-orbe',
++  templateUrl: './orbe.html',
++  styleUrl: './orbe.scss',
++  host: { '[attr.data-estado]': 'estado()' },
++})
+ export class OrbeComponent implements AfterViewInit, OnDestroy {
+   readonly estado = input<EstadoOrbe>('ocioso');
+   readonly intensidade = input(0);
+   private readonly tela = viewChild.required<ElementRef<HTMLCanvasElement>>('tela');
++  private readonly campo = viewChild.required<ElementRef<HTMLCanvasElement>>('campo');
+   private contexto: CanvasRenderingContext2D | null = null;
++  private contextoCampo: CanvasRenderingContext2D | null = null;
+   private observador: ResizeObserver | null = null;
+   private quadro: number | null = null;
+-  private largura=0; private altura=0; private tempo=0; private anterior=0;
++  private largura = 0;
++  private altura = 0;
++  private larguraCampo = 0;
++  private alturaCampo = 0;
++  private tempo = 0;
++  private anterior = 0;
++  private amplitude = amplitudeAlvo('ocioso', 0, 0);
++  private particulas: Particula[] = [];
+   private movimento: MediaQueryList | null = null;
+-  constructor() { effect(() => { this.estado();this.intensidade();if(this.movimento?.matches)this.desenhar(); }); }
++
++  constructor() {
++    effect(() => {
++      this.estado();
++      this.intensidade();
++      if (this.movimento?.matches) this.desenhar();
++    });
++  }
++
+   ngAfterViewInit(): void {
+-    this.contexto=this.tela().nativeElement.getContext('2d');if(!this.contexto)return;
+-    this.movimento=typeof matchMedia==='function'?matchMedia('(prefers-reduced-motion: reduce)'):null;
+-    this.movimento?.addEventListener('change',this.atualizar);
+-    document.addEventListener('visibilitychange',this.atualizar);
+-    this.observador=new ResizeObserver(()=>this.ajustar());this.observador.observe(this.tela().nativeElement);
+-    this.ajustar();this.atualizar();
+-  }
+-  ngOnDestroy(): void { this.suspender();this.observador?.disconnect();document.removeEventListener('visibilitychange',this.atualizar);this.movimento?.removeEventListener('change',this.atualizar); }
+-  private suspender():void {if(this.quadro!==null)cancelAnimationFrame(this.quadro);this.quadro=null;this.anterior=0;}
+-  private readonly atualizar=()=>{this.suspender();if(document.hidden)return;this.desenhar();if(!this.movimento?.matches)this.quadro=requestAnimationFrame(this.animar);};
+-  private readonly animar=(agora:number)=>{this.quadro=null;if(document.hidden)return;const delta=this.anterior?Math.min((agora-this.anterior)/1000,.05):0;this.anterior=agora;this.tempo+=delta;this.desenhar();this.quadro=requestAnimationFrame(this.animar);};
+-  private ajustar():void {const c=this.tela().nativeElement;const d=Math.min(devicePixelRatio||1,2);this.largura=c.clientWidth;this.altura=c.clientHeight;c.width=this.largura*d;c.height=this.altura*d;this.contexto?.setTransform(d,0,0,d,0,0);this.desenhar();}
+-  private desenhar():void {
+-    const ctx=this.contexto;if(!ctx||!this.largura||!this.altura)return;
+-    const estado=this.estado(), trabalhando=estado==='pensando'||estado==='gerando', ouvindo=estado==='ouvindo';
+-    const forca=estado==='falando'?Math.max(0,Math.min(1,this.intensidade())):0;
+-    const tempo=this.movimento?.matches?0:this.tempo;
+-    const t=tempo*(trabalhando?1.1:ouvindo?.65:.28);
+-    const x=this.largura/2,y=this.altura/2,r=Math.min(this.largura,this.altura)*.34;
+-    ctx.clearRect(0,0,this.largura,this.altura);
+-    const halo=ctx.createRadialGradient(x,y,r*.4,x,y,r*1.6);halo.addColorStop(0,'#07357708');halo.addColorStop(.55,`rgba(18,95,255,${.09+forca*.08})`);halo.addColorStop(1,'#07182e00');
+-    ctx.fillStyle=halo;ctx.fillRect(0,0,this.largura,this.altura);ctx.globalCompositeOperation='lighter';
+-    for(let linha=0;linha<9;linha++){
+-      ctx.beginPath();
+-      for(let i=0;i<=200;i++){
+-        const a=i/200*Math.PI*2;
+-        const onda=Math.sin(a*3+t+linha*.72)*.055+Math.sin(a*5-t*.7+linha)*.023;
+-        const raio=r*(1+onda+forca*.09+Math.sin(t+linha)*.025);
+-        const px=x+Math.cos(a+t*.07+linha*.12)*raio;
+-        const py=y+Math.sin(a+t*.07+linha*.12)*raio*(.89+Math.sin(linha+t*.12)*.08);
+-        if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+-      }
+-      ctx.closePath();ctx.lineWidth=linha%3===0?1.5: .75;
+-      ctx.strokeStyle=linha%3===0?`rgba(60,210,255,${.4+forca*.25})`:`rgba(34,107,255,${.3+forca*.2})`;
+-      ctx.shadowBlur=linha%3===0?12:4;ctx.shadowColor='#178fff';ctx.stroke();
++    this.contexto = this.tela().nativeElement.getContext('2d');
++    this.contextoCampo = this.campo().nativeElement.getContext('2d');
++    if (!this.contexto) return;
++    this.movimento =
++      typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
++    this.movimento?.addEventListener('change', this.atualizar);
++    document.addEventListener('visibilitychange', this.atualizar);
++    this.observador = new ResizeObserver(() => this.ajustar());
++    this.observador.observe(this.tela().nativeElement);
++    this.observador.observe(this.campo().nativeElement);
++    this.ajustar();
++    this.atualizar();
++  }
++
++  ngOnDestroy(): void {
++    this.suspender();
++    this.observador?.disconnect();
++    document.removeEventListener('visibilitychange', this.atualizar);
++    this.movimento?.removeEventListener('change', this.atualizar);
++  }
++
++  private suspender(): void {
++    if (this.quadro !== null) cancelAnimationFrame(this.quadro);
++    this.quadro = null;
++    this.anterior = 0;
++  }
++
++  private readonly atualizar = (): void => {
++    this.suspender();
++    if (document.hidden) return;
++    this.desenhar();
++    if (!this.movimento?.matches) this.quadro = requestAnimationFrame(this.animar);
++  };
++
++  private readonly animar = (agora: number): void => {
++    this.quadro = null;
++    if (document.hidden) return;
++    const delta = this.anterior ? Math.min((agora - this.anterior) / 1000, 0.05) : 0;
++    this.anterior = agora;
++    this.tempo += delta;
++    this.amplitude = suavizar(
++      this.amplitude,
++      amplitudeAlvo(this.estado(), this.intensidade(), this.tempo),
++      delta,
++    );
++    this.desenhar();
++    this.quadro = requestAnimationFrame(this.animar);
++  };
++
++  private ajustar(): void {
++    const tela = this.tela().nativeElement;
++    const densidade = Math.min(devicePixelRatio || 1, 2);
++    this.largura = tela.clientWidth;
++    this.altura = tela.clientHeight;
++    tela.width = this.largura * densidade;
++    tela.height = this.altura * densidade;
++    this.contexto?.setTransform(densidade, 0, 0, densidade, 0, 0);
++
++    const campo = this.campo().nativeElement;
++    const densidadeCampo = Math.min(densidade, DENSIDADE_MAXIMA_DO_CAMPO);
++    this.larguraCampo = campo.clientWidth;
++    this.alturaCampo = campo.clientHeight;
++    campo.width = this.larguraCampo * densidadeCampo;
++    campo.height = this.alturaCampo * densidadeCampo;
++    this.contextoCampo?.setTransform(densidadeCampo, 0, 0, densidadeCampo, 0, 0);
++    const quantas = Math.round((this.larguraCampo * this.alturaCampo) / AREA_POR_PARTICULA);
++    if (quantas !== this.particulas.length) this.particulas = criarParticulas(Math.min(quantas, 160));
++
++    this.desenhar();
++  }
++
++  private desenhar(): void {
++    const parado = !!this.movimento?.matches;
++    const estado = this.estado();
++    const forca = estado === 'falando' ? Math.max(0, Math.min(1, this.intensidade())) : 0;
++    const tempo = parado ? 0 : this.tempo;
++    // Sem animação não há quadro para suavizar: a amplitude vai direto para o alvo do estado.
++    const amplitude = parado ? amplitudeAlvo(estado, forca, 0) : this.amplitude;
++    const base = { tempo, estado, forca, amplitude } satisfies Omit<Quadro, 'largura' | 'altura'>;
++    if (this.contextoCampo && this.larguraCampo && this.alturaCampo) {
++      desenharCampo(
++        this.contextoCampo,
++        { ...base, largura: this.larguraCampo, altura: this.alturaCampo },
++        this.particulas,
++      );
++    }
++    if (this.contexto && this.largura && this.altura) {
++      desenharReator(this.contexto, { ...base, largura: this.largura, altura: this.altura });
+     }
+-    ctx.shadowBlur=0;
+-    if(trabalhando||ouvindo){ctx.beginPath();ctx.arc(x,y,r*1.16,t,t+(trabalhando?.8:1.8));ctx.lineWidth=2;ctx.strokeStyle=ouvindo?'#92f9ff99':'#4eacff99';ctx.stroke();}
+-    ctx.globalCompositeOperation='source-over';
+   }
+ }
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/componentes/sondas/sondas.modelo.spec.ts src/hud/jarvis-hud-main/src/app/componentes/sondas/sondas.modelo.spec.ts
+--- a/src/app/componentes/sondas/sondas.modelo.spec.ts	1969-12-31 21:00:00.000000000 -0300
++++ b/src/app/componentes/sondas/sondas.modelo.spec.ts	2026-10-14 14:40:05.204664180 -0300
+@@ -0,0 +1,71 @@
++import { describe, expect, it } from 'vitest';
++
++import { descreverSondas, provedorDaVoz, type EntradaDasSondas } from './sondas.modelo';
++
++const REPOUSO: EntradaDasSondas = {
++  estado: 'ocioso',
++  escutaDisponivel: true,
++  escutaLigada: true,
++  ditando: false,
++  progresso: '',
++  rotuloVoz: 'VOZ: ELEVENLABS 62%',
++};
++
++const ativas = (e: EntradaDasSondas) =>
++  descreverSondas(e)
++    .filter((s) => s.ativa)
++    .map((s) => s.id);
++
++describe('as sondas do orbe', () => {
++  it('em repouso nenhuma acende e cada uma diz o estado real', () => {
++    const sondas = descreverSondas(REPOUSO);
++    expect(ativas(REPOUSO)).toEqual([]);
++    expect(sondas.map((s) => s.detalhe)).toEqual([
++      'Em espera',
++      'Fala → texto',
++      'Claude · ferramentas',
++      'ElevenLabs 62%',
++    ]);
++  });
++
++  it('cada etapa do pedido acende a sua sonda', () => {
++    expect(ativas({ ...REPOUSO, estado: 'ouvindo' })).toEqual(['entrada']);
++    expect(ativas({ ...REPOUSO, estado: 'ouvindo', ditando: true })).toEqual([
++      'entrada',
++      'transcricao',
++    ]);
++    expect(ativas({ ...REPOUSO, estado: 'pensando' })).toEqual(['processamento']);
++    expect(ativas({ ...REPOUSO, estado: 'gerando' })).toEqual(['processamento']);
++    expect(ativas({ ...REPOUSO, estado: 'falando' })).toEqual(['voz']);
++  });
++
++  it('o processamento mostra a ferramenta em curso, encurtada para caber no card', () => {
++    const [, , processamento] = descreverSondas({
++      ...REPOUSO,
++      estado: 'pensando',
++      progresso: 'Consultando o status do servidor e dos sites monitorados',
++    });
++    expect(processamento.detalhe.length).toBeLessThanOrEqual(28);
++    expect(processamento.detalhe.endsWith('…')).toBe(true);
++  });
++
++  it('sem reconhecimento de voz no navegador, a entrada diz isso', () => {
++    expect(descreverSondas({ ...REPOUSO, escutaDisponivel: false })[0].detalhe).toBe('Sem suporte');
++    expect(descreverSondas({ ...REPOUSO, escutaLigada: false })[0].detalhe).toBe(
++      'Microfone desligado',
++    );
++  });
++
++  it('o rótulo da cota vira o nome do provedor', () => {
++    expect(provedorDaVoz('VOZ: ELEVENLABS 8%')).toBe('ElevenLabs 8%');
++    expect(provedorDaVoz('VOZ: NAVEGADOR (cota)')).toBe('Navegador (cota)');
++    expect(provedorDaVoz('')).toBe('Pronta');
++  });
++
++  it('os fios terminam no mesmo raio, fora da coroa do reator', () => {
++    for (const sonda of descreverSondas(REPOUSO)) {
++      const [x, y] = sonda.alvo;
++      expect(Math.hypot(x - 50, y - 50)).toBeCloseTo(33.5, 0);
++    }
++  });
++});
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/componentes/sondas/sondas.modelo.ts src/hud/jarvis-hud-main/src/app/componentes/sondas/sondas.modelo.ts
+--- a/src/app/componentes/sondas/sondas.modelo.ts	1969-12-31 21:00:00.000000000 -0300
++++ b/src/app/componentes/sondas/sondas.modelo.ts	2026-10-14 14:46:59.240985385 -0300
+@@ -0,0 +1,131 @@
++/**
++ * As quatro sondas em volta do orbe: o caminho de um pedido falado, no sentido horário.
++ *
++ *   entrada de áudio → transcrição → processamento → síntese de voz
++ *
++ * Cada uma acende quando a sua etapa está acontecendo de verdade. Nada aqui é decorativo: o
++ * texto pequeno embaixo do título é o estado real (microfone, ditado, ferramenta, provedor de voz).
++ */
++
++export type EstadoDasSondas = 'ocioso' | 'ouvindo' | 'gerando' | 'pensando' | 'falando';
++
++export interface EntradaDasSondas {
++  readonly estado: EstadoDasSondas;
++  readonly escutaDisponivel: boolean;
++  readonly escutaLigada: boolean;
++  readonly ditando: boolean;
++  /** O que a ferramenta em curso informou, ex. "Consultando status do servidor". */
++  readonly progresso: string;
++  /** O rótulo da cota de voz, ex. "VOZ: ELEVENLABS 62%" ou "VOZ: NAVEGADOR (cota)". */
++  readonly rotuloVoz: string;
++}
++
++export type IconeSonda = 'onda' | 'documento' | 'brilho' | 'alto-falante';
++
++export interface Sonda {
++  readonly id: 'entrada' | 'transcricao' | 'processamento' | 'voz';
++  readonly titulo: string;
++  readonly detalhe: string;
++  readonly ativa: boolean;
++  readonly icone: IconeSonda;
++  readonly lado: 'esquerda' | 'direita';
++  /**
++   * Geometria em % do quadrado do orbe (0–100, centro em 50/50). `x`/`y` é a ponta do fio no
++   * card; o fio anda na horizontal até `cotovelo` e desce em diagonal até `alvo`, que fica
++   * logo fora dos arcos segmentados do reator.
++   */
++  readonly x: number;
++  readonly y: number;
++  readonly cotovelo: number;
++  readonly alvo: readonly [number, number];
++}
++
++/** Raio, em fração do lado, onde os fios tocam o reator: logo fora da coroa segmentada. */
++const RAIO_DOS_FIOS = 0.335;
++
++function pontoNoAro(graus: number): readonly [number, number] {
++  const a = (graus * Math.PI) / 180;
++  const arredondar = (n: number) => Math.round(n * 10) / 10;
++  return [
++    arredondar(50 + Math.cos(a) * RAIO_DOS_FIOS * 100),
++    arredondar(50 + Math.sin(a) * RAIO_DOS_FIOS * 100),
++  ];
++}
++
++export function descreverSondas(e: EntradaDasSondas): Sonda[] {
++  const trabalhando = e.estado === 'pensando' || e.estado === 'gerando';
++  return [
++    {
++      id: 'entrada',
++      titulo: 'Entrada de áudio',
++      detalhe: !e.escutaDisponivel
++        ? 'Sem suporte'
++        : e.estado === 'ouvindo'
++          ? 'Captando'
++          : e.escutaLigada
++            ? 'Em espera'
++            : 'Microfone desligado',
++      ativa: e.estado === 'ouvindo',
++      icone: 'onda',
++      lado: 'esquerda',
++      x: 4,
++      y: 24,
++      cotovelo: 15,
++      alvo: pontoNoAro(-140),
++    },
++    {
++      id: 'transcricao',
++      titulo: 'Transcrição',
++      detalhe: e.ditando ? 'Ditado em curso' : 'Fala → texto',
++      ativa: e.ditando,
++      icone: 'documento',
++      lado: 'direita',
++      x: 96,
++      y: 20,
++      cotovelo: 86,
++      alvo: pontoNoAro(-35),
++    },
++    {
++      id: 'processamento',
++      titulo: 'Processamento',
++      detalhe:
++        e.estado === 'gerando'
++          ? 'Montando briefing'
++          : trabalhando
++            ? encurtar(e.progresso) || 'Pensando'
++            : 'Claude · ferramentas',
++      ativa: trabalhando,
++      icone: 'brilho',
++      lado: 'direita',
++      x: 96,
++      y: 76,
++      cotovelo: 86,
++      alvo: pontoNoAro(30),
++    },
++    {
++      id: 'voz',
++      titulo: 'Síntese de voz',
++      detalhe: e.estado === 'falando' ? 'Falando' : provedorDaVoz(e.rotuloVoz),
++      ativa: e.estado === 'falando',
++      icone: 'alto-falante',
++      lado: 'esquerda',
++      x: 4,
++      y: 78,
++      cotovelo: 14,
++      alvo: pontoNoAro(150),
++    },
++  ];
++}
++
++/** "VOZ: ELEVENLABS 62%" → "ElevenLabs 62%"; sem cota conhecida, só "Pronta". */
++export function provedorDaVoz(rotulo: string): string {
++  const resto = rotulo.replace(/^VOZ:\s*/i, '').trim();
++  if (!resto) return 'Pronta';
++  return resto.replace(/^ELEVENLABS/i, 'ElevenLabs').replace(/^NAVEGADOR/i, 'Navegador');
++}
++
++/** O card é estreito: o progresso de ferramenta passa de duas palavras com frequência. */
++function encurtar(texto: string, limite = 28): string {
++  const limpo = texto.trim();
++  return limpo.length > limite ? limpo.slice(0, limite - 1).trimEnd() + '…' : limpo;
++}
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/componentes/sondas/sondas.scss src/hud/jarvis-hud-main/src/app/componentes/sondas/sondas.scss
+--- a/src/app/componentes/sondas/sondas.scss	1969-12-31 21:00:00.000000000 -0300
++++ b/src/app/componentes/sondas/sondas.scss	2026-10-14 14:39:16.872665285 -0300
+@@ -0,0 +1,114 @@
++@use '../../estilos/hud' as hud;
++
++// O host tem o mesmo quadrado do orbe (quem dá tamanho e posição é o hud.page.scss), então as
++// porcentagens da geometria batem com o anel desenhado no canvas.
++:host {
++  display: block;
++  pointer-events: none;
++  transition: opacity 0.6s ease;
++}
++
++:host(.recuada) {
++  opacity: 0.22;
++}
++
++.fios {
++  position: absolute;
++  inset: 0;
++  width: 100%;
++  height: 100%;
++  overflow: visible;
++}
++
++.fio {
++  fill: none;
++  stroke: rgba(95, 242, 255, 0.28);
++  stroke-width: 1;
++  vector-effect: non-scaling-stroke;
++  transition: stroke 0.3s ease;
++}
++
++// O fio aceso corre na direção do orbe: é o sinal entrando no reator.
++.fio--ativo {
++  stroke: rgba(166, 248, 255, 0.85);
++  stroke-dasharray: 4 4;
++  animation: sondas-correr 1s linear infinite;
++}
++
++// A ponta é um div redondo e não um círculo no SVG: com `preserveAspectRatio="none"` o círculo
++// sairia oval assim que o quadrado deixasse de ser quadrado.
++.ponta {
++  position: absolute;
++  width: 6px;
++  height: 6px;
++  margin: -3px 0 0 -3px;
++  border-radius: 50%;
++  background: rgba(95, 242, 255, 0.55);
++  box-shadow: 0 0 8px hud.$ciano;
++}
++
++.ponta--ativa {
++  background: hud.$ciano-forte;
++  box-shadow: 0 0 14px hud.$ciano;
++}
++
++.sonda {
++  @include hud.moldura(10px);
++  position: absolute;
++  translate: 0 -50%;
++  display: flex;
++  align-items: center;
++  gap: 0.75rem;
++  min-width: 13rem;
++  padding: 0.7rem 0.95rem;
++  transition:
++    border-color 0.3s ease,
++    box-shadow 0.3s ease;
++}
++
++.sonda--ativa {
++  border-color: hud.$ciano;
++  box-shadow:
++    0 0 26px rgba(45, 125, 255, 0.35),
++    inset 0 0 18px rgba(95, 242, 255, 0.12);
++}
++
++.icone {
++  width: 1.6rem;
++  height: 1.6rem;
++  flex-shrink: 0;
++  fill: none;
++  stroke: hud.$ciano;
++  stroke-width: 1.5;
++  stroke-linecap: round;
++  stroke-linejoin: round;
++}
++
++strong {
++  display: block;
++  white-space: nowrap;
++  font: 600 0.72rem hud.$mono;
++  letter-spacing: 0.14em;
++  text-transform: uppercase;
++  color: hud.$texto;
++}
++
++small {
++  display: block;
++  margin-top: 0.3rem;
++  white-space: nowrap;
++  font: 500 0.58rem hud.$mono;
++  letter-spacing: 0.14em;
++  text-transform: uppercase;
++  color: #8fb6d8;
++}
++
++.sonda--ativa small {
++  color: hud.$ciano-forte;
++}
++
++@keyframes sondas-correr {
++  to {
++    stroke-dashoffset: -16;
++  }
++}
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/componentes/sondas/sondas.ts src/hud/jarvis-hud-main/src/app/componentes/sondas/sondas.ts
+--- a/src/app/componentes/sondas/sondas.ts	1969-12-31 21:00:00.000000000 -0300
++++ b/src/app/componentes/sondas/sondas.ts	2026-10-14 14:39:08.168665484 -0300
+@@ -0,0 +1,87 @@
++import { Component, computed, input } from '@angular/core';
++
++import {
++  descreverSondas,
++  type EstadoDasSondas,
++  type IconeSonda,
++  type Sonda,
++} from './sondas.modelo';
++
++/** Traços de 24×24, no mesmo peso dos ícones do resto do HUD. */
++const ICONES: Record<IconeSonda, string> = {
++  onda: 'M2 12h2M6 8v8M10 5v14M14 9v6M18 7v10M22 12h-2',
++  documento: 'M6 3h9l4 4v14H6z M9 10h7M9 14h7M9 18h4',
++  brilho:
++    'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z M18 16l.8 2.2L21 19l-2.2.8L18 22l-.8-2.2L15 19l2.2-.8z',
++  'alto-falante': 'M4 9h4l5-4v14l-5-4H4z M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
++};
++
++/**
++ * Os cards-satélite ligados ao orbe por fios: entrada de áudio, transcrição, processamento e
++ * voz. Ficam por baixo do palco e recuam quando há card nele.
++ *
++ * É `aria-hidden` de propósito: tudo o que aparece aqui já é anunciado pela linha de estado
++ * (`role="status"`) e pelos controles do rodapé. Repetir no leitor de tela seria ruído.
++ */
++@Component({
++  selector: 'app-sondas',
++  template: `
++    <svg class="fios" viewBox="0 0 100 100" preserveAspectRatio="none">
++      @for (sonda of sondas(); track sonda.id) {
++        <polyline class="fio" [class.fio--ativo]="sonda.ativa" [attr.points]="pontos(sonda)" />
++      }
++    </svg>
++    @for (sonda of sondas(); track sonda.id) {
++      <i
++        class="ponta"
++        [class.ponta--ativa]="sonda.ativa"
++        [style.left.%]="sonda.alvo[0]"
++        [style.top.%]="sonda.alvo[1]"
++      ></i>
++      <div
++        class="sonda"
++        [class.sonda--ativa]="sonda.ativa"
++        [attr.data-sonda]="sonda.id"
++        [style.top.%]="sonda.y"
++        [style.right.%]="sonda.lado === 'esquerda' ? 100 - sonda.x : null"
++        [style.left.%]="sonda.lado === 'direita' ? sonda.x : null"
++      >
++        <svg class="icone" viewBox="0 0 24 24">
++          <path [attr.d]="icones[sonda.icone]" />
++        </svg>
++        <div>
++          <strong>{{ sonda.titulo }}</strong>
++          <small>{{ sonda.detalhe }}</small>
++        </div>
++      </div>
++    }
++  `,
++  styleUrl: './sondas.scss',
++  host: { 'aria-hidden': 'true', '[class.recuada]': 'recuada()' },
++})
++export class SondasComponent {
++  readonly estado = input<EstadoDasSondas>('ocioso');
++  readonly escutaDisponivel = input(false);
++  readonly escutaLigada = input(false);
++  readonly ditando = input(false);
++  readonly progresso = input('');
++  readonly rotuloVoz = input('');
++  /** Há card no palco: as sondas apagam e deixam o card ser o assunto. */
++  readonly recuada = input(false);
++
++  protected readonly icones = ICONES;
++  protected readonly sondas = computed(() =>
++    descreverSondas({
++      estado: this.estado(),
++      escutaDisponivel: this.escutaDisponivel(),
++      escutaLigada: this.escutaLigada(),
++      ditando: this.ditando(),
++      progresso: this.progresso(),
++      rotuloVoz: this.rotuloVoz(),
++    }),
++  );
++
++  protected pontos(sonda: Sonda): string {
++    return `${sonda.x},${sonda.y} ${sonda.cotovelo},${sonda.y} ${sonda.alvo[0]},${sonda.alvo[1]}`;
++  }
++}
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/paginas/hud/hud.page.html src/hud/jarvis-hud-main/src/app/paginas/hud/hud.page.html
+--- a/src/app/paginas/hud/hud.page.html	2026-10-14 14:23:24.748472146 -0300
++++ b/src/app/paginas/hud/hud.page.html	2026-10-14 14:39:29.139157718 -0300
+@@ -5,6 +5,9 @@
+   <header class="cabecalho">
+     <a class="marca" routerLink="/">J.A.R.V.I.S.<span>ASSISTENTE PESSOAL</span></a>
+     <span class="conexao"><span class="luz" [class.luz--online]="eventos.status() === 'online'" aria-hidden="true"></span>{{ estadoDaConexao() }}</span>
++    <span class="sinal-voz" [class.sinal-voz--ligado]="escuta.disponivel && escuta.ligada()" [class.sinal-voz--ativo]="voz.falando() || escuta.ouvindo()">
++      <span class="barras" aria-hidden="true"><i></i><i></i><i></i><i></i></span>{{ sinalDeVoz() }}
++    </span>
+     <span class="relogio" aria-hidden="true">{{ relogio() }}</span>
+     <app-historico-conversa [trocas]="conversa.trocas()" [ocupada]="conversa.ocupada()" (limpar)="limparConversa()" />
+   </header>
+@@ -14,6 +17,7 @@
+   </div>
+   <main class="conteudo">
+     <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
++    <app-sondas class="sondas" [class.sondas--livre]="orbeLivre()" [recuada]="!orbeLivre()" [estado]="estadoOrbe()" [escutaDisponivel]="escuta.disponivel" [escutaLigada]="escuta.ligada()" [ditando]="escuta.ditando()" [progresso]="conversa.progresso()" [rotuloVoz]="cota.rotulo()" />
+     <div class="palco">
+       <!-- O palco é só para o que se olha: um anexo, um código de confirmação, um erro ou o
+            briefing. Fala simples do Jarvis é voz, legenda e histórico — não ocupa a tela. -->
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/paginas/hud/hud.page.scss src/hud/jarvis-hud-main/src/app/paginas/hud/hud.page.scss
+--- a/src/app/paginas/hud/hud.page.scss	2026-10-14 14:23:24.748491369 -0300
++++ b/src/app/paginas/hud/hud.page.scss	2026-10-14 14:48:15.381058143 -0300
+@@ -1,13 +1,22 @@
+ @use '../../estilos/hud' as hud;
+ 
+ :host{display:block;height:100%;color:hud.$texto}
+-.hud{position:relative;isolation:isolate;min-height:100%;height:100dvh;display:flex;flex-direction:column;gap:clamp(.6rem,1.4vh,1rem);padding:1.4rem clamp(1rem,3vw,3.5rem);overflow:auto;background:hud.$fundo}
++// --respiro é a margem lateral: o campo da onda usa o mesmo valor para ir de borda a borda.
++.hud{--respiro:clamp(1rem,3vw,3.5rem);position:relative;isolation:isolate;min-height:100%;height:100dvh;display:flex;flex-direction:column;gap:clamp(.6rem,1.4vh,1rem);padding:1.4rem var(--respiro);overflow-x:hidden;overflow-y:auto;background:hud.$fundo}
+ 
+ .cabecalho{display:flex;align-items:center;gap:1.5rem;min-height:2.5rem;position:relative;padding-right:10rem}
+ .marca{color:hud.$texto;text-decoration:none;letter-spacing:.25em;font:600 1rem hud.$mono;@include hud.brilho-texto(hud.$ciano,.25)}.marca span{display:block;font-size:.55rem;color:#8caaca;margin-top:.4rem;letter-spacing:.22em}
+ .conexao{font-size:.7rem;color:#a6bed8;display:flex;gap:.5rem;align-items:center;letter-spacing:.1em;text-transform:uppercase}.luz,.ponto{display:inline-block;width:6px;height:6px;border-radius:50%;background:#7893ae}.luz--online{background:#68e4bf;box-shadow:0 0 10px #68e4bf99}
++// O selo de voz abre o lado direito do cabeçalho; as barras só se mexem com som entrando ou saindo.
++.sinal-voz{margin-left:auto;display:inline-flex;align-items:center;gap:.6rem;padding:.45rem .75rem;font:500 .62rem hud.$mono;letter-spacing:.2em;text-transform:uppercase;color:#8fb6d8;border:1px solid rgba(95,242,255,.22);background:rgba(3,14,30,.6)}
++.sinal-voz--ligado{color:hud.$ciano-forte;border-color:rgba(95,242,255,.5);box-shadow:0 0 16px rgba(45,125,255,.2)}
++.barras{display:inline-flex;align-items:center;gap:2px;height:12px}
++.barras i{width:2px;height:30%;background:currentColor;opacity:.8}
++.barras i:nth-child(2){height:70%;animation-delay:-.2s}.barras i:nth-child(3){height:100%;animation-delay:-.45s}.barras i:nth-child(4){height:55%;animation-delay:-.65s}
++.sinal-voz--ativo .barras i{animation:barra-voz .9s ease-in-out infinite}
++@keyframes barra-voz{50%{transform:scaleY(.35)}}
+ // O relógio: hora do aparelho, encostado na direita, antes do botão de histórico.
+-.relogio{margin-left:auto;font:500 .66rem hud.$mono;letter-spacing:.22em;color:#8fb6d8}
++.relogio{font:500 .66rem hud.$mono;letter-spacing:.22em;color:#8fb6d8}
+ 
+ // A linha de estado é a única voz sobre o que o Jarvis está fazendo: ela some do palco para o card ter a tela.
+ .estado-central{text-align:center;min-height:2.7rem}
+@@ -15,10 +24,16 @@
+ .ponto--ativo{background:hud.$ciano;box-shadow:0 0 12px hud.$azul-energia}
+ .tracos{height:3px;width:120px;margin:.7rem auto 0;background:repeating-linear-gradient(90deg,#3d9fb380 0 2px,transparent 2px 5px)}
+ 
+-.conteudo{position:relative;display:grid;place-items:center;flex:1;min-height:19rem}
++// --orbe é o lado do quadrado do orbe; as sondas usam o mesmo para os fios caírem no anel.
++// O conteúdo é container: 100cqw é a largura dele, e somando o respiro dos dois lados a onda
++// encosta nas bordas do HUD sem gerar rolagem lateral.
++.conteudo{--orbe:min(72vh,58rem);--largura-campo:calc(100cqw + 2 * var(--respiro));container-type:inline-size;position:relative;display:grid;place-items:center;flex:1;min-height:19rem}
+ // O orbe recua um passo enquanto há card por cima; sem card, ele cresce e vira o assunto da tela.
+-.orbe{--escala:1;position:absolute;inset:50% auto auto 50%;width:min(72vh,58rem);height:min(72vh,58rem);transform:translate(-50%,-50%) scale(var(--escala));pointer-events:none;opacity:.82;transition:transform .6s ease,opacity .6s ease,filter .6s ease}
+-.orbe--livre{--escala:1.06;opacity:1;filter:drop-shadow(0 0 60px rgba(45,125,255,.28))}
++.orbe,.sondas{--escala:1;position:absolute;inset:50% auto auto 50%;width:var(--orbe);height:var(--orbe);transform:translate(-50%,-50%) scale(var(--escala));pointer-events:none;transition:transform .6s ease,opacity .6s ease}
++.orbe{opacity:.82}
++// Sem drop-shadow aqui: o brilho já vem do canvas, e um filtro sobre o campo (largura da tela) custaria a cada quadro.
++.orbe--livre,.sondas--livre{--escala:1.06}
++.orbe--livre{opacity:1}
+ 
+ .palco{position:relative;width:min(100%,43rem);z-index:1}
+ // O canto cortado é a assinatura dos cards do briefing — a miniatura de fileira.scss é o mesmo card.
+@@ -43,5 +58,8 @@
+ // A saída desce e encolhe: o card vai na direção da fileira, onde ele reaparece como miniatura.
+ @keyframes saindo{to{opacity:0;transform:translateY(2.5rem) scale(.9)}}
+ 
+-@media(min-width:1800px){.hud{padding-inline:clamp(3rem,7vw,11rem)}.orbe{width:min(66vh,50rem);height:min(66vh,50rem)}.palco{width:min(100%,46rem)}}
+-@media(max-width:700px){.hud{padding:1rem;gap:.75rem}.cabecalho{padding-right:7rem;gap:.8rem;flex-wrap:wrap}.marca{font-size:.8rem}.relogio{font-size:.58rem;letter-spacing:.14em}.conteudo{min-height:18rem}.orbe{width:100vw;height:100vw}.orbe--livre{--escala:1.03}.card-principal{max-height:none}.legenda-voz{font-size:.8rem;gap:.5rem}}
++@media(min-width:1800px){.hud{--respiro:clamp(3rem,7vw,11rem)}.conteudo{--orbe:min(66vh,50rem)}.palco{width:min(100%,46rem)}}
++@media(max-width:700px){.hud{--respiro:1rem;padding:1rem;gap:.75rem}.cabecalho{padding-right:7rem;gap:.8rem;flex-wrap:wrap}.marca{font-size:.8rem}.relogio{font-size:.58rem;letter-spacing:.14em}.conteudo{min-height:18rem;--orbe:100vw}.sinal-voz{display:none}.orbe--livre{--escala:1.03}.card-principal{max-height:none}.legenda-voz{font-size:.8rem;gap:.5rem}}
++
++// As sondas ficam fora do quadrado do orbe: abaixo desta largura elas cairiam em cima dele.
++@media(max-width:1100px){.sondas{display:none}}
+diff -ruN '--exclude=node_modules' '--exclude=.angular' hud-original-backup/src/app/paginas/hud/hud.page.ts src/hud/jarvis-hud-main/src/app/paginas/hud/hud.page.ts
+--- a/src/app/paginas/hud/hud.page.ts	2026-10-14 14:23:24.748527732 -0300
++++ b/src/app/paginas/hud/hud.page.ts	2026-10-14 14:39:29.138584822 -0300
+@@ -13,6 +13,7 @@
+ import { CardSistemasComponent } from '../../componentes/card-sistemas/card-sistemas';
+ import { CardTextoComponent } from '../../componentes/card-texto/card-texto';
+ import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
++import { SondasComponent } from '../../componentes/sondas/sondas';
+ import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
+ import {
+   normalizar,
+@@ -53,6 +54,7 @@
+     DialogoConversaComponent,
+     HistoricoConversaComponent,
+     OrbeComponent,
++    SondasComponent,
+     CardClimaComponent,
+     CardLembretesComponent,
+     CardNoticiaComponent,
+@@ -86,6 +88,12 @@
+     return this.voz.falando() ? 'falando' : this.escuta.ouvindo() ? 'ouvindo' : 'ocioso';
+   });
+ 
++  /** O selo do cabeçalho: se a ativação por voz está de pé, e se há som entrando ou saindo agora. */
++  protected readonly sinalDeVoz = computed(() => {
++    if (!this.escuta.disponivel) return 'Só texto';
++    return this.escuta.ligada() ? 'Voz online' : 'Voz em espera';
++  });
++
+   protected readonly estadoDaConexao = computed(() => {
+     switch (this.eventos.status()) {
+       case 'online':

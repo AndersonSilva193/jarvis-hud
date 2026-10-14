@@ -1,4 +1,5 @@
-// O orbe é o canvas; o resto são instrumentos ao redor dele — anéis, tiques e a retícula.
+// O orbe é o reator no canvas `tela`; por baixo dele, o `campo` leva a onda de voz de ponta a
+// ponta da tela. O resto são instrumentos de CSS em volta — anéis, tiques e a retícula.
 :host {
   position: relative;
   display: block;
@@ -6,12 +7,27 @@
   height: 100%;
 }
 
-.tela {
+.tela,
+.campo {
   position: absolute;
-  inset: 0;
+  top: 0;
   display: block;
-  width: 100%;
   height: 100%;
+}
+
+.tela {
+  left: 0;
+  width: 100%;
+}
+
+// O campo sai do quadrado do orbe e cruza a tela. Quem diz a largura é a página, por
+// `--largura-campo` (no HUD, a largura exata dele, sem transbordar); sem ela, fica no quadrado.
+// A divisão desfaz o `scale(var(--escala))` que a página aplica no orbe: sem ela, o orbe livre
+// esticaria a onda 6% além das bordas. Tem de ser aqui, onde a `--escala` herdada já vale.
+.campo {
+  left: 50%;
+  width: calc(var(--largura-campo, 100%) / var(--escala, 1));
+  translate: -50% 0;
 }
 
 .anel,
@@ -25,30 +41,36 @@
 }
 
 .anel--externo {
-  width: 80%;
-  height: 80%;
-  border: 1px dashed rgba(95, 242, 255, 0.2);
+  width: 84%;
+  height: 84%;
+  border: 1px dashed rgba(95, 242, 255, 0.16);
   animation: orbe-girar 60s linear infinite;
 }
 
 // Tiques a cada 15°, recortados num aro fino: a escala de um instrumento, não um anel liso.
+// `repeating-`: com o conic simples só o primeiro tique aparecia.
 .anel--tiques {
-  width: 66%;
-  height: 66%;
-  background: conic-gradient(
-    from 0deg,
-    rgba(95, 242, 255, 0.45) 0 0.6deg,
+  width: 74%;
+  height: 74%;
+  background: repeating-conic-gradient(
+    from -0.3deg,
+    rgba(95, 242, 255, 0.4) 0 0.6deg,
     transparent 0.6deg 15deg
   );
-  mask: radial-gradient(circle, transparent 0 calc(50% - 8px), #000 calc(50% - 8px));
+  mask: radial-gradient(
+    circle,
+    transparent 0 calc(50% - 7px),
+    #000 calc(50% - 7px) calc(50% - 1px),
+    transparent 50%
+  );
   animation: orbe-girar 110s linear infinite reverse;
 }
 
 // Quatro traços nos pontos cardeais: a mira que enquadra o orbe.
 .mira {
-  width: 88%;
-  height: 88%;
-  opacity: 0.45;
+  width: 92%;
+  height: 92%;
+  opacity: 0.4;
   background:
     linear-gradient(#5ff2ff, #5ff2ff) 50% 0 / 1px 16px no-repeat,
     linear-gradient(#5ff2ff, #5ff2ff) 50% 100% / 1px 16px no-repeat,

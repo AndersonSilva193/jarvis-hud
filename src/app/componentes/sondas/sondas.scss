@@ -1,0 +1,114 @@
+@use '../../estilos/hud' as hud;
+
+// O host tem o mesmo quadrado do orbe (quem dá tamanho e posição é o hud.page.scss), então as
+// porcentagens da geometria batem com o anel desenhado no canvas.
+:host {
+  display: block;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+
+:host(.recuada) {
+  opacity: 0.22;
+}
+
+.fios {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.fio {
+  fill: none;
+  stroke: rgba(95, 242, 255, 0.28);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 0.3s ease;
+}
+
+// O fio aceso corre na direção do orbe: é o sinal entrando no reator.
+.fio--ativo {
+  stroke: rgba(166, 248, 255, 0.85);
+  stroke-dasharray: 4 4;
+  animation: sondas-correr 1s linear infinite;
+}
+
+// A ponta é um div redondo e não um círculo no SVG: com `preserveAspectRatio="none"` o círculo
+// sairia oval assim que o quadrado deixasse de ser quadrado.
+.ponta {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: rgba(95, 242, 255, 0.55);
+  box-shadow: 0 0 8px hud.$ciano;
+}
+
+.ponta--ativa {
+  background: hud.$ciano-forte;
+  box-shadow: 0 0 14px hud.$ciano;
+}
+
+.sonda {
+  @include hud.moldura(10px);
+  position: absolute;
+  translate: 0 -50%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 13rem;
+  padding: 0.7rem 0.95rem;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.sonda--ativa {
+  border-color: hud.$ciano;
+  box-shadow:
+    0 0 26px rgba(45, 125, 255, 0.35),
+    inset 0 0 18px rgba(95, 242, 255, 0.12);
+}
+
+.icone {
+  width: 1.6rem;
+  height: 1.6rem;
+  flex-shrink: 0;
+  fill: none;
+  stroke: hud.$ciano;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+strong {
+  display: block;
+  white-space: nowrap;
+  font: 600 0.72rem hud.$mono;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: hud.$texto;
+}
+
+small {
+  display: block;
+  margin-top: 0.3rem;
+  white-space: nowrap;
+  font: 500 0.58rem hud.$mono;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8fb6d8;
+}
+
+.sonda--ativa small {
+  color: hud.$ciano-forte;
+}
+
+@keyframes sondas-correr {
+  to {
+    stroke-dashoffset: -16;
+  }
+}

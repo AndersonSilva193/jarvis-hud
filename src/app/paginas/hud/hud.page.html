@@ -5,6 +5,9 @@
   <header class="cabecalho">
     <a class="marca" routerLink="/">J.A.R.V.I.S.<span>ASSISTENTE PESSOAL</span></a>
     <span class="conexao"><span class="luz" [class.luz--online]="eventos.status() === 'online'" aria-hidden="true"></span>{{ estadoDaConexao() }}</span>
+    <span class="sinal-voz" [class.sinal-voz--ligado]="escuta.disponivel && escuta.ligada()" [class.sinal-voz--ativo]="voz.falando() || escuta.ouvindo()">
+      <span class="barras" aria-hidden="true"><i></i><i></i><i></i><i></i></span>{{ sinalDeVoz() }}
+    </span>
     <span class="relogio" aria-hidden="true">{{ relogio() }}</span>
     <app-historico-conversa [trocas]="conversa.trocas()" [ocupada]="conversa.ocupada()" (limpar)="limparConversa()" />
   </header>
@@ -14,6 +17,7 @@
   </div>
   <main class="conteudo">
     <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
+    <app-sondas class="sondas" [class.sondas--livre]="orbeLivre()" [recuada]="!orbeLivre()" [estado]="estadoOrbe()" [escutaDisponivel]="escuta.disponivel" [escutaLigada]="escuta.ligada()" [ditando]="escuta.ditando()" [progresso]="conversa.progresso()" [rotuloVoz]="cota.rotulo()" />
     <div class="palco">
       <!-- O palco é só para o que se olha: um anexo, um código de confirmação, um erro ou o
            briefing. Fala simples do Jarvis é voz, legenda e histórico — não ocupa a tela. -->

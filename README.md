@@ -9,6 +9,16 @@ relógio no cabeçalho e, em volta do orbe, anéis que giram — tracejado por f
 por dentro e uma mira nos pontos cardeais. Os anéis aceleram e acendem conforme o estado (ouvindo,
 pensando, falando). Tudo isso para no `prefers-reduced-motion`.
 
+O orbe é um **reator**: anel luminoso com núcleo escuro e uma coroa de arcos segmentados. Uma
+**onda de voz** atravessa a tela de borda a borda na altura dele, com espectro nas pontas e
+partículas no fundo; ela cresce com a energia real da fala (o mesmo `intensidade` que já movia o
+orbe) e respira enquanto o microfone capta. Em volta, quatro **sondas** ligadas ao anel por fios
+mostram o caminho de um pedido — entrada de áudio, transcrição, processamento e síntese de voz — e
+cada uma acende só quando a sua etapa acontece; o texto pequeno é o estado real (microfone,
+ferramenta em curso, provedor e cota de voz). As sondas apagam quando há card no palco e somem
+abaixo de 1100 px. No cabeçalho, o selo **Voz online / Voz em espera** diz se a ativação por voz
+está ligada, e as barras dele mexem enquanto há som entrando ou saindo.
+
 O palco tem **no máximo um card**, e só entra nele **o que se olha**: um bloco do briefing, uma
 imagem ou arquivo anexado, um código de confirmação, um erro. Fala simples do Jarvis não vira card
 — ela é falada, aparece na legenda embaixo do orbe e fica no histórico. Para ler a conversa, abra o
@@ -227,7 +237,9 @@ src/app/
   paginas/configuracao/          tela 1
   paginas/hud/                   tela 2: orbe, palco, fileira e controles (um .scss por área)
   componentes/conversa/          barra, diálogo em curso, resposta, anexos e histórico
-  componentes/orbe/              OrbeComponent (canvas de filamentos, anéis e mira; muda com o estado)
+  componentes/orbe/              OrbeComponent: ciclo de vida dos dois canvas (reator e campo da onda)
+  componentes/orbe/desenho-orbe.ts  o desenho em funções puras: reator, onda, espectro e partículas
+  componentes/sondas/            SondasComponent: os quatro cards-satélite e os fios até o reator
   componentes/card-clima/        CardClimaComponent
   componentes/card-lembretes/    CardLembretesComponent
   componentes/card-noticia/      CardNoticiaComponent
