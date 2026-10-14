@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { OrbeComponent } from '../componentes/orbe/orbe';
+import { ConversaService } from './conversa.service';
 import { EscutaService, respostaDasObservacoes } from './escuta.service';
 import { VozService } from './voz.service';
 import { BriefingPlayerService } from './briefing-player.service';
@@ -23,6 +24,7 @@ class ReconhecimentoFalso {
   onresult: ((evento: unknown) => void) | null = null;
   start = vi.fn();
   abort = vi.fn();
+  stop = vi.fn();
   constructor() {
     ReconhecimentoFalso.sessoes.push(this);
   }
@@ -311,6 +313,53 @@ describe('voz e escuta integradas', () => {
     return { player, gerar };
   }
 
+  it('Jarvis com uma pergunta envia um único ditado e não pede briefing', async () => {
+    montarPagina();
+    const conversa = TestBed.inject(ConversaService);
+    const enviar = vi.spyOn(conversa, 'enviar').mockResolvedValue(true);
+    sessao().ouvir('Jarvis, como está o servidor?');
+    expect(escuta.ditando()).toBe(true);
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(enviar).toHaveBeenCalledExactlyOnceWith('como está o servidor?');
+    expect(gerar).not.toHaveBeenCalled();
+  });
+
+  it('conversa interrompe a pergunta do briefing e guarda eventos recebidos', async () => {
+    const { player } = montarPagina();
+    const tocando = player.tocar(BRIEFING);
+    await microtarefas();
+    await terminarFala();
+    await terminarFala();
+    await vi.advanceTimersByTimeAsync(400);
+    sessao().iniciar();
+    const antiga = sessao();
+    const conversa = TestBed.inject(ConversaService);
+    conversa.assumirPalco();
+    const eventos = TestBed.inject(JarvisEventosService);
+    const ouvintes = vi.mocked(eventos.conectar).mock.calls[0][0];
+    ouvintes.briefing({ ...BRIEFING, abertura: 'Novo briefing' });
+    antiga.ouvir('sim');
+    await tocando;
+    expect(escuta.aguardandoResposta()).toBe(false);
+    expect(falas.some((f) => f.text === BRIEFING.encerramento || f.text === 'Novo briefing')).toBe(
+      false,
+    );
+    expect(pagina!['briefingGuardado']()?.abertura).toBe('Novo briefing');
+  });
+
+  it('setas no campo de texto não pulam briefing', () => {
+    const { player } = montarPagina();
+    const pular = vi.spyOn(player, 'pular');
+    const texto = document.createElement('textarea');
+    document.body.appendChild(texto);
+    try {
+      texto.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      expect(pular).not.toHaveBeenCalled();
+    } finally {
+      texto.remove();
+    }
+  });
+
   it('duas ativações geram um POST; pergunta uma vez e só fala observações depois do sim', async () => {
     const { gerar } = montarPagina();
     sessao().ouvir('Bom dia, Jarvis');
@@ -421,7 +470,7 @@ describe('controles de microfone na HUD', () => {
     botao.click();
     tela.detectChanges();
     expect(botao.getAttribute('aria-pressed')).toBe('true');
-    expect(tela.nativeElement.querySelector('[role="status"]')).toBeNull();
+    expect(tela.nativeElement.querySelector('.falando[role="status"]')).toBeNull();
     ReconhecimentoFalso.sessoes.at(-1)!.iniciar();
     tela.detectChanges();
     expect(tela.nativeElement.querySelector('[role="status"]').textContent).toContain('ouvindo');

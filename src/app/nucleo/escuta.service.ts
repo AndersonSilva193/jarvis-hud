@@ -41,6 +41,15 @@ export class EscutaService {
   readonly ligada = signal(this.disponivel && lerLigada());
   /** Capturando agora. Falso enquanto ele fala — é o que acende o indicador de microfone. */
   readonly ouvindo = signal(false);
+  readonly ditando = signal(false);
+  readonly transcricao = signal('');
+  private ditado: {
+    receber: (evento: SpeechRecognitionEvent) => void;
+    atividade: () => void;
+    silencio: () => void;
+    terminou: () => void;
+    cancelar: () => void;
+  } | null = null;
   readonly aguardandoResposta = signal(false);
   readonly motivo = signal<MotivoDaParada>(null);
 
@@ -96,6 +105,7 @@ export class EscutaService {
   }
 
   desligar(): void {
+    this.cancelarDitado();
     this.ligada.set(false);
     gravarLigada(false);
     this.pontual?.cancelar();
@@ -113,6 +123,7 @@ export class EscutaService {
   /** Solta o microfone sem apagar a preferência: é o que a página faz ao sair da tela. */
   soltarMicrofone(): void {
     this.ouvinte = null;
+    this.cancelarDitado();
     this.pontual?.cancelar();
     this.fechar();
   }
@@ -161,8 +172,95 @@ export class EscutaService {
     });
   }
 
+  /** Um ditado por acionamento; não muda a preferência da escuta por palavra-chave. */
+  ditar(inicial = ''): Promise<string> {
+    this.cancelarDitado();
+    this.pontual?.cancelar();
+    if (!this.disponivel || this.ouvinte === null || this.voz.falando()) return Promise.resolve('');
+    this.fechar();
+    this.pausada = false;
+    this.ditando.set(true);
+    this.transcricao.set(inicial.trim());
+    return new Promise<string>((resolver) => {
+      let encerrado = false;
+      let finalizando = false;
+      let prefixo = inicial.trim();
+      const trechos = new Map<number, string>();
+      let silencio: ReturnType<typeof setTimeout> | null = null;
+      let final: ReturnType<typeof setTimeout> | null = null;
+      const vazio = setTimeout(() => {
+        if (!this.transcricao().trim()) concluir('');
+      }, 10000);
+      const concluir = (texto: string) => {
+        if (encerrado) return;
+        encerrado = true;
+        clearTimeout(vazio);
+        if (silencio !== null) clearTimeout(silencio);
+        if (final !== null) clearTimeout(final);
+        this.ditado = null;
+        this.ditando.set(false);
+        this.fechar();
+        if (this.ligada()) this.reabrirDepois(ESPERA_PARA_RETOMAR_MS);
+        resolver(texto.trim());
+      };
+      const encerrar = () => {
+        if (encerrado || finalizando) return;
+        finalizando = true;
+        final = setTimeout(() => concluir(this.transcricao()), 1000);
+        try {
+          if (this.sessao) this.sessao.stop();
+          else concluir(this.transcricao());
+        } catch {
+          concluir(this.transcricao());
+        }
+      };
+      const agendar = () => {
+        if (silencio !== null) clearTimeout(silencio);
+        if (!finalizando && this.transcricao().trim()) silencio = setTimeout(encerrar, 1500);
+      };
+      this.ditado = {
+        receber: (evento) => {
+          for (const indice of trechos.keys()) {
+            if (indice >= evento.results.length) trechos.delete(indice);
+          }
+          for (let i = evento.resultIndex; i < evento.results.length; i++) {
+            trechos.set(i, evento.results[i]?.[0]?.transcript ?? '');
+          }
+          const texto = [prefixo, ...[...trechos].sort(([a], [b]) => a - b).map(([, t]) => t)]
+            .join(' ')
+            .trim();
+          this.transcricao.set(texto);
+          agendar();
+        },
+        atividade: () => {
+          if (silencio !== null) clearTimeout(silencio);
+        },
+        silencio: agendar,
+        terminou: () => {
+          if (finalizando) concluir(this.transcricao());
+          else {
+            prefixo = this.transcricao();
+            trechos.clear();
+            this.reabrirDepois(ESPERA_PARA_RELIGAR_MS);
+          }
+        },
+        cancelar: () => concluir(''),
+      };
+      this.abrir();
+      agendar();
+    });
+  }
+  cancelarDitado(): void {
+    this.ditado?.cancelar();
+  }
+
   private podeOuvir(): boolean {
-    return this.ouvinte !== null && this.ligada() && !this.pausada && !this.voz.falando();
+    return (
+      this.ouvinte !== null &&
+      (this.ligada() || this.ditado !== null) &&
+      !this.pausada &&
+      !this.voz.falando()
+    );
   }
 
   private abrir(): void {
@@ -179,8 +277,8 @@ export class EscutaService {
     const sessao = new Reconhecimento();
     sessao.lang = 'pt-BR';
     sessao.continuous = true;
-    // Só frase pronta: resultado parcial muda a cada sílaba e não serve para comparar palavra.
-    sessao.interimResults = false;
+    // Ativação exige frase final; no ditado cada parcial substitui a posição correspondente.
+    sessao.interimResults = this.ditado !== null;
     sessao.maxAlternatives = 1;
 
     sessao.onstart = () => {
@@ -189,8 +287,17 @@ export class EscutaService {
       this.ouvindo.set(true);
       this.pontual?.iniciar();
     };
+    sessao.onspeechstart = () => {
+      if (this.sessao === sessao) this.ditado?.atividade();
+    };
+    sessao.onspeechend = () => {
+      if (this.sessao === sessao) this.ditado?.silencio();
+    };
     sessao.onresult = (evento) => {
-      if (this.sessao === sessao && this.podeOuvir()) this.aoOuvir(evento);
+      if (this.sessao === sessao && this.podeOuvir()) {
+        if (this.ditado) this.ditado.receber(evento);
+        else this.aoOuvir(evento);
+      }
     };
     sessao.onerror = (evento) => {
       if (this.sessao === sessao) this.aoErrar(evento.error);
@@ -201,7 +308,8 @@ export class EscutaService {
       }
       this.sessao = null;
       this.ouvindo.set(false);
-      this.reabrirDepois(this.esperaDaVez());
+      if (this.ditado) this.ditado.terminou();
+      else this.reabrirDepois(this.esperaDaVez());
     };
 
     this.sessao = sessao;
@@ -233,6 +341,7 @@ export class EscutaService {
   }
 
   private pausar(): void {
+    this.cancelarDitado();
     if (this.pausada) {
       return;
     }
@@ -288,7 +397,9 @@ export class EscutaService {
         if (this.pontual !== pontual) return;
         continue;
       }
+      const sessao = this.sessao;
       this.ouvinte?.(frase);
+      if (this.sessao !== sessao || this.ditado || !this.podeOuvir()) return;
     }
   }
 

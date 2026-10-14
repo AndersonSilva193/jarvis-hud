@@ -2,6 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 
 import { ConfigStore } from './config.store';
 import { JarvisApiService, type ResultadoTeste } from './jarvis-api.service';
+import type { PedidoConversa, ProgressoConversa, RespostaConversa } from './conversa.modelos';
 import type { Briefing } from './briefing.modelos';
 
 export type StatusConexao = 'desligado' | 'conectando' | 'online' | 'reconectando';
@@ -10,6 +11,12 @@ export type StatusConexao = 'desligado' | 'conectando' | 'online' | 'reconectand
 export type MotivoQueda = 'token-invalido' | 'api-inacessivel' | null;
 
 export interface OuvintesDoBriefing {
+  conectado?: () => void;
+  pensando?: (pedido: PedidoConversa) => void;
+  ferramenta?: (progresso: ProgressoConversa) => void;
+  resposta?: (resposta: RespostaConversa) => void;
+  erroConversa?: (resposta: RespostaConversa) => void;
+  historico?: () => void;
   gerando: () => void;
   briefing: (briefing: Briefing) => void;
 }
@@ -19,14 +26,11 @@ const ESPERA_MAXIMA_MS = 30_000;
 const INTERVALO_DA_INVESTIGACAO_MS = 15_000;
 
 /**
- * A conexão SSE com /api/briefing/eventos, que se reconecta sozinha.
+ * A conexão SSE com /api/eventos, que se reconecta sozinha.
  *
- * A API emite só dois eventos nomeados — `gerando` e `briefing` — e um comentário de keep-alive a
- * cada 25 s, que não dispara nada e não precisa de tratamento. Conectar não traz estado nenhum:
- * quem abre o HUD busca /api/briefing/ultimo para pintar a tela.
- *
- * O token vai na query string porque o EventSource do navegador não sabe mandar header; essa é a
- * única rota da API que aceita isso.
+ * Recebe briefing e eventos conversa.*; cada abertura avisa a página para recuperar o estado.
+ * O keep-alive a cada 25 s é um comentário. O token vai na query porque EventSource não envia
+ * headers; downloads de anexos da HUD usam Bearer.
  */
 @Injectable({ providedIn: 'root' })
 export class JarvisEventosService {
@@ -41,15 +45,19 @@ export class JarvisEventosService {
   private tentativas = 0;
   private agendamento: ReturnType<typeof setTimeout> | null = null;
   private investigando = false;
+  private geracao = 0;
   private ultimaInvestigacao = 0;
 
   conectar(ouvintes: OuvintesDoBriefing): void {
+    this.geracao++;
+    this.cancelarAgendamento();
     this.ouvintes = ouvintes;
     this.tentativas = 0;
     this.abrir();
   }
 
   desconectar(): void {
+    this.geracao++;
     this.ouvintes = null;
     this.cancelarAgendamento();
     this.fechar();
@@ -65,27 +73,48 @@ export class JarvisEventosService {
     }
     this.status.set(this.tentativas === 0 ? 'conectando' : 'reconectando');
 
-    const url = `${this.config.rota('/api/briefing/eventos')}?token=${encodeURIComponent(this.config.token())}`;
+    const url = `${this.config.rota('/api/eventos')}?token=${encodeURIComponent(this.config.token())}`;
     // Sem withCredentials: a API não libera credenciais no CORS.
     const fonte = new EventSource(url);
     this.fonte = fonte;
 
     fonte.onopen = () => {
+      if (this.fonte !== fonte) return;
       this.tentativas = 0;
       this.motivo.set(null);
       this.status.set('online');
+      this.ouvintes?.conectado?.();
     };
 
-    fonte.addEventListener('gerando', () => this.ouvintes?.gerando());
+    fonte.addEventListener('gerando', () => {
+      if (this.fonte === fonte) this.ouvintes?.gerando();
+    });
 
     fonte.addEventListener('briefing', (evento) => {
-      const briefing = interpretar(evento);
+      if (this.fonte !== fonte) return;
+      const briefing = interpretar<Briefing>(evento);
       if (briefing) {
         this.ouvintes?.briefing(briefing);
       }
     });
 
+    const receber = <T>(nome: string, tratar: (dados: T) => void) => {
+      fonte.addEventListener(nome, (evento) => {
+        if (this.fonte !== fonte) return;
+        const dados = interpretar<T>(evento);
+        if (dados) tratar(dados);
+      });
+    };
+    receber<PedidoConversa>('conversa.pensando', (dados) => this.ouvintes?.pensando?.(dados));
+    receber<ProgressoConversa>('conversa.ferramenta', (dados) =>
+      this.ouvintes?.ferramenta?.(dados),
+    );
+    receber<RespostaConversa>('conversa.resposta', (dados) => this.ouvintes?.resposta?.(dados));
+    receber<RespostaConversa>('conversa.erro', (dados) => this.ouvintes?.erroConversa?.(dados));
+    receber<unknown>('conversa.historico', () => this.ouvintes?.historico?.());
+
     fonte.onerror = () => {
+      if (this.fonte !== fonte) return;
       // CONNECTING = o próprio EventSource já está tentando de novo; CLOSED = morreu de vez
       // (é o que acontece com token inválido, porque a resposta não é um event-stream).
       if (fonte.readyState === EventSource.CLOSED) {
@@ -120,12 +149,17 @@ export class JarvisEventosService {
     if (this.investigando || agora - this.ultimaInvestigacao < INTERVALO_DA_INVESTIGACAO_MS) {
       return;
     }
+    const geracao = this.geracao;
     this.investigando = true;
     this.ultimaInvestigacao = agora;
     this.api
       .testar(this.config.urlApi(), this.config.token())
-      .then((resultado) => this.motivo.set(motivoDe(resultado)))
-      .catch(() => this.motivo.set('api-inacessivel'))
+      .then((resultado) => {
+        if (geracao === this.geracao) this.motivo.set(motivoDe(resultado));
+      })
+      .catch(() => {
+        if (geracao === this.geracao) this.motivo.set('api-inacessivel');
+      })
       .finally(() => {
         this.investigando = false;
       });
@@ -155,12 +189,12 @@ function motivoDe(resultado: ResultadoTeste): MotivoQueda {
   }
 }
 
-function interpretar(evento: Event): Briefing | null {
+function interpretar<T>(evento: Event): T | null {
   const dados = (evento as MessageEvent<string>).data;
   try {
-    return JSON.parse(dados) as Briefing;
+    return JSON.parse(dados) as T;
   } catch {
-    console.error('Evento "briefing" com JSON inválido; ignorado.');
+    console.error('Evento SSE com JSON inválido; ignorado.');
     return null;
   }
 }

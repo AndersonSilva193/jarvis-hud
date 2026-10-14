@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { ConfigStore, normalizarUrl } from './config.store';
+import type { HistoricoConversa, RespostaConversa } from './conversa.modelos';
 import type { Briefing } from './briefing.modelos';
 
 /** Por que uma tentativa de conexão não deu certo — o suficiente para a tela explicar. */
@@ -89,6 +90,46 @@ export class JarvisApiService {
       }
       return 'api-inacessivel';
     }
+  }
+
+  enviarConversa(texto: string): Promise<{ id: string }> {
+    return firstValueFrom(
+      this.http.post<{ id: string }>(
+        this.config.rota('/api/conversa'),
+        { texto },
+        { headers: this.autorizacao() },
+      ),
+    );
+  }
+  historicoConversa(): Promise<HistoricoConversa> {
+    return firstValueFrom(
+      this.http.get<HistoricoConversa>(this.config.rota('/api/conversa/historico'), {
+        headers: this.autorizacao(),
+      }),
+    );
+  }
+  ultimaConversa(): Promise<RespostaConversa | null> {
+    return firstValueFrom(
+      this.http.get<RespostaConversa | null>(this.config.rota('/api/conversa/ultima'), {
+        headers: this.autorizacao(),
+      }),
+    );
+  }
+  limparConversa(): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(this.config.rota('/api/conversa/limpar'), null, {
+        headers: this.autorizacao(),
+      }),
+    );
+  }
+  baixarAnexo(id: string): Promise<Blob> {
+    if (!/^[a-f0-9-]{36}$/i.test(id)) return Promise.reject(new Error('Anexo inválido'));
+    return firstValueFrom(
+      this.http.get(this.config.rota('/api/anexos/' + id), {
+        headers: this.autorizacao(),
+        responseType: 'blob',
+      }),
+    );
   }
 
   private autorizacao(): HttpHeaders {

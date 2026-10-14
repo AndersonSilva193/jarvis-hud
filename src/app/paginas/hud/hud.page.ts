@@ -1,4 +1,8 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { ConversaService } from '../../nucleo/conversa.service';
+import { BarraConversaComponent } from '../../componentes/conversa/barra-conversa';
+import { RespostaConversaComponent } from '../../componentes/conversa/resposta-conversa';
+import { HistoricoConversaComponent } from '../../componentes/conversa/historico-conversa';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 
@@ -10,7 +14,7 @@ import { CardTextoComponent } from '../../componentes/card-texto/card-texto';
 import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
 import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
 import {
-  ATIVACOES,
+  normalizar,
   EscutaService,
   contem,
   respostaDasObservacoes,
@@ -38,6 +42,9 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
 @Component({
   selector: 'app-hud',
   imports: [
+    BarraConversaComponent,
+    RespostaConversaComponent,
+    HistoricoConversaComponent,
     OrbeComponent,
     CardClimaComponent,
     CardLembretesComponent,
@@ -47,9 +54,12 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
     RouterLink,
   ],
   templateUrl: './hud.page.html',
-  styleUrl: './hud.page.scss',
+  styleUrls: ['./hud.page.scss', './conversa.scss'],
 })
 export class HudPage implements OnInit, OnDestroy {
+  protected readonly conversa = inject(ConversaService);
+  protected readonly rascunho = signal('');
+  protected readonly briefingGuardado = signal<Briefing | null>(null);
   protected readonly player = inject(BriefingPlayerService);
   protected readonly voz = inject(VozService);
   protected readonly eventos = inject(JarvisEventosService);
@@ -60,6 +70,7 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly erro = signal('');
 
   protected readonly estadoOrbe = computed<EstadoOrbe>(() => {
+    if (this.conversa.ocupada()) return 'pensando';
     if (this.player.fase() === 'gerando') {
       return 'gerando';
     }
@@ -91,10 +102,31 @@ export class HudPage implements OnInit, OnDestroy {
   private ativa = true;
   private observacoes: AbortController | null = null;
 
+  constructor() {
+    effect(() => {
+      if (this.escuta.ditando()) this.rascunho.set(this.escuta.transcricao());
+    });
+  }
+
   ngOnInit(): void {
+    this.conversa.abrir();
     this.eventos.conectar({
-      gerando: () => this.player.gerando(),
-      briefing: (briefing) => void this.player.tocar(briefing),
+      gerando: () => {
+        if (!this.conversa.naTela() && !this.escuta.ditando()) this.player.gerando();
+      },
+      briefing: (briefing) => {
+        if (this.conversa.naTela() || this.escuta.ditando()) this.briefingGuardado.set(briefing);
+        else void this.player.tocar(briefing);
+      },
+      conectado: () => void this.conversa.recuperar(),
+      pensando: (pedido) => {
+        this.escuta.cancelarDitado();
+        this.conversa.pensando(pedido);
+      },
+      ferramenta: (progresso) => this.conversa.ferramenta(progresso),
+      resposta: (resposta) => this.conversa.receber(resposta),
+      erroConversa: (resposta) => this.conversa.receber(resposta),
+      historico: () => void this.conversa.recuperar(),
     });
 
     // Conectar no SSE não traz nada: quem pinta a tela ao abrir é o último briefing.
@@ -102,7 +134,8 @@ export class HudPage implements OnInit, OnDestroy {
       .ultimoBriefing()
       .then((briefing) => {
         if (briefing && this.ativa) {
-          this.player.mostrar(briefing);
+          if (this.conversa.naTela() || this.escuta.ditando()) this.briefingGuardado.set(briefing);
+          else this.player.mostrar(briefing);
         }
       })
       .catch(() => {
@@ -121,6 +154,7 @@ export class HudPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.ativa = false;
+    this.conversa.fechar();
     this.eventos.desconectar();
     this.player.parar();
     this.player.epilogo = null;
@@ -139,6 +173,9 @@ export class HudPage implements OnInit, OnDestroy {
    * O destravar() tem de acontecer dentro do clique, senão o Chrome recusa a fala.
    */
   protected async bomDia(): Promise<void> {
+    if (this.conversa.ocupada()) return;
+    this.escuta.cancelarDitado();
+    this.conversa.mostrarBriefing();
     this.voz.destravar();
     await this.pedirBriefing();
   }
@@ -165,7 +202,10 @@ export class HudPage implements OnInit, OnDestroy {
     this.erro.set('');
     try {
       const briefing = await this.api.gerarBriefing();
-      if (this.ativa) void this.player.tocar(briefing);
+      if (this.ativa) {
+        if (this.conversa.naTela() || this.escuta.ditando()) this.briefingGuardado.set(briefing);
+        else void this.player.tocar(briefing);
+      }
     } catch (erro) {
       this.erro.set(explicar(erro));
     } finally {
@@ -179,6 +219,7 @@ export class HudPage implements OnInit, OnDestroy {
    * peçam dois briefings.
    */
   private aoOuvir(frase: string): void {
+    if (this.conversa.ocupada() || this.escuta.ditando()) return;
     if (!this.ativa || !this.escuta.ligada() || this.voz.falando()) return;
     const fase = this.player.fase();
     if (fase !== 'ocioso' && fase !== 'concluido') {
@@ -187,11 +228,17 @@ export class HudPage implements OnInit, OnDestroy {
     if (this.pedindo() || Date.now() - this.ultimaAtivacao < DESCANSO_DA_ATIVACAO_MS) {
       return;
     }
-    if (!contem(frase, ATIVACOES)) {
-      return;
+    const saudacao = normalizar(frase)
+      .replace(/[^a-z ]/g, '')
+      .trim();
+    if (['bom dia', 'bom dia jarvis', 'jarvis bom dia'].includes(saudacao)) {
+      this.ultimaAtivacao = Date.now();
+      this.conversa.mostrarBriefing();
+      void this.pedirBriefing();
+    } else if (contem(frase, ['jarvis'])) {
+      this.ultimaAtivacao = Date.now();
+      void this.ditar(frase.replace(/^.*?\bjarvis\b[\s,.:!-]*/i, ''));
     }
-    this.ultimaAtivacao = Date.now();
-    void this.pedirBriefing();
   }
 
   /**
@@ -229,7 +276,71 @@ export class HudPage implements OnInit, OnDestroy {
     }
   }
 
+  protected async enviarTexto(comando?: string): Promise<void> {
+    const texto = comando ?? this.rascunho();
+    this.voz.destravar();
+    this.escuta.cancelarDitado();
+    if (await this.conversa.enviar(texto)) {
+      if (comando === undefined && this.rascunho() === texto) this.rascunho.set('');
+    }
+  }
+
+  protected async ditar(inicial = ''): Promise<void> {
+    if (this.conversa.ocupada()) return;
+    if (this.escuta.ditando()) {
+      this.escuta.cancelarDitado();
+      return;
+    }
+    this.voz.destravar();
+    this.conversa.assumirPalco();
+    const texto = await this.escuta.ditar(inicial);
+    if (!this.ativa || !texto) return;
+    this.rascunho.set(texto);
+    const confirmacao = this.conversa.resposta()?.confirmacao;
+    const codigo = normalizarCodigo(texto);
+    if (
+      confirmacao &&
+      Date.parse(confirmacao.expiraEm) > Date.now() &&
+      codigo === normalizarCodigo(confirmacao.codigo)
+    ) {
+      await this.enviarTexto('confirmo ' + confirmacao.codigo);
+    } else await this.enviarTexto();
+  }
+
+  protected consultarBriefing(): void {
+    if (this.conversa.ocupada()) return;
+    this.escuta.cancelarDitado();
+    this.conversa.mostrarBriefing();
+    const briefing = this.briefingGuardado();
+    if (briefing) {
+      this.player.mostrar(briefing);
+      this.briefingGuardado.set(null);
+    }
+  }
+
+  protected limparConversa(): void {
+    if (
+      !this.conversa.ocupada() &&
+      window.confirm('Apagar o histórico compartilhado da HUD e do Telegram?')
+    ) {
+      this.escuta.cancelarDitado();
+      void this.conversa.limpar();
+    }
+  }
+
   private readonly aoTeclar = (evento: KeyboardEvent): void => {
+    if (evento.key === 'Escape') {
+      this.escuta.cancelarDitado();
+      this.voz.parar();
+      this.player.parar();
+      return;
+    }
+    if (
+      evento.target instanceof HTMLElement &&
+      (evento.target.closest('input, textarea, button, [contenteditable=true]') ||
+        this.conversa.naTela())
+    )
+      return;
     if (evento.key === 'ArrowRight') {
       this.player.pular();
     } else if (evento.key === 'Escape') {
@@ -264,4 +375,26 @@ function explicar(erro: unknown): string {
     return `a API respondeu ${erro.status}`;
   }
   return 'não consegui pedir o briefing';
+}
+
+/** Aceita também códigos numéricos ditados dígito por dígito. */
+function normalizarCodigo(texto: string): string {
+  const digitos: Record<string, string> = {
+    zero: '0',
+    um: '1',
+    uma: '1',
+    dois: '2',
+    duas: '2',
+    tres: '3',
+    quatro: '4',
+    cinco: '5',
+    seis: '6',
+    sete: '7',
+    oito: '8',
+    nove: '9',
+  };
+  return normalizar(texto)
+    .split(/[^a-z0-9]+/)
+    .map((parte) => digitos[parte] ?? parte)
+    .join('');
 }

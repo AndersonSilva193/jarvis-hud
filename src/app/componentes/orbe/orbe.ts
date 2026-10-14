@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 
-export type EstadoOrbe = 'ocioso' | 'gerando' | 'falando';
+export type EstadoOrbe = 'ocioso' | 'gerando' | 'pensando' | 'falando';
 
 const TAU = Math.PI * 2;
 const PARTICULAS = 130;
@@ -104,7 +104,7 @@ export class OrbeComponent implements AfterViewInit, OnDestroy {
 
     const estado = this.estado();
     const forca = estado === 'falando' ? limitar(this.intensidade()) : 0;
-    const agitacao = estado === 'gerando' ? 1 : 0;
+    const agitacao = estado === 'gerando' || estado === 'pensando' ? 1 : 0;
     const cx = this.largura / 2;
     const cy = this.altura / 2;
     const base = Math.min(this.largura, this.altura) * 0.3;

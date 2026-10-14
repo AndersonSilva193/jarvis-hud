@@ -1,0 +1,45 @@
+.barra-conversa {
+  position: absolute;
+  z-index: 6;
+  bottom: 4.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(52rem, calc(100% - 2rem));
+}
+.resposta-conversa {
+  position: absolute;
+  z-index: 5;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(43rem, calc(100% - 2rem));
+  max-height: calc(70vh - 12rem);
+}
+.rodape {
+  gap: 0.5rem;
+}
+.acoes {
+  gap: 0.65rem;
+}
+.palco[hidden] {
+  display: none;
+}
+@media (max-width: 700px) {
+  .rodape {
+    left: 1rem;
+    right: 1rem;
+    bottom: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .acoes {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .barra-conversa {
+    bottom: 7.5rem;
+  }
+  .resposta-conversa {
+    top: 12%;
+    max-height: calc(70vh - 16rem);
+  }
+}

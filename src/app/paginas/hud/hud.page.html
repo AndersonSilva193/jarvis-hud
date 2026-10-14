@@ -22,10 +22,26 @@
     class="orbe"
     [estado]="estadoOrbe()"
     [intensidade]="voz.intensidade()"
-    [legenda]="player.legenda()"
+    [legenda]="
+      conversa.ocupada() ? conversa.progresso() : conversa.naTela() ? '' : player.legenda()
+    "
   />
 
-  <div class="palco" [style.--total]="player.indiceAtual()">
+  <app-historico-conversa
+    [trocas]="conversa.trocas()"
+    [ocupada]="conversa.ocupada()"
+    (limpar)="limparConversa()"
+  />
+  @if (conversa.naTela()) {
+    <app-resposta-conversa
+      class="resposta-conversa"
+      [resposta]="conversa.resposta()"
+      [erro]="conversa.erro()"
+      [ocupada]="conversa.ocupada()"
+      (comando)="enviarTexto($event)"
+    />
+  }
+  <div class="palco" [hidden]="conversa.naTela()" [style.--total]="player.indiceAtual()">
     @for (bloco of player.blocos(); track bloco.id; let i = $index) {
       <article
         class="slot"
@@ -59,6 +75,15 @@
     }
   </div>
 
+  <app-barra-conversa
+    class="barra-conversa"
+    [(texto)]="rascunho"
+    [ocupada]="conversa.ocupada()"
+    [ditando]="escuta.ditando()"
+    [vozDisponivel]="escuta.disponivel"
+    (enviar)="enviarTexto()"
+    (microfone)="ditar()"
+  />
   <footer class="rodape">
     <div class="conexao">
       <span
@@ -91,10 +116,25 @@
           @if (escuta.ouvindo()) {
             <span class="ponto" aria-hidden="true"></span>
           }
-          microfone
+          ativação por voz
         </button>
       }
-      <button class="botao bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo()">
+      @if (conversa.naTela()) {
+        <button
+          class="botao"
+          type="button"
+          [disabled]="conversa.ocupada()"
+          (click)="consultarBriefing()"
+        >
+          Ver briefing
+        </button>
+      }
+      <button
+        class="botao bom-dia"
+        type="button"
+        (click)="bomDia()"
+        [disabled]="pedindo() || conversa.ocupada()"
+      >
         {{ pedindo() ? 'pedindo' : 'Bom dia' }}
       </button>
     </div>
