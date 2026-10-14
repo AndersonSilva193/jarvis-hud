@@ -179,18 +179,16 @@
   }
 }
 
-// Discreto de propósito: o botão existe porque o Chrome exige um clique, não para ser o centro.
-.bom-dia {
+// Discretos de propósito: estes botões existem porque o Chrome exige um clique, não para serem
+// o centro da tela.
+.botao {
   padding: 0.6rem 1.5rem;
   background: rgba(7, 22, 44, 0.6);
   border: 1px solid hud.$ciano-fraco;
   color: hud.$ciano;
   cursor: pointer;
   @include hud.rotulo(0.64rem);
-  transition:
-    background 0.2s ease,
-    box-shadow 0.2s ease,
-    color 0.2s ease;
+  transition: background 0.2s;
 
   &:hover:not(:disabled),
   &:focus-visible:not(:disabled) {
@@ -203,4 +201,16 @@
     opacity: 0.45;
     cursor: default;
   }
+}
+
+// Desligado fica apagado; ligado acende e ganha o ponto pulsando, para o estado não ser só cor.
+.microfone {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.microfone--ligado {
+  border-color: hud.$ciano;
+  color: hud.$ciano-forte;
 }

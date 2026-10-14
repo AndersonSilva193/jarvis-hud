@@ -1,12 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  OnDestroy,
-  OnInit,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 
@@ -17,12 +9,25 @@ import { CardSistemasComponent } from '../../componentes/card-sistemas/card-sist
 import { CardTextoComponent } from '../../componentes/card-texto/card-texto';
 import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
 import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
+import {
+  ATIVACOES,
+  EscutaService,
+  contem,
+  respostaDasObservacoes,
+} from '../../nucleo/escuta.service';
 import { JarvisApiService } from '../../nucleo/jarvis-api.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
 import { VozService } from '../../nucleo/voz.service';
+import type { Briefing } from '../../nucleo/briefing.modelos';
 
 /** Tempo parado até o cursor sumir: o HUD vive num monitor, sem ninguém mexendo no mouse. */
 const OCIOSO_ATE_ESCONDER_MS = 5_000;
+
+/** A pergunta do fim do briefing, e quanto tempo ele espera o "sim". */
+const PERGUNTA_DAS_OBSERVACOES = 'O senhor quer ouvir as observações?';
+const JANELA_DA_RESPOSTA_MS = 8_000;
+/** Duas frases finais no mesmo fôlego não podem pedir dois briefings. */
+const DESCANSO_DA_ATIVACAO_MS = 3_000;
 
 /**
  * A tela do HUD: orbe no centro, o bloco atual por cima dele e os já falados numa fileira.
@@ -43,12 +48,12 @@ const OCIOSO_ATE_ESCONDER_MS = 5_000;
   ],
   templateUrl: './hud.page.html',
   styleUrl: './hud.page.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HudPage implements OnInit, OnDestroy {
   protected readonly player = inject(BriefingPlayerService);
   protected readonly voz = inject(VozService);
   protected readonly eventos = inject(JarvisEventosService);
+  protected readonly escuta = inject(EscutaService);
   private readonly api = inject(JarvisApiService);
 
   protected readonly pedindo = signal(false);
@@ -82,6 +87,9 @@ export class HudPage implements OnInit, OnDestroy {
   });
 
   private ocioso: ReturnType<typeof setTimeout> | null = null;
+  private ultimaAtivacao = -Infinity;
+  private ativa = true;
+  private observacoes: AbortController | null = null;
 
   ngOnInit(): void {
     this.eventos.conectar({
@@ -93,7 +101,7 @@ export class HudPage implements OnInit, OnDestroy {
     this.api
       .ultimoBriefing()
       .then((briefing) => {
-        if (briefing) {
+        if (briefing && this.ativa) {
           this.player.mostrar(briefing);
         }
       })
@@ -101,14 +109,22 @@ export class HudPage implements OnInit, OnDestroy {
         // O estado da conexão no rodapé já conta essa história.
       });
 
+    // A escuta abre sozinha quando ficou ligada da última vez: num monitor 24 h, pedir um clique
+    // a cada recarga não faz sentido. O que o clique traz é o destravar() da fala.
+    this.escuta.escutar((frase) => this.aoOuvir(frase));
+    this.player.epilogo = (briefing, sinal) => this.perguntarObservacoes(briefing, sinal);
+
     window.addEventListener('keydown', this.aoTeclar);
     window.addEventListener('mousemove', this.aoMexerOMouse);
     this.agendarEsconderCursor();
   }
 
   ngOnDestroy(): void {
+    this.ativa = false;
     this.eventos.desconectar();
     this.player.parar();
+    this.player.epilogo = null;
+    this.escuta.soltarMicrofone();
     window.removeEventListener('keydown', this.aoTeclar);
     window.removeEventListener('mousemove', this.aoMexerOMouse);
     if (this.ocioso !== null) {
@@ -118,23 +134,98 @@ export class HudPage implements OnInit, OnDestroy {
   }
 
   /**
-   * Pede um briefing novo.
+   * Pede um briefing novo pelo botão.
    *
-   * O destravar() tem de acontecer dentro do clique, senão o Chrome recusa a fala. E o briefing
-   * que volta aqui é tocado direto porque, se a API reaproveitar um de menos de 60 s, ela não
-   * emite nada no SSE — o clique ficaria sem resposta.
+   * O destravar() tem de acontecer dentro do clique, senão o Chrome recusa a fala.
    */
   protected async bomDia(): Promise<void> {
     this.voz.destravar();
+    await this.pedirBriefing();
+  }
+
+  /**
+   * Liga e desliga o microfone.
+   *
+   * O destravar() vem antes de propósito: este clique é o gesto que o Chrome exige para falar, e
+   * sem ele o primeiro "bom dia" ouvido numa aba recém-aberta traria um briefing mudo.
+   */
+  protected alternarEscuta(): void {
+    this.voz.destravar();
+    if (this.escuta.ligada()) this.observacoes?.abort();
+    this.escuta.alternar();
+  }
+
+  /**
+   * O briefing que volta aqui é tocado direto porque, se a API reaproveitar um de menos de 60 s,
+   * ela não emite nada no SSE — o pedido ficaria sem resposta.
+   */
+  private async pedirBriefing(): Promise<void> {
+    if (!this.ativa || this.pedindo()) return;
     this.pedindo.set(true);
     this.erro.set('');
     try {
       const briefing = await this.api.gerarBriefing();
-      void this.player.tocar(briefing);
+      if (this.ativa) void this.player.tocar(briefing);
     } catch (erro) {
       this.erro.set(explicar(erro));
     } finally {
       this.pedindo.set(false);
+    }
+  }
+
+  /**
+   * Cada frase ouvida. A palavra de ativação só vale com a tela parada: no meio de um briefing o
+   * microfone está pausado de todo jeito, e o descanso evita que duas frases do mesmo fôlego
+   * peçam dois briefings.
+   */
+  private aoOuvir(frase: string): void {
+    if (!this.ativa || !this.escuta.ligada() || this.voz.falando()) return;
+    const fase = this.player.fase();
+    if (fase !== 'ocioso' && fase !== 'concluido') {
+      return;
+    }
+    if (this.pedindo() || Date.now() - this.ultimaAtivacao < DESCANSO_DA_ATIVACAO_MS) {
+      return;
+    }
+    if (!contem(frase, ATIVACOES)) {
+      return;
+    }
+    this.ultimaAtivacao = Date.now();
+    void this.pedirBriefing();
+  }
+
+  /**
+   * O fim do briefing: ele oferece as observações e escuta a resposta por alguns segundos.
+   *
+   * Sem microfone ligado a pergunta não é feita — ficaria uma pergunta no vazio. Sem
+   * encerramento (backend antigo, ou narração que falhou) também não há o que oferecer.
+   */
+  private async perguntarObservacoes(briefing: Briefing, sinal: AbortSignal): Promise<void> {
+    const encerramento = briefing.encerramento?.trim() ?? '';
+    if (!encerramento || !this.escuta.ligada() || !this.ativa || sinal.aborted) return;
+    const controle = new AbortController();
+    this.observacoes?.abort();
+    this.observacoes = controle;
+    const cancelar = () => controle.abort();
+    sinal.addEventListener('abort', cancelar, { once: true });
+    try {
+      await this.voz.falar(PERGUNTA_DAS_OBSERVACOES, controle.signal);
+      if (controle.signal.aborted || !this.escuta.ligada()) return;
+      const resposta = await this.escuta.ouvirPor(
+        JANELA_DA_RESPOSTA_MS,
+        controle.signal,
+        (frase) => respostaDasObservacoes(frase) !== null,
+      );
+      if (
+        !controle.signal.aborted &&
+        this.escuta.ligada() &&
+        respostaDasObservacoes(resposta) === 'sim'
+      ) {
+        await this.voz.falar(encerramento, controle.signal);
+      }
+    } finally {
+      sinal.removeEventListener('abort', cancelar);
+      if (this.observacoes === controle) this.observacoes = null;
     }
   }
 

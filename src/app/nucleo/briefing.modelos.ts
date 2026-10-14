@@ -12,6 +12,11 @@ export interface Briefing {
   secoes: Secao[];
   /** O cumprimento narrado pelo Jarvis. Vazio quando a narração falhou. */
   abertura?: string;
+  /**
+   * As observações do fim da narração, que a HUD só fala se o usuário pedir. Opcional porque um
+   * backend anterior a esta versão não manda o campo; aí a pergunta nem é feita.
+   */
+  encerramento?: string;
   /** A narração inteira, do jeito que vai para o Telegram. */
   texto: string;
   /** false quando a API reaproveitou um briefing de menos de 60 s. */

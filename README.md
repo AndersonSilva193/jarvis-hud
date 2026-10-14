@@ -56,6 +56,27 @@ Para rodar sem precisar do clique inicial:
 chrome --kiosk --autoplay-policy=no-user-gesture-required http://localhost:4200
 ```
 
+## Escuta por voz
+
+Em navegadores com SpeechRecognition ou webkitSpeechRecognition, clique em **microfone** e
+autorize o acesso. A escuta começa desligada na primeira visita e lembra a preferência nas
+seguintes. Usa pt-BR contínuo: diga **bom dia** ou **Jarvis** para pedir o briefing.
+
+O indicador **ouvindo** acende somente durante a captura. O microfone pausa durante qualquer
+fala do Jarvis e retoma após 400 ms. O botão permanece ligado durante essa pausa. Ao sair da
+HUD, a captura e as esperas são encerradas. Sem suporte, o recurso fica escondido.
+
+Se houver observações e o microfone estiver ligado, o Jarvis pergunta **O senhor quer ouvir as
+observações?** e mostra **Aguardando resposta**. São oito segundos a partir da captura ativa
+(com até dez segundos para abrir o microfone). Aceita **sim**, **quero**, **claro** e **pode**;
+**não**, **nem** e **negativo** têm prioridade como recusa. Outras frases não encerram a espera.
+Silêncio encerra a pergunta; Escape, novo briefing, saída da HUD ou desligar o microfone
+cancelam a interação. As observações só são faladas após confirmação.
+
+Use HTTPS ou localhost e conceda a permissão do navegador. Mesmo lembrando o microfone ligado,
+uma aba recém-aberta pode precisar de um clique em **microfone** ou **Bom dia** para liberar
+áudio. Se a permissão for recusada, a HUD avisa e não fica solicitando novamente em laço.
+
 ## Deploy na Vercel
 
 O `vercel.json` já traz o build, o diretório de saída (`dist/jarvis-hud/browser`) e o rewrite para

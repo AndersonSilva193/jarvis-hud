@@ -2,8 +2,20 @@
   <div class="vinheta" aria-hidden="true"></div>
   <div class="grade" aria-hidden="true"></div>
 
+  <!-- Um indicador só: o microfone está pausado justamente quando ele fala. -->
   @if (voz.falando()) {
-    <p class="falando"><span class="ponto" aria-hidden="true"></span>falando</p>
+    <p class="falando" role="status"><span class="ponto" aria-hidden="true"></span>falando</p>
+  } @else if (escuta.aguardandoResposta()) {
+    <p class="falando falando--escutando" role="status">
+      @if (escuta.ouvindo()) {
+        <span class="ponto" aria-hidden="true"></span>
+      }
+      Aguardando resposta
+    </p>
+  } @else if (escuta.ouvindo()) {
+    <p class="falando falando--escutando" role="status">
+      <span class="ponto" aria-hidden="true"></span>ouvindo
+    </p>
   }
 
   <app-orbe
@@ -60,11 +72,29 @@
       @if (erro()) {
         <span class="erro">{{ erro() }}</span>
       }
+      @if (escuta.motivo() === 'permissao-negada') {
+        <span class="erro">microfone bloqueado pelo navegador</span>
+      }
     </div>
 
     <div class="acoes">
       <a class="elo" routerLink="/configuracao">configuração</a>
-      <button class="bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo()">
+      <!-- Escondido onde a Web Speech API não existe: no Firefox não há o que ligar. -->
+      @if (escuta.disponivel) {
+        <button
+          class="botao microfone"
+          type="button"
+          [class.microfone--ligado]="escuta.ligada()"
+          [attr.aria-pressed]="escuta.ligada()"
+          (click)="alternarEscuta()"
+        >
+          @if (escuta.ouvindo()) {
+            <span class="ponto" aria-hidden="true"></span>
+          }
+          microfone
+        </button>
+      }
+      <button class="botao bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo()">
         {{ pedindo() ? 'pedindo' : 'Bom dia' }}
       </button>
     </div>

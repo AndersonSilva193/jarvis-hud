@@ -29,9 +29,19 @@ export class VozService {
   readonly voz = computed(() => escolherVoz(this.vozes()));
   readonly nomeDaVoz = computed(() => this.voz()?.name ?? 'voz padrão do sistema');
 
-  private cancelado = false;
+  private execucao = 0;
+  private concluirPedaco: (() => void) | null = null;
+  private readonly antesDaFala = new Set<() => void>();
   private ultimoBoundary = 0;
   private quadro: number | null = null;
+
+  /** Aviso síncrono: a captura deve parar antes de enviar áudio ao alto-falante. */
+  aoComecarFala(ouvinte: () => void): () => void {
+    this.antesDaFala.add(ouvinte);
+    return () => {
+      this.antesDaFala.delete(ouvinte);
+    };
+  }
 
   constructor() {
     if (!this.disponivel) {
@@ -60,30 +70,40 @@ export class VozService {
   }
 
   /** Fala o texto inteiro e só resolve quando acabou (ou quando `parar()` interrompeu). */
-  async falar(texto: string): Promise<void> {
+  async falar(texto: string, sinal?: AbortSignal): Promise<void> {
     const pedacos = fatiar(texto, LIMITE_DO_PEDACO);
-    if (!this.disponivel || pedacos.length === 0) {
+    if (!this.disponivel || pedacos.length === 0 || sinal?.aborted) {
       return;
     }
-    this.cancelado = false;
+    this.parar();
+    const minhaVez = ++this.execucao;
+    const cancelar = () => {
+      if (minhaVez === this.execucao) this.parar();
+    };
+    sinal?.addEventListener('abort', cancelar, { once: true });
+    this.antesDaFala.forEach((ouvinte) => ouvinte());
     this.falando.set(true);
     this.ultimoBoundary = performance.now();
     this.animar();
     try {
       for (const pedaco of pedacos) {
-        if (this.cancelado) {
+        if (minhaVez !== this.execucao) {
           return;
         }
         await this.falarPedaco(pedaco);
       }
     } finally {
-      this.falando.set(false);
-      this.intensidade.set(0);
+      sinal?.removeEventListener('abort', cancelar);
+      if (minhaVez === this.execucao) {
+        this.falando.set(false);
+        this.intensidade.set(0);
+      }
     }
   }
 
   parar(): void {
-    this.cancelado = true;
+    this.execucao += 1;
+    this.concluirPedaco?.();
     this.falando.set(false);
     this.intensidade.set(0);
     if (this.disponivel) {
@@ -111,6 +131,10 @@ export class VozService {
         }
         encerrado = true;
         clearTimeout(salvaguarda);
+        fala.onboundary = null;
+        fala.onend = null;
+        fala.onerror = null;
+        if (this.concluirPedaco === encerrar) this.concluirPedaco = null;
         resolver();
       };
 
@@ -121,8 +145,16 @@ export class VozService {
       // cancel() cai em onerror em alguns navegadores e em onend em outros: os dois encerram.
       fala.onerror = encerrar;
 
-      salvaguarda = setTimeout(encerrar, folgaPara(texto));
-      speechSynthesis.speak(fala);
+      this.concluirPedaco = encerrar;
+      salvaguarda = setTimeout(() => {
+        speechSynthesis.cancel();
+        encerrar();
+      }, folgaPara(texto));
+      try {
+        speechSynthesis.speak(fala);
+      } catch {
+        encerrar();
+      }
     });
   }
 

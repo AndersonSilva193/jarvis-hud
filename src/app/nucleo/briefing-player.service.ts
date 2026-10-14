@@ -54,12 +54,20 @@ export class BriefingPlayerService {
   /** Tempo que o card fica no palco antes da fala começar, para a entrada não ser atropelada. */
   pausaDeEntradaMs = 600;
 
+  /**
+   * O que vem depois do último bloco — hoje a pergunta das observações. Quem monta é a página,
+   * para a fila não precisar saber que existe microfone.
+   */
+  epilogo: ((briefing: Briefing, sinal: AbortSignal) => Promise<void>) | null = null;
+
   /** Cresce a cada nova reprodução: o laço antigo vê que não é mais o dono e desiste. */
   private execucao = 0;
+  private cancelamento = new AbortController();
   private emAndamento: string | null = null;
 
   /** Um briefing começou a ser montado no servidor. */
   gerando(): void {
+    this.cancelamento.abort();
     this.execucao += 1;
     this.voz.parar();
     this.emAndamento = null;
@@ -92,6 +100,9 @@ export class BriefingPlayerService {
       return;
     }
 
+    this.cancelamento.abort();
+    this.cancelamento = new AbortController();
+    const sinal = this.cancelamento.signal;
     const minhaVez = ++this.execucao;
     this.voz.parar();
     this.emAndamento = briefing.geradoEm;
@@ -119,6 +130,22 @@ export class BriefingPlayerService {
     }
     // Todos abaixo do índice: a fileira fica cheia e o palco vazio.
     this.indiceAtual.set(blocos.length);
+
+    // A fase só fecha depois do epílogo: enquanto a pergunta está no ar, continuar em "tocando"
+    // é o que mantém a guarda de reentrância de pé — briefing novo cancela a pergunta e um "bom
+    // dia" ouvido na janela não dispara nada. O try/catch existe para que um epílogo que estoure
+    // não deixe a fase congelada, o que mataria a palavra de ativação.
+    const epilogo = this.epilogo;
+    if (epilogo !== null) {
+      try {
+        await epilogo(briefing, sinal);
+      } catch {
+        // Pergunta que não deu certo não é motivo para a fila ficar presa.
+      }
+      if (minhaVez !== this.execucao) {
+        return;
+      }
+    }
     this.fase.set('concluido');
   }
 
@@ -129,6 +156,7 @@ export class BriefingPlayerService {
 
   /** Encerra a reprodução onde está e manda tudo para a fileira. */
   parar(): void {
+    this.cancelamento.abort();
     this.execucao += 1;
     this.voz.parar();
     if (this.blocos().length > 0) {

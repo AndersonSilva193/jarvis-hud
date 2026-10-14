@@ -277,4 +277,39 @@ describe('BriefingPlayerService', () => {
 
     expect(voz.falados.length).toBeGreaterThan(noPrimeiro);
   });
+
+  it('chama o epílogo depois do último bloco, e só então conclui a fase', async () => {
+    const quandoChamou: string[] = [];
+    player.epilogo = async () => {
+      quandoChamou.push(player.fase());
+    };
+
+    await player.tocar(briefingDe([CLIMA, LEMBRETES]));
+
+    // A fase ainda é "tocando" durante o epílogo: é o que mantém a guarda de reentrância de pé.
+    expect(quandoChamou).toEqual(['tocando']);
+    expect(player.fase()).toBe('concluido');
+  });
+
+  it('epílogo que estoura não deixa a fase presa em "tocando"', async () => {
+    player.epilogo = () => Promise.reject(new Error('microfone sumiu'));
+
+    await player.tocar(briefingDe([CLIMA]));
+
+    expect(player.fase()).toBe('concluido');
+  });
+
+  it('briefing novo no meio do epílogo cancela a conclusão do antigo', async () => {
+    let soltarEpilogo: () => void = () => {};
+    player.epilogo = () => new Promise<void>((resolver) => (soltarEpilogo = resolver));
+
+    const antigo = player.tocar(briefingDe([CLIMA], '2026-10-13T08:00:00-03:00'));
+    await respirar();
+
+    void player.tocar(briefingDe([LEMBRETES], '2026-10-13T09:00:00-03:00'));
+    soltarEpilogo?.();
+    await antigo;
+
+    expect(player.blocos().map((b) => b.tipo)).toEqual(['abertura', 'lembretes']);
+  });
 });
