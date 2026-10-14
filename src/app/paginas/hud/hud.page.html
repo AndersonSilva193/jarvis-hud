@@ -76,6 +76,7 @@
       @if (briefingGuardado()) { <span>Um briefing está disponível para consulta.</span> }
     </div>
     <div class="acoes">
+      @if (cota.rotulo(); as rotulo) { <span class="cota-voz" role="status">{{ rotulo }}</span> }
       <a class="elo" routerLink="/configuracao" aria-label="Configurar Jarvis">Configuração</a>
       @if (escuta.disponivel) { <button class="botao microfone" type="button" [attr.aria-pressed]="escuta.ligada()" (click)="alternarEscuta()">Ativação por voz <span>{{ escuta.ligada() ? 'ligada' : 'desligada' }}</span></button> }
       @if (player.fase() === 'tocando' || voz.falando()) { <button class="botao" type="button" (click)="player.parar()">Parar fala</button> }

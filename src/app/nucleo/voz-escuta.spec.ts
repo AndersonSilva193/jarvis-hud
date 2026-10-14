@@ -80,6 +80,10 @@ describe('voz e escuta integradas', () => {
           useValue: {
             gerarBriefing: gerar,
             ultimoBriefing: async () => null,
+            // Voz remota desligada: aqui o que se testa é a síntese do navegador.
+            sintetizarVoz: async () => ({ provedor: 'navegador', motivo: 'desligado' }),
+            urlDoAudio: (rota: string) => rota,
+            statusVoz: async () => null,
           },
         },
         {
@@ -132,6 +136,17 @@ describe('voz e escuta integradas', () => {
     TestBed.tick();
   }
 
+  /**
+   * Espera a ida à API de voz, que hoje acontece antes do primeiro som: só depois dela a
+   * utterance existe e o microfone é pausado. São microtarefas puras de propósito — avançar o
+   * relógio falso aqui esbarraria no laço de animação, que reagenda a cada quadro.
+   */
+  async function inicioDaFala(): Promise<void> {
+    for (let volta = 0; volta < 5; volta += 1) {
+      await Promise.resolve();
+    }
+  }
+
   it('começa desligado, configura pt-BR contínuo e lembra a preferência ao sair e voltar', () => {
     expect(escuta.ligada()).toBe(false);
     ligar();
@@ -154,6 +169,7 @@ describe('voz e escuta integradas', () => {
     ligar();
     const antiga = sessao();
     const fala = voz.falar('Bom dia, Jarvis.');
+    await inicioDaFala();
     expect(antiga.abort).toHaveBeenCalledOnce();
     expect(escuta.ouvindo()).toBe(false);
     antiga.ouvir('Jarvis');
@@ -169,10 +185,12 @@ describe('voz e escuta integradas', () => {
 
   it('ligar durante fala não abre captura; fala antiga não encerra a nova', async () => {
     const antiga = voz.falar('Primeira.');
+    await inicioDaFala();
     const fimAntigo = falas[0]!.onend;
     escuta.ligar();
     expect(ReconhecimentoFalso.sessoes).toHaveLength(0);
     const nova = voz.falar('Segunda.');
+    await inicioDaFala();
     fimAntigo?.();
     await antiga;
     TestBed.tick();
@@ -184,6 +202,7 @@ describe('voz e escuta integradas', () => {
 
   it('parar resolve a fala mesmo sem evento do navegador e não fala os pedaços restantes', async () => {
     const fala = voz.falar('Uma frase longa. '.repeat(50));
+    await inicioDaFala();
     voz.parar();
     await fala;
     expect(falas).toHaveLength(1);
@@ -281,6 +300,7 @@ describe('voz e escuta integradas', () => {
   it('sair durante fala impede reabertura quando a fala termina', async () => {
     ligar();
     const fala = voz.falar('Uma fala.');
+    await inicioDaFala();
     escuta.soltarMicrofone();
     await terminarFala();
     await fala;
@@ -434,7 +454,15 @@ describe('controles de microfone na HUD', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
-        { provide: JarvisApiService, useValue: { ultimoBriefing: async () => null } },
+        {
+          provide: JarvisApiService,
+          useValue: {
+            ultimoBriefing: async () => null,
+            sintetizarVoz: async () => ({ provedor: 'navegador', motivo: 'desligado' }),
+            urlDoAudio: (rota: string) => rota,
+            statusVoz: async () => null,
+          },
+        },
         {
           provide: JarvisEventosService,
           useValue: {

@@ -5,6 +5,8 @@
 .avisos{font-size:.72rem;color:#b8cbe0;max-width:28rem}
 .erro{color:#ffadb8}
 .acoes{display:flex;align-items:center;justify-content:center;gap:.6rem;flex-wrap:wrap;margin-left:auto}
+// Discreto de propósito: é informação de canto de tela, não um controle.
+.cota-voz{font:500 .62rem hud.$mono;letter-spacing:.14em;color:#8fb0cc;white-space:nowrap}
 .elo{font:500 .62rem hud.$mono;letter-spacing:.16em;text-transform:uppercase;color:#9fc2e0;padding:.6rem;text-decoration:none}
 .elo:hover{color:hud.$ciano-forte}
 .botao{@include hud.botao(7px);min-height:38px}

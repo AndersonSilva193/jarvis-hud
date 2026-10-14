@@ -118,6 +118,8 @@ export class BriefingPlayerService {
     this.blocos.set(blocos);
     this.indiceAtual.set(-1);
     this.fase.set('tocando');
+    // O áudio do primeiro bloco já pode ir sendo buscado durante a pausa de entrada do card.
+    this.voz.preparar(blocos[0]?.fala);
 
     for (let i = 0; i < blocos.length; i += 1) {
       if (minhaVez !== this.execucao) {
@@ -128,6 +130,9 @@ export class BriefingPlayerService {
       if (minhaVez !== this.execucao) {
         return;
       }
+      // Enquanto esta seção toca, a próxima já está sendo sintetizada: é o que emenda uma na
+      // outra sem o silêncio de uma ida e volta à API no meio do briefing.
+      this.voz.preparar(blocos[i + 1]?.fala);
       await this.voz.falar(blocos[i]!.fala);
     }
 

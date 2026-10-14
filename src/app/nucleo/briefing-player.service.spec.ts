@@ -58,8 +58,14 @@ const NOTICIAS: Secao = {
 /** Uma voz de mentira: no modo manual a fala só termina quando o teste manda. */
 class VozFalsa {
   readonly falados: string[] = [];
+  /** Os textos que o player mandou adiantar: é por aqui que se vê o pré-carregamento. */
+  readonly preparados: string[] = [];
   manual = false;
   paradas = 0;
+
+  preparar(texto: string | null | undefined): void {
+    if (texto) this.preparados.push(texto);
+  }
 
   private concluirAtual: (() => void) | null = null;
 
@@ -190,6 +196,30 @@ describe('BriefingPlayerService', () => {
     ]);
     expect(player.fase()).toBe('concluido');
     expect(player.indiceAtual()).toBe(3);
+  });
+
+  it('pede o áudio da seção seguinte enquanto a atual toca', async () => {
+    voz.manual = true;
+
+    void player.tocar(briefingDe([CLIMA, LEMBRETES]));
+    await respirar();
+
+    // Falando a abertura, o áudio do clima já foi encomendado: é isso que tira o silêncio
+    // entre uma seção e a outra.
+    expect(voz.falados).toHaveLength(1);
+    expect(voz.preparados).toContain(CLIMA.conteudo);
+    expect(voz.preparados).not.toContain(LEMBRETES.conteudo);
+
+    voz.terminarFala();
+    await respirar();
+
+    expect(voz.falados.at(-1)).toBe(CLIMA.conteudo);
+    expect(voz.preparados).toContain(LEMBRETES.conteudo);
+
+    voz.terminarFala();
+    await respirar();
+    voz.terminarFala();
+    await respirar();
   });
 
   it('ignora o mesmo briefing chegando duas vezes enquanto toca (SSE e resposta do POST)', async () => {

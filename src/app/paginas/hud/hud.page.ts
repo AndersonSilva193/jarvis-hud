@@ -23,6 +23,7 @@ import {
 import { JarvisApiService } from '../../nucleo/jarvis-api.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
 import { VozService } from '../../nucleo/voz.service';
+import { VozCotaService } from '../../nucleo/voz-cota.service';
 import { contextoBriefing } from '../../nucleo/horario-briefing';
 import type { Bloco, Briefing } from '../../nucleo/briefing.modelos';
 
@@ -68,6 +69,7 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly briefingGuardado = signal<Briefing | null>(null);
   protected readonly player = inject(BriefingPlayerService);
   protected readonly voz = inject(VozService);
+  protected readonly cota = inject(VozCotaService);
   protected readonly eventos = inject(JarvisEventosService);
   protected readonly escuta = inject(EscutaService);
   private readonly api = inject(JarvisApiService);
@@ -154,6 +156,7 @@ export class HudPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.conversa.abrir();
+    this.cota.acompanhar();
     this.eventos.conectar({
       gerando: () => {
         if (!this.conversa.naTela() && !this.escuta.ditando()) this.player.gerando();
@@ -199,6 +202,7 @@ export class HudPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.ativa = false;
+    this.cota.parar();
     this.conversa.fechar();
     this.eventos.desconectar();
     this.player.parar();

@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { ConfigStore, normalizarUrl } from './config.store';
 import type { HistoricoConversa, RespostaConversa } from './conversa.modelos';
 import type { Briefing } from './briefing.modelos';
+import type { RespostaVoz, StatusVoz } from './voz.modelos';
 
 /** Por que uma tentativa de conexão não deu certo — o suficiente para a tela explicar. */
 export type ResultadoTeste = 'ok' | 'token-invalido' | 'api-inacessivel' | 'conteudo-misto';
@@ -122,6 +123,35 @@ export class JarvisApiService {
       }),
     );
   }
+  /**
+   * Pergunta como falar esta frase: a rota do MP3, ou o aviso de que a HUD fala sozinha.
+   *
+   * Quem chama põe um teto de tempo em cima desta promessa — esperar a rede é pior do que falar
+   * logo com a voz do navegador.
+   */
+  sintetizarVoz(texto: string): Promise<RespostaVoz> {
+    return firstValueFrom(
+      this.http.post<RespostaVoz>(
+        this.config.rota('/api/voz/sintetizar'),
+        { texto },
+        { headers: this.autorizacao() },
+      ),
+    );
+  }
+
+  /** Endereço absoluto do MP3, com o token na query: o elemento <audio> não manda header. */
+  urlDoAudio(rotaRelativa: string): string {
+    return `${this.config.rota(rotaRelativa)}?token=${encodeURIComponent(this.config.token())}`;
+  }
+
+  statusVoz(): Promise<StatusVoz> {
+    return firstValueFrom(
+      this.http.get<StatusVoz>(this.config.rota('/api/voz/status'), {
+        headers: this.autorizacao(),
+      }),
+    );
+  }
+
   baixarAnexo(id: string): Promise<Blob> {
     if (!/^[a-f0-9-]{36}$/i.test(id)) return Promise.reject(new Error('Anexo inválido'));
     return firstValueFrom(
