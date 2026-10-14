@@ -16,3 +16,5 @@
 
 <p class="fonte">{{ fonte() }}</p>
 <h2 class="manchete">{{ dados().titulo }}</h2>
+
+@if (linkSeguro()) { <a class="abrir-fonte" [href]="linkSeguro()" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Abrir fonte ↗</a> }

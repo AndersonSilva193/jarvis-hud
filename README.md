@@ -4,6 +4,10 @@ A tela de conversa e briefing do [Jarvis](../jarvis): fundo azul-escuro com grad
 cards translúcidos que entram um por um enquanto o Jarvis lê cada bloco em voz alta. Feita para
 ficar aberta em tela cheia num monitor.
 
+O palco tem **no máximo um card**. Quando o bloco acaba de ser falado, o card desce para a fileira
+de baixo e vira miniatura; depois do último, o palco fica vazio e o orbe cresce e assume o centro —
+o Jarvis em repouso é um círculo livre, sem nada por cima.
+
 Angular 22 (standalone, zoneless, sem SSR). Nenhum segredo no build: a URL da API e o `HUD_TOKEN`
 são digitados na primeira tela e ficam no `localStorage` do navegador.
 
@@ -29,15 +33,47 @@ Do lado do Jarvis, `HUD_ORIGEM` precisa listar a origem de onde o HUD é aberto 
 1. Ao abrir, busca `GET /api/briefing/ultimo` e pinta o último briefing na fileira de baixo — sem
    falar nada. Conectar no SSE não traz estado nenhum, por isso essa chamada existe.
 2. Conecta em `GET /api/eventos?token=...` e reconecta sozinho, com backoff até 30 s.
-3. No evento `gerando`, o orbe mostra **"Atualizando o radar de notícias..."**.
+3. No evento `gerando`, a linha de estado no topo mostra **"Atualizando o radar de notícias..."**.
+   Essa linha é a única voz sobre o que o Jarvis está fazendo: pronto, ouvindo, pensando,
+   consultando ferramenta, falando e aguardando resposta passam todos por ali. O estado da conexão
+   é separado, no canto esquerdo.
 4. No evento `briefing`, a fila começa: o card entra no centro, o Jarvis fala aquele bloco e, ao
-   terminar, o card desce para a fileira e o próximo entra. São 7 blocos no caso cheio — abertura,
-   clima, lembretes, sistemas e uma manchete por notícia.
-5. O botão **Bom dia** faz `POST /api/briefing`. Ele é discreto de propósito: existe porque o
+   terminar, o card sai animado para baixo e vira miniatura na fileira. São 7 blocos no caso cheio —
+   abertura, clima, lembretes, sistemas e uma manchete por notícia. Depois do último, o palco fica
+   vazio: o orbe cresce e fica sozinho na tela, com o rótulo do briefing e a data de geração acima
+   da fileira.
+5. O botão **Briefing** faz `POST /api/briefing`. Ele é discreto de propósito: existe porque o
    Chrome exige um clique antes de tocar áudio. O cron das 8h e o `/bomdia` no Telegram disparam o
    briefing sem clique nenhum — a tela se monta sozinha pelo SSE.
+6. Cada miniatura é consultável: clicar abre o card em leitura silenciosa (selo **CONSULTA**) e
+   interrompe a fala em curso. Clicar de novo na mesma miniatura, no **✕** do card ou em `Esc`
+   fecha a consulta e devolve o centro ao orbe.
 
-Teclas: `→` pula o bloco atual, `Esc` encerra a reprodução.
+Abaixo do orbe, uma legenda discreta mostra o trecho que está sendo falado agora — é o texto
+entregue à síntese, sem simular sincronia palavra a palavra, que o navegador não informa.
+
+Teclas: `→` pula o bloco atual, `Esc` fecha a consulta e encerra a reprodução.
+
+A barra de conversa fica compacta em repouso (**Conversar** e o microfone) e só expande ao clicar ou
+ao começar um ditado. Ela nunca se recolhe sozinha enquanto houver rascunho ou ditado em curso.
+
+## Saudação e horário
+
+O cumprimento é **um só**, decidido no backend: a mesma abertura vai para a tela e para a síntese,
+e o modelo não escolhe de novo o período do dia. As faixas são bom dia das 05h às 11h59, boa tarde
+das 12h às 17h59 e boa noite no resto.
+
+Quem lê isso aqui é `nucleo/horario-briefing.ts`, e a regra é usar **o relógio do servidor**:
+
+- com `fusoHorario` no briefing (campo opcional, para não quebrar com backend antigo), a data é
+  formatada nesse fuso;
+- sem ele, o relógio é reconstruído do offset do `geradoEm` — o que o servidor tinha, não o que o
+  navegador tem. Abrir o HUD de outro fuso não muda o cumprimento;
+- a `abertura` que o backend mandou sempre vence o cálculo local, que é só a rede de segurança.
+
+O briefing restaurado ao abrir a tela fica **mudo** e aparece rotulado **Último briefing**, com a
+data em que foi gerado — ele não finge ser de agora. Pedir um novo gera conteúdo atualizado, e o
+cache do backend deixa de ser reaproveitado quando vira a data ou muda o período da saudação.
 
 ## Voz
 
@@ -60,7 +96,8 @@ chrome --kiosk --autoplay-policy=no-user-gesture-required http://localhost:4200
 
 Em navegadores com SpeechRecognition ou webkitSpeechRecognition, clique em **ativação por voz** e
 autorize o acesso. A escuta começa desligada na primeira visita e lembra a preferência nas
-seguintes. Usa pt-BR contínuo: **bom dia** pede briefing; **Jarvis** inicia um ditado de conversa.
+seguintes. Usa pt-BR contínuo: **bom dia**, **boa tarde** e **boa noite** pedem o briefing (com ou sem
+"jarvis" antes ou depois); **Jarvis** seguido de qualquer outra coisa inicia um ditado de conversa.
 A frase **Jarvis, como está o servidor?** já aproveita a pergunta na mesma ativação.
 
 O indicador **ouvindo** acende somente durante a captura. O microfone pausa durante qualquer
@@ -75,7 +112,7 @@ Silêncio encerra a pergunta; Escape, novo briefing, saída da HUD ou desligar o
 cancelam a interação. As observações só são faladas após confirmação.
 
 Use HTTPS ou localhost e conceda a permissão do navegador. Mesmo lembrando o microfone ligado,
-uma aba recém-aberta pode precisar de um clique em **Ditar**, **ativação por voz** ou **Bom dia** para liberar
+uma aba recém-aberta pode precisar de um clique em **Ditar**, **ativação por voz** ou **Briefing** para liberar
 áudio. Se a permissão for recusada, a HUD avisa e não fica solicitando novamente em laço.
 
 ## Conversar com o Jarvis
@@ -124,6 +161,11 @@ para essas futuras integrações.
 2. Envie texto com Enter; confirme a resposta falada e a mesma conversa no histórico do Telegram.
 3. Clique **Ditar**, diga uma pergunta e faça silêncio; deve enviar uma vez e pausar a captura durante a resposta.
 4. Ligue **ativação por voz**, diga “Jarvis, como está o servidor?” e depois “bom dia”. Só a segunda pede briefing.
+5. Repita com “boa tarde” e “boa noite”: as três saudações pedem briefing.
+6. Com o briefing terminado, confira que o palco está vazio e o orbe sozinho; clique numa miniatura,
+   depois no **✕**, e veja o orbe voltar ao centro.
+7. Mude o relógio do servidor para manhã, tarde, noite e madrugada e confira que o cumprimento
+   exibido é idêntico ao falado. O período vem do servidor, nunca do relógio do navegador.
 5. Na pergunta das observações, teste “sim”, “não quero” e silêncio. Saia da página durante a espera: o microfone não deve reabrir.
 6. Derrube e restaure a conexão durante um pedido. Deve recuperar a resposta sem executar o pedido novamente.
 7. Reabra a HUD: a preferência de ativação deve ser lembrada e as respostas restauradas silenciosamente.
@@ -158,6 +200,7 @@ teriam de ser listadas uma por uma. Na prática, só o domínio de produção fu
 src/app/
   nucleo/
     briefing.modelos.ts          espelho do BriefingDto da API, mais o tipo Bloco da fila
+    horario-briefing.ts          abertura e data de geração no fuso do servidor, nunca no do navegador
     config.store.ts              URL + token no localStorage
     conversa.service.ts          pedido, histórico e recuperação sem repetir POST
     conversa.modelos.ts          contratos de conversa, anexos e confirmação
@@ -167,9 +210,9 @@ src/app/
     voz.service.ts               speechSynthesis pt-BR e a intensidade do orbe
     briefing-player.service.ts   a fila: um bloco por vez, falado até o fim
   paginas/configuracao/          tela 1
-  paginas/hud/                   tela 2: orbe, palco e fileira
+  paginas/hud/                   tela 2: orbe, palco, fileira e controles (um .scss por área)
   componentes/conversa/          barra, resposta, anexos e histórico
-  componentes/orbe/              OrbeComponent (canvas: núcleo, anéis, partículas)
+  componentes/orbe/              OrbeComponent (canvas: filamentos por espera, escuta, trabalho e fala)
   componentes/card-clima/        CardClimaComponent
   componentes/card-lembretes/    CardLembretesComponent
   componentes/card-noticia/      CardNoticiaComponent
@@ -191,6 +234,6 @@ npm run build       # build de produção
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `token inválido` no rodapé       | `HUD_TOKEN` diferente do que está no `.env` do Jarvis                                                                                         |
 | `api fora do ar`                 | URL errada, Jarvis desligado, ou a origem não está em `HUD_ORIGEM`                                                                            |
-| Cards aparecem, mas ninguém fala | Falta o clique inicial (clique em **Bom dia**) ou não há voz pt-BR no sistema                                                                 |
-| Clicar **Bom dia** não muda nada | Dentro de 60 s a API devolve o briefing anterior sem emitir SSE; o HUD toca o da resposta HTTP, então isso deveria funcionar — veja o console |
+| Cards aparecem, mas ninguém fala | Falta o clique inicial (clique em **Briefing**) ou não há voz pt-BR no sistema                                                                 |
+| Clicar **Briefing** não muda nada | Dentro de 60 s a API devolve o briefing anterior sem emitir SSE; o HUD toca o da resposta HTTP, então isso deveria funcionar — veja o console |
 | Card de notícia sem foto         | O feed não trouxe imagem, ou a CDN recusou o hotlink: o card tem estado próprio para isso                                                     |

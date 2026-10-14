@@ -54,3 +54,5 @@
   letter-spacing: -0.01em;
   color: hud.$texto;
 }
+
+.abrir-fonte { display:inline-block;margin-top:1rem;color:#a6f8ff;font-size:.85rem; } .abrir-fonte:focus-visible { outline:2px solid #a6f8ff;outline-offset:4px; }

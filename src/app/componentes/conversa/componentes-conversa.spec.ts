@@ -35,6 +35,38 @@ describe('componentes da conversa', () => {
     expect(tela.nativeElement.querySelector('[aria-label="Ditar mensagem"]')).toBeNull();
     expect(tela.nativeElement.querySelector('label')?.htmlFor).toBe(texto.id);
   });
+  it('a barra começa compacta, expande ao clicar e não recolhe com rascunho ou ditado', () => {
+    const tela = TestBed.createComponent(BarraConversaComponent);
+    tela.detectChanges();
+    const editor = (): HTMLElement => tela.nativeElement.querySelector('#editor-conversa');
+    const recolher = (): HTMLButtonElement =>
+      tela.nativeElement.querySelector('[aria-label="Recolher conversa"]');
+    expect(editor().hidden).toBe(true);
+
+    tela.nativeElement.querySelector('.compacta button').click();
+    tela.detectChanges();
+    expect(editor().hidden).toBe(false);
+    expect(recolher().disabled).toBe(false);
+
+    // Rascunho em cima da mesa: recolher apagaria o que a pessoa está escrevendo.
+    const texto: HTMLTextAreaElement = tela.nativeElement.querySelector('textarea');
+    texto.value = 'Meio de uma frase';
+    texto.dispatchEvent(new Event('input'));
+    tela.detectChanges();
+    expect(recolher().disabled).toBe(true);
+
+    recolher().click();
+    tela.detectChanges();
+    expect(editor().hidden).toBe(false);
+    expect(tela.componentInstance.texto()).toBe('Meio de uma frase');
+
+    // Ditado em curso também segura o campo aberto, mesmo sem texto ainda.
+    tela.componentInstance.texto.set('');
+    tela.componentRef.setInput('ditando', true);
+    tela.detectChanges();
+    expect(editor().hidden).toBe(false);
+    expect(recolher().disabled).toBe(true);
+  });
   it('só mostra confirmação com metadados e emite os dois comandos explícitos', () => {
     const tela = TestBed.createComponent(RespostaConversaComponent);
     const comando = vi.fn();

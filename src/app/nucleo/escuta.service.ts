@@ -5,7 +5,7 @@ import { VozService } from './voz.service';
 const CHAVE_LIGADA = 'jarvis-hud.escuta';
 
 /** O que acorda o Jarvis. */
-export const ATIVACOES = ['bom dia', 'jarvis'] as const;
+export const ATIVACOES = ['bom dia', 'boa tarde', 'boa noite', 'jarvis'] as const;
 /** O que conta como "sim" na pergunta das observações. */
 export const CONFIRMACOES = ['sim', 'quero', 'claro', 'pode'] as const;
 

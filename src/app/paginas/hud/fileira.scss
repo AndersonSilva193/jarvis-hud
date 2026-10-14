@@ -1,0 +1,13 @@
+@use '../../estilos/hud' as hud;
+
+// A área dos cards concluídos: fica fora do palco de propósito, para nada se sobrepor ao orbe.
+.arquivo{display:flex;flex-direction:column;gap:.5rem;max-width:75rem;width:100%;margin:auto;flex-shrink:0;box-sizing:border-box}
+.rotulo-arquivo{margin:0 0 0 .3rem;@include hud.rotulo(.6rem);letter-spacing:.16em}.rotulo-arquivo span{color:#8fa9c4;letter-spacing:.08em}
+.fileira{display:flex;gap:.7rem;width:100%;overflow-x:auto;padding:.3rem;box-sizing:border-box;scrollbar-width:thin}
+// Mesma moldura do card em destaque: a miniatura é o mesmo card, não uma redução por escala.
+.miniatura{@include hud.moldura(14px);flex:1 0 155px;max-width:230px;display:flex;flex-direction:column;gap:.65rem;text-align:left;padding:1rem;color:hud.$texto;cursor:pointer}
+.miniatura strong{font-size:.8rem;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:500}
+.mini-acao{font-size:.65rem;color:#99b9d3;margin-top:auto}.mini-acao span{float:right}
+.miniatura--ativa,.miniatura:hover{border-color:hud.$ciano;background:linear-gradient(160deg,rgba(16,43,73,.9),rgba(7,25,46,.92))}
+@media(min-width:1800px){.arquivo{max-width:88rem}}
+@media(max-width:700px){.arquivo{margin-top:.5rem}.miniatura{min-width:145px}}

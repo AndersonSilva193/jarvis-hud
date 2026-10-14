@@ -24,6 +24,7 @@ export class VozService {
   readonly falando = signal(false);
   /** 0 a 1, de quanto o orbe deve pulsar agora. */
   readonly intensidade = signal(0);
+  readonly trechoAtual = signal('');
 
   private readonly vozes = signal<SpeechSynthesisVoice[]>([]);
   readonly voz = computed(() => escolherVoz(this.vozes()));
@@ -95,6 +96,7 @@ export class VozService {
     } finally {
       sinal?.removeEventListener('abort', cancelar);
       if (minhaVez === this.execucao) {
+        this.trechoAtual.set('');
         this.falando.set(false);
         this.intensidade.set(0);
       }
@@ -102,6 +104,7 @@ export class VozService {
   }
 
   parar(): void {
+    this.trechoAtual.set('');
     this.execucao += 1;
     this.concluirPedaco?.();
     this.falando.set(false);
@@ -113,6 +116,7 @@ export class VozService {
 
   private falarPedaco(texto: string): Promise<void> {
     return new Promise<void>((resolver) => {
+      this.trechoAtual.set(texto);
       const fala = new SpeechSynthesisUtterance(texto);
       fala.lang = 'pt-BR';
       const voz = this.voz();

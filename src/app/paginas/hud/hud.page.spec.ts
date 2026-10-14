@@ -1,0 +1,127 @@
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { signal } from '@angular/core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { HudPage } from './hud.page';
+import { OrbeComponent } from '../../componentes/orbe/orbe';
+import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
+import { JarvisApiService } from '../../nucleo/jarvis-api.service';
+import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
+import type { Briefing } from '../../nucleo/briefing.modelos';
+
+const BRIEFING: Briefing = {
+  geradoEm: '2026-10-13T08:00:00-03:00',
+  fusoHorario: 'America/Sao_Paulo',
+  nomeUsuario: 'Anderson',
+  secoes: [
+    {
+      titulo: 'clima',
+      conteudo: 'Curitiba: 18 °C agora (céu limpo)',
+      dados: {
+        cidade: 'Curitiba',
+        temperaturaAtual: 18,
+        minima: 14,
+        maxima: 22,
+        chanceChuvaPct: 30,
+        descricao: 'céu limpo',
+      },
+    },
+  ],
+  texto: '',
+  geradoAgora: true,
+};
+
+afterEach(() => {
+  TestBed.resetTestingModule();
+  vi.restoreAllMocks();
+});
+
+describe('o palco do HUD', () => {
+  beforeEach(() => {
+    // O jsdom não tem canvas; aqui o que se mede é o palco, não o desenho do orbe.
+    vi.spyOn(OrbeComponent.prototype, 'ngAfterViewInit').mockImplementation(() => {});
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: JarvisApiService, useValue: { ultimoBriefing: async () => null } },
+        {
+          provide: JarvisEventosService,
+          useValue: {
+            conectar: vi.fn(),
+            desconectar: vi.fn(),
+            status: signal('online'),
+            motivo: signal(null),
+          },
+        },
+      ],
+    });
+  });
+
+  it('briefing terminado: o último card sai do palco e deixa o orbe sozinho', () => {
+    const player = TestBed.inject(BriefingPlayerService);
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+    player.mostrar(BRIEFING);
+    tela.detectChanges();
+
+    // Nada por cima do orbe — nem card, nem o antigo painel de boas-vindas.
+    expect(tela.nativeElement.querySelector('.card-principal')).toBeNull();
+    expect(tela.nativeElement.querySelector('.boas-vindas')).toBeNull();
+    expect(tela.nativeElement.querySelector('.orbe--livre')).not.toBeNull();
+
+    // Os blocos falados viram miniaturas: abertura + clima.
+    expect(tela.nativeElement.querySelectorAll('.fileira .miniatura')).toHaveLength(2);
+    expect(tela.nativeElement.querySelector('.rotulo-arquivo').textContent).toContain(
+      'Último briefing',
+    );
+  });
+
+  it('consultar devolve o card ao palco; fechar devolve o orbe', () => {
+    const player = TestBed.inject(BriefingPlayerService);
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+    player.mostrar(BRIEFING);
+    tela.detectChanges();
+    const clima: HTMLButtonElement = tela.nativeElement.querySelectorAll('.miniatura')[1];
+
+    clima.click();
+    tela.detectChanges();
+    expect(tela.nativeElement.querySelector('.card-principal')).not.toBeNull();
+    expect(tela.nativeElement.querySelector('.selo').textContent).toContain('CONSULTA');
+    expect(clima.getAttribute('aria-pressed')).toBe('true');
+    expect(tela.nativeElement.querySelector('.orbe--livre')).toBeNull();
+
+    tela.nativeElement.querySelector('[aria-label="Fechar consulta"]').click();
+    tela.detectChanges();
+    expect(tela.nativeElement.querySelector('.card-principal')).toBeNull();
+    expect(tela.nativeElement.querySelector('.orbe--livre')).not.toBeNull();
+  });
+
+  it('clicar de novo na miniatura aberta fecha a consulta', () => {
+    const player = TestBed.inject(BriefingPlayerService);
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+    player.mostrar(BRIEFING);
+    tela.detectChanges();
+    const clima: HTMLButtonElement = tela.nativeElement.querySelectorAll('.miniatura')[1];
+
+    clima.click();
+    tela.detectChanges();
+    clima.click();
+    tela.detectChanges();
+
+    expect(tela.nativeElement.querySelector('.card-principal')).toBeNull();
+    expect(clima.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('sem briefing nenhum, a tela é só o orbe e a linha de estado', () => {
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+
+    expect(tela.nativeElement.querySelector('.card-principal')).toBeNull();
+    expect(tela.nativeElement.querySelector('.arquivo')).toBeNull();
+    expect(tela.nativeElement.querySelector('.orbe--livre')).not.toBeNull();
+    expect(tela.nativeElement.querySelector('.falando').textContent).toContain('Às suas ordens');
+  });
+});

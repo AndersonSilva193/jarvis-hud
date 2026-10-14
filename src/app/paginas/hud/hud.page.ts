@@ -22,7 +22,8 @@ import {
 import { JarvisApiService } from '../../nucleo/jarvis-api.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
 import { VozService } from '../../nucleo/voz.service';
-import type { Briefing } from '../../nucleo/briefing.modelos';
+import { contextoBriefing } from '../../nucleo/horario-briefing';
+import type { Bloco, Briefing } from '../../nucleo/briefing.modelos';
 
 /** Tempo parado até o cursor sumir: o HUD vive num monitor, sem ninguém mexendo no mouse. */
 const OCIOSO_ATE_ESCONDER_MS = 5_000;
@@ -54,7 +55,7 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
     RouterLink,
   ],
   templateUrl: './hud.page.html',
-  styleUrls: ['./hud.page.scss', './conversa.scss'],
+  styleUrls: ['./hud.page.scss', './fileira.scss', './conversa.scss'],
 })
 export class HudPage implements OnInit, OnDestroy {
   protected readonly conversa = inject(ConversaService);
@@ -74,7 +75,7 @@ export class HudPage implements OnInit, OnDestroy {
     if (this.player.fase() === 'gerando') {
       return 'gerando';
     }
-    return this.voz.falando() ? 'falando' : 'ocioso';
+    return this.voz.falando() ? 'falando' : this.escuta.ouvindo() ? 'ouvindo' : 'ocioso';
   });
 
   protected readonly estadoDaConexao = computed(() => {
@@ -96,6 +97,34 @@ export class HudPage implements OnInit, OnDestroy {
         return 'desligado';
     }
   });
+
+  protected readonly blocoNoPalco = computed(() => this.player.selecionado() ?? this.player.atual());
+  /** Zero ou um: é lista para o `@for` dar identidade ao card e animar a entrada e a saída dele. */
+  protected readonly palco = computed(() => { const bloco = this.blocoNoPalco(); return bloco ? [bloco] : []; });
+  /** Sem nada no palco o orbe cresce e assume o centro — é o Jarvis em repouso, sem card por cima. */
+  protected readonly orbeLivre = computed(() => !this.conversa.naTela() && this.palco().length === 0);
+  protected readonly concluidos = computed(() => this.player.blocos().slice(0, Math.max(0,this.player.indiceAtual())));
+  protected readonly geracaoBriefing = computed(() => { const b = this.player.briefing(); return b ? contextoBriefing(b).geracao : ''; });
+  protected readonly estadoApresentacao = computed(() => {
+    if (this.voz.falando()) return 'Falando';
+    if (this.escuta.aguardandoResposta()) return 'Aguardando resposta';
+    if (this.conversa.ocupada()) return this.conversa.progresso() || 'Pensando';
+    // Na fase `gerando` quem tem o texto é a fila; aqui em cima fica só a decisão de qual estado mostrar.
+    if (this.player.fase() === 'gerando') return this.player.legenda();
+    if (this.pedindo()) return 'Preparando briefing';
+    if (this.escuta.ouvindo()) return this.escuta.ditando() ? 'Ouvindo sua mensagem' : 'Ouvindo';
+    return 'Às suas ordens';
+  });
+  protected consultarCard(bloco: Bloco): void { this.player.consultar(bloco); }
+  protected resumoCard(bloco: Bloco): string {
+    switch(bloco.tipo) {
+      case 'clima': return bloco.dados.temperaturaAtual + '° · ' + bloco.dados.cidade;
+      case 'lembretes': return bloco.dados.itens.length ? bloco.dados.itens.length + ' lembrete(s)' : 'Agenda livre';
+      case 'sistemas': return bloco.dados.sites.length + ' site(s) monitorado(s)';
+      case 'noticia': return bloco.dados.titulo;
+      default: return bloco.linhas[0] ?? bloco.rotulo;
+    }
+  }
 
   private ocioso: ReturnType<typeof setTimeout> | null = null;
   private ultimaAtivacao = -Infinity;
@@ -231,7 +260,7 @@ export class HudPage implements OnInit, OnDestroy {
     const saudacao = normalizar(frase)
       .replace(/[^a-z ]/g, '')
       .trim();
-    if (['bom dia', 'bom dia jarvis', 'jarvis bom dia'].includes(saudacao)) {
+    if (/^(?:(?:bom dia|boa tarde|boa noite)(?: jarvis)?|jarvis (?:bom dia|boa tarde|boa noite))$/.test(saudacao)) {
       this.ultimaAtivacao = Date.now();
       this.conversa.mostrarBriefing();
       void this.pedirBriefing();
@@ -332,6 +361,8 @@ export class HudPage implements OnInit, OnDestroy {
     if (evento.key === 'Escape') {
       this.escuta.cancelarDitado();
       this.voz.parar();
+      // Fechar a consulta antes de parar: o palco volta a ficar vazio e o orbe retoma o centro.
+      this.player.fecharConsulta();
       this.player.parar();
       return;
     }
@@ -343,8 +374,6 @@ export class HudPage implements OnInit, OnDestroy {
       return;
     if (evento.key === 'ArrowRight') {
       this.player.pular();
-    } else if (evento.key === 'Escape') {
-      this.player.parar();
     }
   };
 

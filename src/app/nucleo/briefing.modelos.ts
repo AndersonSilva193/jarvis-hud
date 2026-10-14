@@ -8,6 +8,7 @@
 export interface Briefing {
   /** ISO-8601 com offset, ex. "2026-10-13T08:00:00-03:00". */
   geradoEm: string;
+  fusoHorario?: string;
   nomeUsuario: string;
   secoes: Secao[];
   /** O cumprimento narrado pelo Jarvis. Vazio quando a narração falhou. */

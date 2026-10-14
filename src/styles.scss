@@ -32,6 +32,27 @@ app-root {
   height: 100%;
 }
 
+// O fundo das duas telas: as páginas só colocam as duas divs, a pintura mora aqui para não divergirem.
+.vinheta,
+.grade {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.vinheta {
+  background: radial-gradient(ellipse at 50% 44%, #0b2862 0%, #06132f 40%, hud.$fundo-abissal 90%);
+}
+
+.grade {
+  background-image:
+    linear-gradient(#519bff0b 1px, transparent 1px),
+    linear-gradient(90deg, #519bff0b 1px, transparent 1px);
+  background-size: 54px 54px;
+  mask-image: radial-gradient(ellipse, #000, transparent 85%);
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -43,6 +64,18 @@ app-root {
 
 ::selection {
   background: hud.$ciano-fraco;
+}
+
+// Precisa ser global: dentro de um componente o `*` vira `*[_ngcontent-x]` e não alcança os cards,
+// o orbe nem a outra página — que é justamente onde moram as animações contínuas.
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @keyframes hud-pulsar {

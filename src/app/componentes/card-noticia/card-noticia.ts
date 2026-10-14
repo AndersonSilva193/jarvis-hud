@@ -20,6 +20,7 @@ export class CardNoticiaComponent {
   private readonly imagemFalhou = signal(false);
 
   readonly comImagem = computed(() => this.dados().imagemUrl.length > 0 && !this.imagemFalhou());
+  readonly linkSeguro = computed(() => { try { const u = new URL(this.dados().link); return ['https:','http:'].includes(u.protocol) && !u.username && !u.password ? u.href : ''; } catch { return ''; } });
   readonly fonte = computed(() => {
     const dados = this.dados();
     return dados.fonte ? `${dados.tema} · ${dados.fonte}` : dados.tema;

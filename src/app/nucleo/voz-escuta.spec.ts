@@ -466,20 +466,22 @@ describe('controles de microfone na HUD', () => {
     const tela = TestBed.createComponent(HudPage);
     tela.detectChanges();
     const botao: HTMLButtonElement = tela.nativeElement.querySelector('.microfone');
+    // A linha de estado agora é fixa — quem acende é o ponto, e o texto diz qual é o estado.
+    const estado = () => tela.nativeElement.querySelector('.falando');
     expect(botao.getAttribute('aria-pressed')).toBe('false');
     botao.click();
     tela.detectChanges();
     expect(botao.getAttribute('aria-pressed')).toBe('true');
-    expect(tela.nativeElement.querySelector('.falando[role="status"]')).toBeNull();
+    expect(estado().textContent).toContain('Às suas ordens');
+    expect(estado().querySelector('.ponto--ativo')).toBeNull();
     ReconhecimentoFalso.sessoes.at(-1)!.iniciar();
     tela.detectChanges();
-    expect(tela.nativeElement.querySelector('[role="status"]').textContent).toContain('ouvindo');
+    expect(estado().textContent).toContain('Ouvindo');
+    expect(estado().querySelector('.ponto--ativo')).not.toBeNull();
     const escuta = TestBed.inject(EscutaService);
     const resposta = escuta.ouvirPor(8000);
     tela.detectChanges();
-    expect(tela.nativeElement.querySelector('[role="status"]').textContent).toContain(
-      'Aguardando resposta',
-    );
+    expect(estado().textContent).toContain('Aguardando resposta');
     botao.click();
     tela.detectChanges();
     await expect(resposta).resolves.toBe('');

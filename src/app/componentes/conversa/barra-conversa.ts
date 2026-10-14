@@ -1,11 +1,16 @@
-import { Component, input, model, output } from '@angular/core';
+import { Component, ElementRef, computed, input, model, output, signal, viewChild } from '@angular/core';
 
 @Component({
   selector: 'app-barra-conversa',
   template: ` <div class="barra" role="group" aria-label="Conversar com o Jarvis">
+    <div class="compacta" [hidden]="expandida()">
+      <button type="button" (click)="abrir()" aria-controls="editor-conversa" [attr.aria-expanded]="expandida()">Conversar <span aria-hidden="true">↗</span></button>
+      @if (vozDisponivel()) { <button class="ditar" type="button" aria-label="Ditar mensagem" [disabled]="ocupada()" (click)="microfone.emit()">◉</button> }
+    </div>
+    <div id="editor-conversa" class="editor" [hidden]="!expandida()">
     <label class="rotulo" for="mensagem-jarvis">Sua mensagem</label>
     <textarea
-      id="mensagem-jarvis"
+      #campo id="mensagem-jarvis"
       rows="2"
       maxlength="8000"
       [value]="texto()"
@@ -15,6 +20,7 @@ import { Component, input, model, output } from '@angular/core';
       aria-describedby="ajuda-conversa"
     ></textarea>
     <div class="acoes">
+      <button type="button" aria-label="Recolher conversa" [disabled]="!!texto().trim() || ditando()" (click)="aberta.set(false)">Recolher</button>
       @if (vozDisponivel()) {
         <button
           type="button"
@@ -43,18 +49,24 @@ import { Component, input, model, output } from '@angular/core';
             : 'Enter envia · Shift + Enter quebra a linha'
       }}
     </p>
+    </div>
   </div>`,
   styles: `
     :host {
       display: block;
     }
+    [hidden] { display:none !important; }
+    .compacta { display:flex;justify-content:center;gap:.7rem; }
+    .compacta button { border-radius:30px;padding:.8rem 1.5rem;box-shadow:0 0 25px #167aff25; }
+    .compacta .ditar {border-radius:50%;padding:.8rem 1rem;}
+    .editor { display:grid;grid-template-columns:1fr auto;gap:.6rem;padding:.8rem;background:#07162cf2;border:1px solid #386577;border-radius:12px; }
     .barra {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: 1fr;
       gap: 0.5rem 0.8rem;
-      padding: 0.8rem 1rem;
-      background: #07162cf2;
-      border: 1px solid #386577;
+      padding: 0;
+      background: transparent;
+      border: 0;
       border-radius: 8px;
     }
     .rotulo {
@@ -104,7 +116,7 @@ import { Component, input, model, output } from '@angular/core';
       outline-offset: 3px;
     }
     @media (max-width: 600px) {
-      .barra {
+      .editor {
         grid-template-columns: 1fr;
       }
       .acoes {
@@ -115,6 +127,10 @@ import { Component, input, model, output } from '@angular/core';
 })
 export class BarraConversaComponent {
   readonly texto = model('');
+  readonly aberta = signal(false);
+  readonly expandida = computed(() => this.aberta() || this.ditando() || !!this.texto());
+  private readonly campo = viewChild<ElementRef<HTMLTextAreaElement>>('campo');
+  abrir(): void { this.aberta.set(true); setTimeout(() => this.campo()?.nativeElement.focus()); }
   readonly ocupada = input(false);
   readonly ditando = input(false);
   readonly vozDisponivel = input(false);

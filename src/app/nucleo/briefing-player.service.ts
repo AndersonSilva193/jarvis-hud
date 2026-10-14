@@ -14,6 +14,7 @@ import {
   type DadosSistemas,
   type Secao,
 } from './briefing.modelos';
+import { contextoBriefing } from './horario-briefing';
 import { VozService } from './voz.service';
 
 export type Fase = 'ocioso' | 'gerando' | 'tocando' | 'concluido';
@@ -33,6 +34,8 @@ const LEGENDA_OCIOSO = 'Aguardando o briefing';
 export class BriefingPlayerService {
   private readonly voz = inject(VozService);
 
+  readonly restaurado = signal(false);
+  readonly selecionado = signal<Bloco | null>(null);
   readonly fase = signal<Fase>('ocioso');
   readonly blocos = signal<Bloco[]>([]);
   /** Índice do bloco no palco. Acima dele, nada apareceu ainda; abaixo, já está na fileira. */
@@ -67,6 +70,7 @@ export class BriefingPlayerService {
 
   /** Um briefing começou a ser montado no servidor. */
   gerando(): void {
+    this.restaurado.set(false); this.selecionado.set(null);
     this.cancelamento.abort();
     this.execucao += 1;
     this.voz.parar();
@@ -81,6 +85,7 @@ export class BriefingPlayerService {
     if (this.fase() === 'tocando' || this.fase() === 'gerando') {
       return;
     }
+    this.restaurado.set(true); this.selecionado.set(null);
     const blocos = blocosDe(briefing);
     this.briefing.set(briefing);
     this.blocos.set(blocos);
@@ -101,6 +106,7 @@ export class BriefingPlayerService {
     }
 
     this.cancelamento.abort();
+    this.restaurado.set(false); this.selecionado.set(null);
     this.cancelamento = new AbortController();
     const sinal = this.cancelamento.signal;
     const minhaVez = ++this.execucao;
@@ -153,6 +159,19 @@ export class BriefingPlayerService {
   pular(): void {
     this.voz.parar();
   }
+
+  /**
+   * Abre um card já falado para leitura silenciosa. Clicar no que já está aberto fecha — um card que
+   * não está mais em uso tem de sair do palco e devolver o centro ao orbe.
+   */
+  consultar(bloco: Bloco): void {
+    if (!this.blocos().includes(bloco)) return;
+    if (this.selecionado()?.id === bloco.id) { this.fecharConsulta(); return; }
+    this.parar(); this.selecionado.set(bloco);
+  }
+
+  /** Tira o card consultado do palco. Não mexe na fase: a fila já estava parada. */
+  fecharConsulta(): void { this.selecionado.set(null); }
 
   /** Encerra a reprodução onde está e manda tudo para a fileira. */
   parar(): void {
@@ -251,28 +270,8 @@ export function blocosDe(briefing: Briefing): Bloco[] {
 }
 
 function abertura(briefing: Briefing): Bloco {
-  const data = new Date(briefing.geradoEm);
-  const valida = !Number.isNaN(data.getTime());
-  const dia = valida
-    ? new Intl.DateTimeFormat('pt-BR', {
-        weekday: 'long',
-        day: '2-digit',
-        month: '2-digit',
-      }).format(data)
-    : '';
-  const hora = valida
-    ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(data)
-    : '';
-  const saudacao = `Bom dia, ${briefing.nomeUsuario}!`;
-
-  return {
-    id: 'abertura',
-    tipo: 'abertura',
-    rotulo: 'briefing do dia',
-    // A abertura narrada pelo Jarvis, quando veio; senão o cumprimento montado aqui.
-    fala: briefing.abertura?.trim() || (valida ? `${saudacao} ${dia}, ${hora}.` : saudacao),
-    linhas: valida ? [saudacao, `${dia} às ${hora}`] : [saudacao],
-  };
+  const contexto = contextoBriefing(briefing);
+  return { id:'abertura', tipo:'abertura', rotulo:'briefing', fala:contexto.abertura, linhas:[contexto.abertura] };
 }
 
 function blocoDeTexto(id: string, rotulo: string, secao: Secao): Bloco {

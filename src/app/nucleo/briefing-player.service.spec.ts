@@ -10,6 +10,8 @@ const GERADO_EM = '2026-10-13T08:00:00-03:00';
 function briefingDe(secoes: Secao[], geradoEm = GERADO_EM): Briefing {
   return {
     geradoEm,
+    // Explícito de propósito: sem ele a saudação sairia do offset, e o teste passaria por acaso.
+    fusoHorario: 'America/Sao_Paulo',
     nomeUsuario: 'Anderson',
     secoes,
     texto: 'Bom dia, Anderson!',
@@ -226,6 +228,76 @@ describe('BriefingPlayerService', () => {
     expect(player.fase()).toBe('concluido');
     // Só os blocos do briefing novo: abertura + clima.
     expect(player.blocos()).toHaveLength(2);
+  });
+
+  it('a abertura segue o horário do briefing, não o do navegador', () => {
+    const abertura = blocosDe(briefingDe([CLIMA], '2026-10-13T20:00:00-03:00'))[0]!;
+
+    expect(abertura.tipo).toBe('abertura');
+    expect(abertura.fala).toBe('Boa noite, Anderson!');
+    // O que a HUD desenha é o mesmo texto que vai para a síntese.
+    expect(abertura.tipo === 'abertura' && abertura.linhas).toEqual(['Boa noite, Anderson!']);
+  });
+
+  it('consultar() abre um card já falado, para a fala e marca o selecionado', async () => {
+    voz.manual = true;
+    void player.tocar(briefingDe([CLIMA, LEMBRETES]));
+    await respirar();
+    const clima = player.blocos().find((b) => b.tipo === 'clima')!;
+
+    player.consultar(clima);
+
+    expect(player.selecionado()).toBe(clima);
+    expect(player.fase()).toBe('concluido');
+    expect(voz.paradas).toBeGreaterThan(0);
+  });
+
+  it('consultar() no card já aberto fecha: o palco esvazia e o orbe volta ao centro', () => {
+    player.mostrar(briefingDe([CLIMA]));
+    const clima = player.blocos().find((b) => b.tipo === 'clima')!;
+
+    player.consultar(clima);
+    player.consultar(clima);
+
+    expect(player.selecionado()).toBeNull();
+  });
+
+  it('fecharConsulta() tira o card do palco sem mexer na fase', () => {
+    player.mostrar(briefingDe([CLIMA]));
+    player.consultar(player.blocos()[1]!);
+
+    player.fecharConsulta();
+
+    expect(player.selecionado()).toBeNull();
+    expect(player.fase()).toBe('concluido');
+  });
+
+  it('consultar() ignora bloco que não é deste briefing', () => {
+    player.mostrar(briefingDe([CLIMA]));
+    const intruso = blocosDe(briefingDe([LEMBRETES]))[1]!;
+
+    player.consultar(intruso);
+
+    expect(player.selecionado()).toBeNull();
+  });
+
+  it('um briefing novo limpa a consulta aberta', async () => {
+    player.mostrar(briefingDe([CLIMA]));
+    player.consultar(player.blocos()[1]!);
+
+    player.gerando();
+
+    expect(player.selecionado()).toBeNull();
+    expect(player.restaurado()).toBe(false);
+  });
+
+  it('restaurado só é verdade no briefing pintado pelo /ultimo', async () => {
+    player.mostrar(briefingDe([CLIMA]));
+    expect(player.restaurado()).toBe(true);
+
+    await player.tocar(briefingDe([CLIMA], '2026-10-13T09:00:00-03:00'));
+
+    expect(player.restaurado()).toBe(false);
   });
 
   it('gerando() limpa a tela e acende a legenda do radar', () => {

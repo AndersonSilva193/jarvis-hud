@@ -19,6 +19,12 @@ describe('contem', () => {
     expect(contem('ei jarvis', ATIVACOES)).toBe(true);
   });
 
+  it('as três saudações acordam o Jarvis, não só a da manhã', () => {
+    expect(contem('Boa tarde', ATIVACOES)).toBe(true);
+    expect(contem('BOA NOITE, senhor', ATIVACOES)).toBe(true);
+    expect(contem('Jarvis, boa noite', ATIVACOES)).toBe(true);
+  });
+
   it('não casa por pedaço de palavra: "simplesmente" não é um "sim"', () => {
     expect(contem('simplesmente não', CONFIRMACOES)).toBe(false);
     expect(contem('bomba', ATIVACOES)).toBe(false);

@@ -1,142 +1,70 @@
 <section class="hud">
-  <div class="vinheta" aria-hidden="true"></div>
-  <div class="grade" aria-hidden="true"></div>
-
-  <!-- Um indicador só: o microfone está pausado justamente quando ele fala. -->
-  @if (voz.falando()) {
-    <p class="falando" role="status"><span class="ponto" aria-hidden="true"></span>falando</p>
-  } @else if (escuta.aguardandoResposta()) {
-    <p class="falando falando--escutando" role="status">
-      @if (escuta.ouvindo()) {
-        <span class="ponto" aria-hidden="true"></span>
-      }
-      Aguardando resposta
-    </p>
-  } @else if (escuta.ouvindo()) {
-    <p class="falando falando--escutando" role="status">
-      <span class="ponto" aria-hidden="true"></span>ouvindo
-    </p>
-  }
-
-  <app-orbe
-    class="orbe"
-    [estado]="estadoOrbe()"
-    [intensidade]="voz.intensidade()"
-    [legenda]="
-      conversa.ocupada() ? conversa.progresso() : conversa.naTela() ? '' : player.legenda()
-    "
-  />
-
-  <app-historico-conversa
-    [trocas]="conversa.trocas()"
-    [ocupada]="conversa.ocupada()"
-    (limpar)="limparConversa()"
-  />
-  @if (conversa.naTela()) {
-    <app-resposta-conversa
-      class="resposta-conversa"
-      [resposta]="conversa.resposta()"
-      [erro]="conversa.erro()"
-      [ocupada]="conversa.ocupada()"
-      (comando)="enviarTexto($event)"
-    />
-  }
-  <div class="palco" [hidden]="conversa.naTela()" [style.--total]="player.indiceAtual()">
-    @for (bloco of player.blocos(); track bloco.id; let i = $index) {
-      <article
-        class="slot"
-        [class.slot--palco]="i === player.indiceAtual()"
-        [class.slot--fileira]="i < player.indiceAtual()"
-        [style.--ordem]="i"
-      >
-        <p class="rotulo-bloco">{{ bloco.rotulo }}</p>
-
-        @switch (bloco.tipo) {
-          @case ('clima') {
-            <app-card-clima [dados]="bloco.dados" />
-          }
-          @case ('lembretes') {
-            <app-card-lembretes [dados]="bloco.dados" />
-          }
-          @case ('sistemas') {
-            <app-card-sistemas [dados]="bloco.dados" />
-          }
-          @case ('noticia') {
-            <app-card-noticia [dados]="bloco.dados" />
-          }
-          @case ('abertura') {
-            <app-card-texto [linhas]="bloco.linhas" />
-          }
-          @default {
-            <app-card-texto [linhas]="bloco.linhas" [comFalha]="true" />
-          }
-        }
-      </article>
-    }
+  <div class="vinheta" aria-hidden="true"></div><div class="grade" aria-hidden="true"></div>
+  <header class="cabecalho">
+    <a class="marca" routerLink="/">J.A.R.V.I.S.<span>ASSISTENTE PESSOAL</span></a>
+    <span class="conexao"><span class="luz" [class.luz--online]="eventos.status() === 'online'" aria-hidden="true"></span>{{ estadoDaConexao() }}</span>
+    <app-historico-conversa [trocas]="conversa.trocas()" [ocupada]="conversa.ocupada()" (limpar)="limparConversa()" />
+  </header>
+  <div class="estado-central">
+    <p class="falando" role="status" aria-live="polite"><span class="ponto" [class.ponto--ativo]="voz.falando() || escuta.ouvindo() || conversa.ocupada()" aria-hidden="true"></span>{{ estadoApresentacao() }}</p>
+    <div class="tracos" aria-hidden="true"></div>
   </div>
-
-  <app-barra-conversa
-    class="barra-conversa"
-    [(texto)]="rascunho"
-    [ocupada]="conversa.ocupada()"
-    [ditando]="escuta.ditando()"
-    [vozDisponivel]="escuta.disponivel"
-    (enviar)="enviarTexto()"
-    (microfone)="ditar()"
-  />
-  <footer class="rodape">
-    <div class="conexao">
-      <span
-        class="luz"
-        [class.luz--online]="eventos.status() === 'online'"
-        [class.luz--conectando]="eventos.status() === 'conectando'"
-        [class.luz--reconectando]="eventos.status() === 'reconectando'"
-        aria-hidden="true"
-      ></span>
-      <span class="estado">{{ estadoDaConexao() }}</span>
-      @if (erro()) {
-        <span class="erro">{{ erro() }}</span>
-      }
-      @if (escuta.motivo() === 'permissao-negada') {
-        <span class="erro">microfone bloqueado pelo navegador</span>
+  <main class="conteudo">
+    <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
+    <div class="palco">
+      @if (conversa.naTela()) {
+        <app-resposta-conversa [resposta]="conversa.resposta()" [erro]="conversa.erro()" [ocupada]="conversa.ocupada()" (comando)="enviarTexto($event)" />
+      } @else {
+        <!-- Lista de zero ou um: o card entra, e ao sair de uso desce para a fileira e libera o orbe. -->
+        @for (bloco of palco(); track bloco.id) {
+          <article class="card-principal" [attr.aria-label]="bloco.rotulo" animate.enter="entrando" animate.leave="saindo">
+            <div class="cabecalho-card">
+              <p class="rotulo-bloco">{{ bloco.rotulo }}</p>
+              <span class="selo">{{ player.selecionado() ? 'CONSULTA' : 'BRIEFING' }}</span>
+              @if (player.selecionado()) { <button class="fechar" type="button" aria-label="Fechar consulta" (click)="player.fecharConsulta()">✕</button> }
+            </div>
+            @switch (bloco.tipo) {
+              @case ('clima') { <app-card-clima [dados]="bloco.dados" /> }
+              @case ('lembretes') { <app-card-lembretes [dados]="bloco.dados" /> }
+              @case ('sistemas') { <app-card-sistemas [dados]="bloco.dados" /> }
+              @case ('noticia') { <app-card-noticia [dados]="bloco.dados" /> }
+              @case ('abertura') { <app-card-texto [linhas]="bloco.linhas" /> }
+              @default { <app-card-texto [linhas]="bloco.linhas" [comFalha]="true" /> }
+            }
+          </article>
+        }
       }
     </div>
-
+  </main>
+  @if (!conversa.naTela() && concluidos().length) {
+    <section class="arquivo">
+      <p class="rotulo-arquivo">{{ player.restaurado() ? 'Último briefing' : 'Briefing' }} <span>· gerado em {{ geracaoBriefing() }}</span></p>
+      <nav class="fileira" aria-label="Cards do briefing">
+        @for (bloco of concluidos(); track bloco.id) {
+          <button class="miniatura" type="button" [class.miniatura--ativa]="player.selecionado()?.id === bloco.id" [attr.aria-pressed]="player.selecionado()?.id === bloco.id" (click)="consultarCard(bloco)">
+            <span class="rotulo-bloco">{{ bloco.rotulo }}</span>
+            <strong>{{ resumoCard(bloco) }}</strong>
+            <span class="mini-acao">{{ player.selecionado()?.id === bloco.id ? 'Fechar' : 'Consultar' }} <span aria-hidden="true">↗</span></span>
+          </button>
+        }
+      </nav>
+    </section>
+  }
+  <div class="legenda-voz" aria-live="off">{{ voz.trechoAtual() }}</div>
+  <app-barra-conversa class="barra-conversa" [(texto)]="rascunho" [ocupada]="conversa.ocupada()" [ditando]="escuta.ditando()" [vozDisponivel]="escuta.disponivel" (enviar)="enviarTexto()" (microfone)="ditar()" />
+  <footer class="rodape">
+    <div class="avisos" role="status">
+      @if (erro()) { <span class="erro">{{ erro() }}</span> }
+      @if (escuta.motivo() === 'permissao-negada') { <span class="erro">Microfone bloqueado pelo navegador</span> }
+      @if (briefingGuardado()) { <span>Um briefing está disponível para consulta.</span> }
+    </div>
     <div class="acoes">
-      <a class="elo" routerLink="/configuracao">configuração</a>
-      <!-- Escondido onde a Web Speech API não existe: no Firefox não há o que ligar. -->
-      @if (escuta.disponivel) {
-        <button
-          class="botao microfone"
-          type="button"
-          [class.microfone--ligado]="escuta.ligada()"
-          [attr.aria-pressed]="escuta.ligada()"
-          (click)="alternarEscuta()"
-        >
-          @if (escuta.ouvindo()) {
-            <span class="ponto" aria-hidden="true"></span>
-          }
-          ativação por voz
-        </button>
-      }
-      @if (conversa.naTela()) {
-        <button
-          class="botao"
-          type="button"
-          [disabled]="conversa.ocupada()"
-          (click)="consultarBriefing()"
-        >
-          Ver briefing
-        </button>
-      }
-      <button
-        class="botao bom-dia"
-        type="button"
-        (click)="bomDia()"
-        [disabled]="pedindo() || conversa.ocupada()"
-      >
-        {{ pedindo() ? 'pedindo' : 'Bom dia' }}
-      </button>
+      <a class="elo" routerLink="/configuracao" aria-label="Configurar Jarvis">Configuração</a>
+      @if (escuta.disponivel) { <button class="botao microfone" type="button" [attr.aria-pressed]="escuta.ligada()" (click)="alternarEscuta()">Ativação por voz <span>{{ escuta.ligada() ? 'ligada' : 'desligada' }}</span></button> }
+      @if (player.fase() === 'tocando' || voz.falando()) { <button class="botao" type="button" (click)="player.parar()">Parar fala</button> }
+      @if (player.fase() === 'tocando') { <button class="botao" type="button" (click)="player.pular()">Próximo</button> }
+      @if (conversa.naTela()) { <button class="botao" type="button" [disabled]="conversa.ocupada()" (click)="consultarBriefing()">Ver briefing</button> }
+      <button class="botao bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo() || conversa.ocupada()">{{ pedindo() ? 'Preparando…' : 'Briefing' }}</button>
     </div>
   </footer>
 </section>

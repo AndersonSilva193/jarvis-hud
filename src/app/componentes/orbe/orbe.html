@@ -1,12 +1,1 @@
 <canvas #tela class="tela" aria-hidden="true"></canvas>
-
-@if (legenda()) {
-  <p
-    class="legenda"
-    role="status"
-    aria-live="polite"
-    [class.legenda--trabalhando]="estado() === 'gerando'"
-  >
-    {{ legenda() }}
-  </p>
-}
