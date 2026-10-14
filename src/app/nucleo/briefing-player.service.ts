@@ -146,6 +146,14 @@ export class BriefingPlayerService {
  * Não é um espelho de `secoes`: a abertura ganha um bloco próprio e a seção de notícias virá
  * como um bloco por manchete, porque cada manchete tem a sua imagem e merece a tela inteira.
  */
+/**
+ * O que falar de uma seção: a narração do Jarvis quando o backend manda, senão a prosa montada
+ * em Java. O `conteudo` nunca é substituído — ele continua sendo o que o card desenha.
+ */
+function falaDe(secao: Secao): string {
+  return secao.fala?.trim() || secao.conteudo;
+}
+
 export function blocosDe(briefing: Briefing): Bloco[] {
   const blocos: Bloco[] = [abertura(briefing)];
 
@@ -158,7 +166,7 @@ export function blocosDe(briefing: Briefing): Bloco[] {
         id: chave,
         tipo: 'clima',
         rotulo: 'clima',
-        fala: secao.conteudo,
+        fala: falaDe(secao),
         dados: converter<DadosClima>(dados),
       });
       return;
@@ -169,7 +177,7 @@ export function blocosDe(briefing: Briefing): Bloco[] {
         id: chave,
         tipo: 'lembretes',
         rotulo: 'lembretes de hoje',
-        fala: secao.conteudo,
+        fala: falaDe(secao),
         dados: converter<DadosLembretes>(dados),
       });
       return;
@@ -180,7 +188,7 @@ export function blocosDe(briefing: Briefing): Bloco[] {
         id: chave,
         tipo: 'sistemas',
         rotulo: 'sistemas',
-        fala: secao.conteudo,
+        fala: falaDe(secao),
         dados: converter<DadosSistemas>(dados),
       });
       return;
@@ -233,7 +241,8 @@ function abertura(briefing: Briefing): Bloco {
     id: 'abertura',
     tipo: 'abertura',
     rotulo: 'briefing do dia',
-    fala: valida ? `${saudacao} ${dia}, ${hora}.` : saudacao,
+    // A abertura narrada pelo Jarvis, quando veio; senão o cumprimento montado aqui.
+    fala: briefing.abertura?.trim() || (valida ? `${saudacao} ${dia}, ${hora}.` : saudacao),
     linhas: valida ? [saudacao, `${dia} às ${hora}`] : [saudacao],
   };
 }
@@ -243,7 +252,7 @@ function blocoDeTexto(id: string, rotulo: string, secao: Secao): Bloco {
     id,
     tipo: 'texto',
     rotulo,
-    fala: secao.conteudo,
+    fala: falaDe(secao),
     linhas: secao.conteudo.split('\n').filter((linha) => linha.trim().length > 0),
   };
 }

@@ -10,6 +10,8 @@ export interface Briefing {
   geradoEm: string;
   nomeUsuario: string;
   secoes: Secao[];
+  /** O cumprimento narrado pelo Jarvis. Vazio quando a narração falhou. */
+  abertura?: string;
   /** A narração inteira, do jeito que vai para o Telegram. */
   texto: string;
   /** false quando a API reaproveitou um briefing de menos de 60 s. */
@@ -20,6 +22,11 @@ export interface Secao {
   titulo: string;
   conteudo: string;
   dados: DadosSecao | null;
+  /**
+   * O mesmo conteudo narrado pelo Jarvis — é o que a HUD fala. Opcional porque um backend
+   * anterior a esta versão não manda o campo; aí a fala volta a ser o `conteudo`.
+   */
+  fala?: string;
 }
 
 /** Os quatro títulos que a API manda, sempre nesta ordem. */

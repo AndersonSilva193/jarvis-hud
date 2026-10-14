@@ -96,6 +96,31 @@ describe('blocosDe', () => {
     expect(blocos[0]!.fala).toContain('Bom dia, Anderson!');
   });
 
+  it('fala a narração do Jarvis quando a API manda, e o card segue com o conteudo', () => {
+    const blocos = blocosDe(
+      briefingDe([{ ...CLIMA, fala: 'Dezoito graus e céu limpo em Curitiba, senhor.' }]),
+    );
+
+    expect(blocos[1]!.fala).toBe('Dezoito graus e céu limpo em Curitiba, senhor.');
+    // O card continua desenhando os dados estruturados, não a narração.
+    expect(blocos[1]!.tipo).toBe('clima');
+  });
+
+  it('sem narração — ou com ela em branco — fala o conteudo montado em Java', () => {
+    expect(blocosDe(briefingDe([CLIMA]))[1]!.fala).toBe(CLIMA.conteudo);
+    expect(blocosDe(briefingDe([{ ...CLIMA, fala: '   ' }]))[1]!.fala).toBe(CLIMA.conteudo);
+  });
+
+  it('abertura usa a narração do Jarvis quando vem, senão o cumprimento montado aqui', () => {
+    const narrado = blocosDe({
+      ...briefingDe([CLIMA]),
+      abertura: 'Bom dia, senhor. Seu briefing está pronto.',
+    });
+    expect(narrado[0]!.fala).toBe('Bom dia, senhor. Seu briefing está pronto.');
+
+    expect(blocosDe(briefingDe([CLIMA]))[0]!.fala).toContain('Bom dia, Anderson!');
+  });
+
   it('transforma cada manchete em um bloco próprio, com a sua imagem', () => {
     const blocos = blocosDe(briefingDe([NOTICIAS]));
 
