@@ -4,9 +4,20 @@ A tela de conversa e briefing do [Jarvis](../jarvis): fundo azul-escuro com grad
 cards translúcidos que entram um por um enquanto o Jarvis lê cada bloco em voz alta. Feita para
 ficar aberta em tela cheia num monitor.
 
-O palco tem **no máximo um card**. Quando o bloco acaba de ser falado, o card desce para a fileira
-de baixo e vira miniatura; depois do último, o palco fica vazio e o orbe cresce e assume o centro —
-o Jarvis em repouso é um círculo livre, sem nada por cima.
+A moldura é de instrumento: colchetes nos quatro cantos, uma varredura lenta de cima a baixo, o
+relógio no cabeçalho e, em volta do orbe, anéis que giram — tracejado por fora, escala de tiques
+por dentro e uma mira nos pontos cardeais. Os anéis aceleram e acendem conforme o estado (ouvindo,
+pensando, falando). Tudo isso para no `prefers-reduced-motion`.
+
+O palco tem **no máximo um card**, e só entra nele **o que se olha**: um bloco do briefing, uma
+imagem ou arquivo anexado, um código de confirmação, um erro. Fala simples do Jarvis não vira card
+— ela é falada, aparece na legenda embaixo do orbe e fica no histórico. Para ler a conversa, abra o
+chat (**Conversar**) ou o **Histórico** no topo; para conversar por texto o tempo todo, há o
+Telegram.
+
+Quando o bloco acaba de ser falado, o card desce para a fileira de baixo e vira miniatura; depois
+do último, o palco fica vazio e o orbe cresce e assume o centro — o Jarvis em repouso é um círculo
+livre, sem nada por cima.
 
 Angular 22 (standalone, zoneless, sem SSR). Nenhum segredo no build: a URL da API e o `HUD_TOKEN`
 são digitados na primeira tela e ficam no `localStorage` do navegador.
@@ -56,6 +67,7 @@ Teclas: `→` pula o bloco atual, `Esc` fecha a consulta e encerra a reproduçã
 
 A barra de conversa fica compacta em repouso (**Conversar** e o microfone) e só expande ao clicar ou
 ao começar um ditado. Ela nunca se recolhe sozinha enquanto houver rascunho ou ditado em curso.
+Aberta, ela mostra acima de si as últimas trocas — é ali que a fala do Jarvis vira texto na tela.
 
 ## Saudação e horário
 
@@ -127,7 +139,10 @@ o resultado final e aguarda até mais um segundo antes de enviar. Sem fala por d
 segundo clique ou **Esc** cancela. Não envia texto vazio. A precisão dos eventos de silêncio
 depende do navegador. Depois da resposta, aguarda novo clique ou a palavra **Jarvis**.
 
-As respostas da HUD aparecem no card central e usam a mesma voz do briefing. O histórico lateral
+As respostas da HUD usam a mesma voz do briefing e aparecem como texto em dois lugares: no diálogo
+em cima da barra, enquanto o chat está aberto, e no histórico. **O card central é só para o que se
+olha** — anexo, código de confirmação ou erro —, e esse card sai no **✕**, no **Esc** ou no **Ver
+briefing**; um card restaurado ao abrir a tela não volta sozinho ao palco. O histórico lateral
 recolhível mostra as dez últimas trocas dos dois canais. Mensagens do Telegram só atualizam essa
 coluna: não assumem o card central e não são faladas. **Limpar conversa** limpa também o histórico
 do Telegram e a última resposta; fica indisponível durante um pedido pendente.
@@ -211,14 +226,14 @@ src/app/
     briefing-player.service.ts   a fila: um bloco por vez, falado até o fim
   paginas/configuracao/          tela 1
   paginas/hud/                   tela 2: orbe, palco, fileira e controles (um .scss por área)
-  componentes/conversa/          barra, resposta, anexos e histórico
-  componentes/orbe/              OrbeComponent (canvas: filamentos por espera, escuta, trabalho e fala)
+  componentes/conversa/          barra, diálogo em curso, resposta, anexos e histórico
+  componentes/orbe/              OrbeComponent (canvas de filamentos, anéis e mira; muda com o estado)
   componentes/card-clima/        CardClimaComponent
   componentes/card-lembretes/    CardLembretesComponent
   componentes/card-noticia/      CardNoticiaComponent
   componentes/card-sistemas/     CardSistemasComponent
   componentes/card-texto/        abertura e qualquer seção sem dados estruturados
-  estilos/_hud.scss              cores, fonte mono e a moldura dos cards
+  estilos/_hud.scss              cores, fonte mono, a moldura dos cards e o botão do HUD
 ```
 
 ## Validar

@@ -3,7 +3,7 @@ import { AfterViewInit, Component, ElementRef, OnDestroy, effect, input, viewChi
 export type EstadoOrbe = 'ocioso' | 'ouvindo' | 'gerando' | 'pensando' | 'falando';
 
 /** Filamentos orgânicos; uma única animação, suspensa fora da tela. */
-@Component({selector:'app-orbe',templateUrl:'./orbe.html',styleUrl:'./orbe.scss'})
+@Component({selector:'app-orbe',templateUrl:'./orbe.html',styleUrl:'./orbe.scss',host:{'[attr.data-estado]':'estado()'}})
 export class OrbeComponent implements AfterViewInit, OnDestroy {
   readonly estado = input<EstadoOrbe>('ocioso');
   readonly intensidade = input(0);

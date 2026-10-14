@@ -53,6 +53,70 @@ app-root {
   mask-image: radial-gradient(ellipse, #000, transparent 85%);
 }
 
+// Os colchetes dos quatro cantos e a varredura lenta: a moldura de instrumento das duas telas.
+.cantos {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.cantos i {
+  position: absolute;
+  width: clamp(16px, 2.4vw, 30px);
+  height: clamp(16px, 2.4vw, 30px);
+  border: 1px solid hud.$ciano-fraco;
+}
+
+.cantos i:nth-child(1) {
+  top: 10px;
+  left: 10px;
+  border-width: 1px 0 0 1px;
+}
+.cantos i:nth-child(2) {
+  top: 10px;
+  right: 10px;
+  border-width: 1px 1px 0 0;
+}
+.cantos i:nth-child(3) {
+  bottom: 10px;
+  right: 10px;
+  border-width: 0 1px 1px 0;
+}
+.cantos i:nth-child(4) {
+  bottom: 10px;
+  left: 10px;
+  border-width: 0 0 1px 1px;
+}
+
+.varredura {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.55;
+  background: linear-gradient(
+    180deg,
+    transparent 0,
+    #5ff2ff14 48%,
+    #5ff2ff22 50%,
+    #5ff2ff14 52%,
+    transparent 100%
+  );
+  background-size: 100% 42vh;
+  background-repeat: no-repeat;
+  animation: hud-varrer 14s linear infinite;
+}
+
+@keyframes hud-varrer {
+  from {
+    background-position: 0 -45vh;
+  }
+  to {
+    background-position: 0 115vh;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

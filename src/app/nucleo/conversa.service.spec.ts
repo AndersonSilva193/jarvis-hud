@@ -171,6 +171,70 @@ describe('ConversaService', () => {
     await servico.limpar();
     expect(servico.resposta()).toBeNull();
   });
+  it('fala simples não ocupa a tela; só o que se olha segura o palco', async () => {
+    servico.chatAberto.set(true);
+    expect(servico.naTela()).toBe(true);
+
+    // Fechado o chat, a resposta de texto é falada e guardada no histórico — a tela volta ao orbe.
+    servico.chatAberto.set(false);
+    servico.receber(resposta());
+    expect(servico.cartao()).toBeNull();
+    expect(servico.naTela()).toBe(false);
+    expect(voz.falar).toHaveBeenCalledExactlyOnceWith('Tudo certo.');
+
+    // Com anexo há o que olhar: o card entra no palco e só sai no ✕.
+    servico.receber({
+      ...resposta('2'),
+      anexos: [
+        {
+          id: 'a',
+          tipo: 'imagem',
+          nome: 'Print',
+          mime: 'image/png',
+          url: '/api/anexos/a',
+          expiraEm: null,
+        },
+      ],
+    });
+    expect(servico.cartao()?.id).toBe('2');
+    expect(servico.naTela()).toBe(true);
+    servico.dispensar();
+    expect(servico.cartao()).toBeNull();
+    expect(servico.naTela()).toBe(false);
+  });
+  it('card restaurado ao abrir a tela não volta sozinho para o palco', async () => {
+    historico = {
+      ...vazio(),
+      revisao: 2,
+      ultima: {
+        ...resposta('9'),
+        anexos: [
+          {
+            id: 'a',
+            tipo: 'imagem',
+            nome: 'Print',
+            mime: 'image/png',
+            url: '/api/anexos/a',
+            expiraEm: null,
+          },
+        ],
+      },
+    };
+    await servico.recuperar();
+    await aguardar();
+    expect(servico.resposta()?.id).toBe('9');
+    expect(servico.cartao()).toBeNull();
+    expect(servico.naTela()).toBe(false);
+  });
+  it('chat aberto pela pessoa continua aberto depois da resposta', () => {
+    servico.chatAberto.set(true);
+    servico.receber(resposta());
+    // Quem abriu o chat foi a pessoa; só ela o fecha, no Recolher, no Esc ou no Ver briefing.
+    expect(servico.chatAberto()).toBe(true);
+    expect(servico.naTela()).toBe(true);
+    servico.recolher();
+    expect(servico.naTela()).toBe(false);
+  });
   it('sair durante o POST não deixa a próxima abertura bloqueada', async () => {
     const post = adiar<{ id: string }>();
     api.enviarConversa.mockReturnValue(post.promessa);

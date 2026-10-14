@@ -1,1 +1,17 @@
-.rodape{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.8rem;flex-shrink:0;margin-top:.1rem}.avisos{font-size:.72rem;color:#b8cbe0;max-width:28rem}.erro{color:#ffadb8}.acoes{display:flex;align-items:center;justify-content:center;gap:.6rem;flex-wrap:wrap;margin-left:auto}.elo{font-size:.7rem;color:#b4cce2;padding:.6rem;text-decoration:none}.botao{font:500 .67rem monospace;border:1px solid #345776;border-radius:7px;background:#091b30;color:#c8e5f7;padding:.65rem .85rem;cursor:pointer;min-height:38px}.botao span{color:#9cb5d0}.botao[aria-pressed=true]{border-color:#69bac9;background:#123146}.botao:hover:not(:disabled){background:#163750;border-color:#68cbdc}.botao:disabled{opacity:.5;cursor:default}.bom-dia{border-color:#4d8aaf;background:#102f4c}:focus-visible{outline:2px solid #9eefff;outline-offset:4px}.palco app-resposta-conversa{display:block;max-height:48vh;overflow:auto}@media(max-width:700px){.rodape{justify-content:center}.acoes{margin:0}.palco app-resposta-conversa{max-height:none}.botao{min-height:44px}}
+@use '../../estilos/hud' as hud;
+
+// O rodapé: avisos à esquerda, controles à direita, todos com o mesmo botão de HUD.
+.rodape{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.8rem;flex-shrink:0;margin-top:.1rem}
+.avisos{font-size:.72rem;color:#b8cbe0;max-width:28rem}
+.erro{color:#ffadb8}
+.acoes{display:flex;align-items:center;justify-content:center;gap:.6rem;flex-wrap:wrap;margin-left:auto}
+.elo{font:500 .62rem hud.$mono;letter-spacing:.16em;text-transform:uppercase;color:#9fc2e0;padding:.6rem;text-decoration:none}
+.elo:hover{color:hud.$ciano-forte}
+.botao{@include hud.botao(7px);min-height:38px}
+.botao span{color:#8fb0cc}
+.botao[aria-pressed=true]{border-color:#69bac9;background:linear-gradient(180deg,#143a53,#0b2135)}
+.botao[aria-pressed=true] span{color:hud.$ciano}
+.bom-dia{color:hud.$ciano-forte;border-color:rgba(95,242,255,.5);background:linear-gradient(180deg,#123a5e,#09203a)}
+:focus-visible{outline:2px solid #9eefff;outline-offset:4px}
+
+@media(max-width:700px){.rodape{justify-content:center}.acoes{margin:0}.botao{min-height:44px}}

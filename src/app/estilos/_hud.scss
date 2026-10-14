@@ -52,3 +52,40 @@ $mono: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
 @mixin brilho-texto($cor: $ciano, $forca: 0.55) {
   text-shadow: 0 0 18px rgba($cor, $forca);
 }
+
+// O botão do HUD: canto cortado, mono em caixa alta e a borda que acende ao passar o mouse.
+@mixin botao($corte: 8px) {
+  font-family: $mono;
+  font-size: 0.67rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #cdeaff;
+  background: linear-gradient(180deg, rgba(13, 43, 74, 0.9), rgba(5, 17, 34, 0.92));
+  border: 1px solid rgba(95, 242, 255, 0.3);
+  border-radius: 0;
+  clip-path: polygon(
+    $corte 0,
+    100% 0,
+    100% calc(100% - #{$corte}),
+    calc(100% - #{$corte}) 100%,
+    0 100%,
+    0 $corte
+  );
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:hover:not(:disabled) {
+    color: $ciano-forte;
+    border-color: $ciano;
+    box-shadow: 0 0 18px rgba(45, 125, 255, 0.35);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}

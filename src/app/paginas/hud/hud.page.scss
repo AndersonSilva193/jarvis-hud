@@ -2,13 +2,16 @@
 
 :host{display:block;height:100%;color:hud.$texto}
 .hud{position:relative;isolation:isolate;min-height:100%;height:100dvh;display:flex;flex-direction:column;gap:clamp(.6rem,1.4vh,1rem);padding:1.4rem clamp(1rem,3vw,3.5rem);overflow:auto;background:hud.$fundo}
+
 .cabecalho{display:flex;align-items:center;gap:1.5rem;min-height:2.5rem;position:relative;padding-right:10rem}
-.marca{color:hud.$texto;text-decoration:none;letter-spacing:.25em;font:600 1rem hud.$mono}.marca span{display:block;font-size:.55rem;color:#8caaca;margin-top:.4rem;letter-spacing:.22em}
-.conexao{font-size:.7rem;color:#a6bed8;display:flex;gap:.5rem;align-items:center}.luz,.ponto{display:inline-block;width:6px;height:6px;border-radius:50%;background:#7893ae}.luz--online{background:#68e4bf}
+.marca{color:hud.$texto;text-decoration:none;letter-spacing:.25em;font:600 1rem hud.$mono;@include hud.brilho-texto(hud.$ciano,.25)}.marca span{display:block;font-size:.55rem;color:#8caaca;margin-top:.4rem;letter-spacing:.22em}
+.conexao{font-size:.7rem;color:#a6bed8;display:flex;gap:.5rem;align-items:center;letter-spacing:.1em;text-transform:uppercase}.luz,.ponto{display:inline-block;width:6px;height:6px;border-radius:50%;background:#7893ae}.luz--online{background:#68e4bf;box-shadow:0 0 10px #68e4bf99}
+// O relógio: hora do aparelho, encostado na direita, antes do botão de histórico.
+.relogio{margin-left:auto;font:500 .66rem hud.$mono;letter-spacing:.22em;color:#8fb6d8}
 
 // A linha de estado é a única voz sobre o que o Jarvis está fazendo: ela some do palco para o card ter a tela.
 .estado-central{text-align:center;min-height:2.7rem}
-.falando{display:flex;justify-content:center;gap:.7rem;align-items:center;margin:0;@include hud.rotulo(.73rem);letter-spacing:.2em;color:#9cefff}
+.falando{display:flex;justify-content:center;gap:.7rem;align-items:center;margin:0;@include hud.rotulo(.73rem);letter-spacing:.2em;color:#9cefff;@include hud.brilho-texto(hud.$ciano,.35)}
 .ponto--ativo{background:hud.$ciano;box-shadow:0 0 12px hud.$azul-energia}
 .tracos{height:3px;width:120px;margin:.7rem auto 0;background:repeating-linear-gradient(90deg,#3d9fb380 0 2px,transparent 2px 5px)}
 
@@ -18,19 +21,22 @@
 .orbe--livre{--escala:1.06;opacity:1;filter:drop-shadow(0 0 60px rgba(45,125,255,.28))}
 
 .palco{position:relative;width:min(100%,43rem);z-index:1}
-// A mesma moldura da miniatura em fileira.scss: o canto cortado é a assinatura dos cards do briefing.
-.card-principal{@include hud.moldura(14px);padding:clamp(1rem,2.4vw,1.8rem);max-height:48vh;overflow:auto}
+// O canto cortado é a assinatura dos cards do briefing — a miniatura de fileira.scss é o mesmo card.
+.card-principal,.miniatura{@include hud.moldura(14px)}
+.card-principal{padding:clamp(1rem,2.4vw,1.8rem);max-height:48vh;overflow:auto}
 .card-principal.entrando{animation:entrando .45s ease-out}
 .card-principal.saindo{animation:saindo .35s ease-in forwards}
 .cabecalho-card{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:1rem}
 .rotulo-bloco{margin:0;@include hud.rotulo(.65rem);letter-spacing:.16em}
 .selo,.fechar{border:1px solid hud.$ciano-fraco}
-.selo{@include hud.rotulo(.55rem);letter-spacing:.1em;color:#97d5f2;border-radius:20px;padding:.3rem .6rem}
+.selo{@include hud.rotulo(.55rem);letter-spacing:.1em;color:#97d5f2;border-radius:20px;padding:.3rem .6rem;margin-left:auto}
 .fechar{border-radius:50%;width:28px;height:28px;background:transparent;color:hud.$ciano-forte;cursor:pointer;line-height:1;flex-shrink:0}
 .fechar:hover{background:#163750;border-color:hud.$ciano}
 
-.legenda-voz{text-align:center;min-height:1.5em;max-width:65rem;align-self:center;font-size:clamp(.85rem,1.5vw,1rem);line-height:1.5;color:#d5e5f4}
-.barra-conversa{width:min(100%,52rem);align-self:center;flex-shrink:0}
+// A legenda da fala: só aparece enquanto há voz, e some sem deixar buraco na tela.
+.legenda-voz{display:flex;flex-wrap:wrap;justify-content:center;align-items:baseline;gap:.8rem;margin:0;text-align:center;min-height:1.6em;max-width:65rem;align-self:center;font-size:clamp(.85rem,1.5vw,1rem);line-height:1.5;color:#d8e9f8}
+.legenda-quem{font:500 .55rem hud.$mono;letter-spacing:.3em;text-transform:uppercase;color:hud.$ciano}
+.doca{display:flex;flex-direction:column;width:min(100%,52rem);align-self:center;flex-shrink:0}
 
 // Só a ponta oposta: a outra é o estado natural do card, que o próprio elemento já define.
 @keyframes entrando{from{opacity:0;transform:translateY(12px)}}
@@ -38,4 +44,4 @@
 @keyframes saindo{to{opacity:0;transform:translateY(2.5rem) scale(.9)}}
 
 @media(min-width:1800px){.hud{padding-inline:clamp(3rem,7vw,11rem)}.orbe{width:min(66vh,50rem);height:min(66vh,50rem)}.palco{width:min(100%,46rem)}}
-@media(max-width:700px){.hud{padding:1rem;gap:.75rem}.cabecalho{padding-right:7rem;gap:.8rem;flex-wrap:wrap}.marca{font-size:.8rem}.conteudo{min-height:18rem}.orbe{width:100vw;height:100vw}.orbe--livre{--escala:1.03}.card-principal{max-height:none}.legenda-voz{font-size:.8rem}}
+@media(max-width:700px){.hud{padding:1rem;gap:.75rem}.cabecalho{padding-right:7rem;gap:.8rem;flex-wrap:wrap}.marca{font-size:.8rem}.relogio{font-size:.58rem;letter-spacing:.14em}.conteudo{min-height:18rem}.orbe{width:100vw;height:100vw}.orbe--livre{--escala:1.03}.card-principal{max-height:none}.legenda-voz{font-size:.8rem;gap:.5rem}}

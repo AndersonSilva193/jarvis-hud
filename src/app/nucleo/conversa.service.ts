@@ -27,10 +27,29 @@ export class ConversaService {
   readonly limpando = signal(false);
   readonly erro = signal('');
   readonly progresso = signal('');
-  readonly naTela = signal(false);
+  /** A barra de conversa está aberta na tela. Vai e volta com o `[(aberta)]` da barra. */
+  readonly chatAberto = signal(false);
+  /** Rascunho ou ditado em curso: enquanto houver, o chat não se recolhe sozinho. */
+  readonly compondo = signal(false);
+  /** O card já olhado e fechado no ✕ — ele não volta sozinho ao palco. */
+  private readonly dispensada = signal<string | null>(null);
   readonly ocupada = computed(
     () => !!this.pendente() || this.enviando() || this.incerto() || this.limpando(),
   );
+  /** O chat está em uso: aberto, sendo escrito/ditado ou com um pedido em andamento. */
+  readonly conversando = computed(() => this.chatAberto() || this.compondo() || this.ocupada());
+  /**
+   * A resposta que merece o palco.
+   *
+   * Fala simples não entra: ela é falada, legendada embaixo do orbe e fica no histórico. Só o
+   * que se olha — anexo, código de confirmação ou erro — toma o centro da tela.
+   */
+  readonly cartao = computed(() => {
+    const resposta = this.resposta();
+    return resposta && resposta.id !== this.dispensada() && temOlhar(resposta) ? resposta : null;
+  });
+  /** A conversa ocupa o palco, e por isso o briefing espera a vez. */
+  readonly naTela = computed(() => this.conversando() || !!this.cartao());
   private ativa = false;
   private geracao = 0;
   private consulta = 0;
@@ -58,15 +77,24 @@ export class ConversaService {
     this.limpando.set(false);
     this.voz.parar();
   }
+  /** A conversa assume o palco: o briefing cala e espera a vez. Quem abre o chat é a pessoa. */
   assumirPalco(): void {
     this.player.parar();
-    this.naTela.set(true);
   }
   mostrarBriefing(): void {
     if (!this.ocupada()) {
       this.voz.parar();
-      this.naTela.set(false);
+      this.recolher();
     }
+  }
+  /** Devolve a tela ao orbe: fecha o chat e dispensa o card da última resposta. */
+  recolher(): void {
+    this.chatAberto.set(false);
+    this.dispensar();
+  }
+  /** Tira do palco o card da resposta atual, sem apagá-la do histórico. */
+  dispensar(): void {
+    this.dispensada.set(this.resposta()?.id ?? null);
   }
 
   async enviar(texto: string): Promise<boolean> {
@@ -129,7 +157,8 @@ export class ConversaService {
     this.encerradas.add(resposta.id);
     this.incerto.set(false);
     this.resposta.set(resposta);
-    this.naTela.set(true);
+    // Resposta restaurada ao abrir a tela não volta como card: ela já está no histórico.
+    if (!narrar) this.dispensada.set(resposta.id);
     if (this.pendente() === resposta.id) this.guardarPendente(null);
     this.progresso.set('');
     this.erro.set(resposta.erro ?? '');
@@ -204,6 +233,7 @@ export class ConversaService {
       await this.api.limparConversa();
       if (!this.ativa || geracao !== this.geracao) return;
       this.resposta.set(null);
+      this.dispensada.set(null);
       this.trocas.set([]);
       this.erro.set('');
       this.progresso.set('');
@@ -227,4 +257,9 @@ export class ConversaService {
       /* A conversa também funciona sem sessionStorage. */
     }
   }
+}
+
+/** O que se olha numa resposta: anexo, código de confirmação ou um erro para ler. */
+function temOlhar(resposta: RespostaConversa): boolean {
+  return resposta.anexos.length > 0 || !!resposta.confirmacao || !!resposta.erro;
 }

@@ -5,8 +5,7 @@ import type { RespostaConversa } from '../../nucleo/conversa.modelos';
 @Component({
   selector: 'app-resposta-conversa',
   imports: [AnexoConversaComponent],
-  template: ` <article aria-label="Resposta do Jarvis">
-    <h2>Jarvis</h2>
+  template: ` <div class="resposta">
     @if (resposta(); as r) {
       <p class="texto" aria-live="polite" aria-atomic="true">{{ r.texto }}</p>
       @for (anexo of r.anexos; track anexo.id) {
@@ -43,49 +42,61 @@ import type { RespostaConversa } from '../../nucleo/conversa.modelos';
     @if (erro()) {
       <p class="erro" role="alert">{{ erro() }}</p>
     }
-  </article>`,
+  </div>`,
   styles: `
     :host {
       display: block;
-      max-height: 100%;
-      overflow: auto;
-    }
-    article {
-      padding: 1.4rem;
-      background: #061426eb;
-      border: 1px solid #416574;
-      border-radius: 10px;
       color: #dff4ff;
     }
-    h2 {
-      margin: 0;
-      color: #a6f8ff;
-      font: 600 0.8rem monospace;
-      letter-spacing: 0.15em;
+    p {
+      margin: 0 0 0.6rem;
     }
     .texto {
       white-space: pre-wrap;
-      line-height: 1.6;
+      line-height: 1.65;
+      font-size: 1rem;
       overflow-wrap: anywhere;
     }
     app-anexo-conversa {
       display: block;
       margin-top: 0.7rem;
     }
+    section {
+      margin-top: 1rem;
+      padding-top: 0.9rem;
+      border-top: 1px solid rgba(95, 242, 255, 0.28);
+    }
     .codigo {
       display: block;
       font: 700 2rem monospace;
-      letter-spacing: 0.2em;
+      letter-spacing: 0.25em;
+      color: #a6f8ff;
+      text-shadow: 0 0 22px rgba(95, 242, 255, 0.45);
       margin: 0.5rem 0;
     }
     button {
-      padding: 0.6rem 1rem;
+      padding: 0.6rem 1.1rem;
       margin: 0.5rem 0.5rem 0 0;
       background: #12354a;
       color: #dff4ff;
       border: 1px solid #608b9a;
-      border-radius: 4px;
+      border-radius: 0;
+      clip-path: polygon(
+        8px 0,
+        100% 0,
+        100% calc(100% - 8px),
+        calc(100% - 8px) 100%,
+        0 100%,
+        0 8px
+      );
+      font: 500 0.75rem monospace;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
       cursor: pointer;
+    }
+    button:hover:not(:disabled) {
+      background: #184761;
+      border-color: #68cbdc;
     }
     button:disabled {
       opacity: 0.55;

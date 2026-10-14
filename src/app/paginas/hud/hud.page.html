@@ -1,8 +1,11 @@
 <section class="hud">
   <div class="vinheta" aria-hidden="true"></div><div class="grade" aria-hidden="true"></div>
+  <div class="cantos" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div class="varredura" aria-hidden="true"></div>
   <header class="cabecalho">
     <a class="marca" routerLink="/">J.A.R.V.I.S.<span>ASSISTENTE PESSOAL</span></a>
     <span class="conexao"><span class="luz" [class.luz--online]="eventos.status() === 'online'" aria-hidden="true"></span>{{ estadoDaConexao() }}</span>
+    <span class="relogio" aria-hidden="true">{{ relogio() }}</span>
     <app-historico-conversa [trocas]="conversa.trocas()" [ocupada]="conversa.ocupada()" (limpar)="limparConversa()" />
   </header>
   <div class="estado-central">
@@ -12,11 +15,20 @@
   <main class="conteudo">
     <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
     <div class="palco">
-      @if (conversa.naTela()) {
-        <app-resposta-conversa [resposta]="conversa.resposta()" [erro]="conversa.erro()" [ocupada]="conversa.ocupada()" (comando)="enviarTexto($event)" />
+      <!-- O palco é só para o que se olha: um anexo, um código de confirmação, um erro ou o
+           briefing. Fala simples do Jarvis é voz, legenda e histórico — não ocupa a tela. -->
+      @if (conversa.cartao(); as resposta) {
+        <article class="card-principal" aria-label="Resposta do Jarvis" animate.enter="entrando" animate.leave="saindo">
+          <div class="cabecalho-card">
+            <p class="rotulo-bloco">Jarvis</p>
+            <span class="selo">RESPOSTA</span>
+            <button class="fechar" type="button" aria-label="Fechar resposta" (click)="conversa.dispensar()">✕</button>
+          </div>
+          <app-resposta-conversa [resposta]="resposta" [erro]="conversa.erro()" [ocupada]="conversa.ocupada()" (comando)="enviarTexto($event)" />
+        </article>
       } @else {
         <!-- Lista de zero ou um: o card entra, e ao sair de uso desce para a fileira e libera o orbe. -->
-        @for (bloco of palco(); track bloco.id) {
+        @for (bloco of briefingNoPalco(); track bloco.id) {
           <article class="card-principal" [attr.aria-label]="bloco.rotulo" animate.enter="entrando" animate.leave="saindo">
             <div class="cabecalho-card">
               <p class="rotulo-bloco">{{ bloco.rotulo }}</p>
@@ -50,8 +62,13 @@
       </nav>
     </section>
   }
-  <div class="legenda-voz" aria-live="off">{{ voz.trechoAtual() }}</div>
-  <app-barra-conversa class="barra-conversa" [(texto)]="rascunho" [ocupada]="conversa.ocupada()" [ditando]="escuta.ditando()" [vozDisponivel]="escuta.disponivel" (enviar)="enviarTexto()" (microfone)="ditar()" />
+  <p class="legenda-voz" aria-live="off">@if (voz.trechoAtual()) {<span class="legenda-quem" aria-hidden="true">Jarvis</span>}{{ voz.trechoAtual() }}</p>
+  <div class="doca">
+    @if (conversa.conversando()) {
+      <app-dialogo-conversa [trocas]="conversa.trocas()" [resposta]="conversa.resposta()" [ocultar]="conversa.cartao()?.id ?? ''" [progresso]="conversa.progresso()" [erro]="conversa.erro()" />
+    }
+    <app-barra-conversa [(texto)]="rascunho" [(aberta)]="conversa.chatAberto" [ocupada]="conversa.ocupada()" [ditando]="escuta.ditando()" [vozDisponivel]="escuta.disponivel" (enviar)="enviarTexto()" (microfone)="ditar()" />
+  </div>
   <footer class="rodape">
     <div class="avisos" role="status">
       @if (erro()) { <span class="erro">{{ erro() }}</span> }

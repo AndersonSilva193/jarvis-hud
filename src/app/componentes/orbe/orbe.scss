@@ -1,3 +1,4 @@
+// O orbe é o canvas; o resto são instrumentos ao redor dele — anéis, tiques e a retícula.
 :host {
   position: relative;
   display: block;
@@ -6,7 +7,74 @@
 }
 
 .tela {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.anel,
+.mira {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.anel--externo {
+  width: 80%;
+  height: 80%;
+  border: 1px dashed rgba(95, 242, 255, 0.2);
+  animation: orbe-girar 60s linear infinite;
+}
+
+// Tiques a cada 15°, recortados num aro fino: a escala de um instrumento, não um anel liso.
+.anel--tiques {
+  width: 66%;
+  height: 66%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(95, 242, 255, 0.45) 0 0.6deg,
+    transparent 0.6deg 15deg
+  );
+  mask: radial-gradient(circle, transparent 0 calc(50% - 8px), #000 calc(50% - 8px));
+  animation: orbe-girar 110s linear infinite reverse;
+}
+
+// Quatro traços nos pontos cardeais: a mira que enquadra o orbe.
+.mira {
+  width: 88%;
+  height: 88%;
+  opacity: 0.45;
+  background:
+    linear-gradient(#5ff2ff, #5ff2ff) 50% 0 / 1px 16px no-repeat,
+    linear-gradient(#5ff2ff, #5ff2ff) 50% 100% / 1px 16px no-repeat,
+    linear-gradient(#5ff2ff, #5ff2ff) 0 50% / 16px 1px no-repeat,
+    linear-gradient(#5ff2ff, #5ff2ff) 100% 50% / 16px 1px no-repeat;
+}
+
+// Os anéis acompanham o estado: aceleram quando ele trabalha e acendem quando ele ouve.
+:host([data-estado='pensando']) .anel--externo,
+:host([data-estado='gerando']) .anel--externo {
+  border-color: rgba(78, 172, 255, 0.5);
+  animation-duration: 14s;
+}
+
+:host([data-estado='ouvindo']) .anel--externo {
+  border-color: rgba(146, 249, 255, 0.45);
+  animation-duration: 26s;
+}
+
+:host([data-estado='falando']) .mira,
+:host([data-estado='ouvindo']) .mira {
+  opacity: 0.75;
+}
+
+@keyframes orbe-girar {
+  to {
+    rotate: 360deg;
+  }
 }

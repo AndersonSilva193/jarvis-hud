@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '
 import { ConversaService } from '../../nucleo/conversa.service';
 import { BarraConversaComponent } from '../../componentes/conversa/barra-conversa';
 import { RespostaConversaComponent } from '../../componentes/conversa/resposta-conversa';
+import { DialogoConversaComponent } from '../../componentes/conversa/dialogo-conversa';
 import { HistoricoConversaComponent } from '../../componentes/conversa/historico-conversa';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
@@ -28,6 +29,9 @@ import type { Bloco, Briefing } from '../../nucleo/briefing.modelos';
 /** Tempo parado até o cursor sumir: o HUD vive num monitor, sem ninguém mexendo no mouse. */
 const OCIOSO_ATE_ESCONDER_MS = 5_000;
 
+/** O relógio do cabeçalho: um HUD sem hora na tela não parece um HUD. */
+const RELOGIO_MS = 1_000;
+
 /** A pergunta do fim do briefing, e quanto tempo ele espera o "sim". */
 const PERGUNTA_DAS_OBSERVACOES = 'O senhor quer ouvir as observações?';
 const JANELA_DA_RESPOSTA_MS = 8_000;
@@ -45,6 +49,7 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
   imports: [
     BarraConversaComponent,
     RespostaConversaComponent,
+    DialogoConversaComponent,
     HistoricoConversaComponent,
     OrbeComponent,
     CardClimaComponent,
@@ -69,6 +74,7 @@ export class HudPage implements OnInit, OnDestroy {
 
   protected readonly pedindo = signal(false);
   protected readonly erro = signal('');
+  protected readonly relogio = signal(agora());
 
   protected readonly estadoOrbe = computed<EstadoOrbe>(() => {
     if (this.conversa.ocupada()) return 'pensando';
@@ -101,8 +107,12 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly blocoNoPalco = computed(() => this.player.selecionado() ?? this.player.atual());
   /** Zero ou um: é lista para o `@for` dar identidade ao card e animar a entrada e a saída dele. */
   protected readonly palco = computed(() => { const bloco = this.blocoNoPalco(); return bloco ? [bloco] : []; });
+  /** O briefing só aparece no palco quando a conversa não está usando a tela. */
+  protected readonly briefingNoPalco = computed(() => (this.conversa.naTela() ? [] : this.palco()));
   /** Sem nada no palco o orbe cresce e assume o centro — é o Jarvis em repouso, sem card por cima. */
-  protected readonly orbeLivre = computed(() => !this.conversa.naTela() && this.palco().length === 0);
+  protected readonly orbeLivre = computed(
+    () => !this.conversa.cartao() && this.briefingNoPalco().length === 0,
+  );
   protected readonly concluidos = computed(() => this.player.blocos().slice(0, Math.max(0,this.player.indiceAtual())));
   protected readonly geracaoBriefing = computed(() => { const b = this.player.briefing(); return b ? contextoBriefing(b).geracao : ''; });
   protected readonly estadoApresentacao = computed(() => {
@@ -127,6 +137,7 @@ export class HudPage implements OnInit, OnDestroy {
   }
 
   private ocioso: ReturnType<typeof setTimeout> | null = null;
+  private pendulo: ReturnType<typeof setInterval> | null = null;
   private ultimaAtivacao = -Infinity;
   private ativa = true;
   private observacoes: AbortController | null = null;
@@ -134,6 +145,10 @@ export class HudPage implements OnInit, OnDestroy {
   constructor() {
     effect(() => {
       if (this.escuta.ditando()) this.rascunho.set(this.escuta.transcricao());
+    });
+    // Enquanto há rascunho ou ditado, a conversa segura a tela: nada se recolhe por baixo da mão.
+    effect(() => {
+      this.conversa.compondo.set(!!this.rascunho().trim() || this.escuta.ditando());
     });
   }
 
@@ -178,6 +193,7 @@ export class HudPage implements OnInit, OnDestroy {
 
     window.addEventListener('keydown', this.aoTeclar);
     window.addEventListener('mousemove', this.aoMexerOMouse);
+    this.pendulo = setInterval(() => this.relogio.set(agora()), RELOGIO_MS);
     this.agendarEsconderCursor();
   }
 
@@ -192,6 +208,9 @@ export class HudPage implements OnInit, OnDestroy {
     window.removeEventListener('mousemove', this.aoMexerOMouse);
     if (this.ocioso !== null) {
       clearTimeout(this.ocioso);
+    }
+    if (this.pendulo !== null) {
+      clearInterval(this.pendulo);
     }
     document.body.classList.remove('sem-cursor');
   }
@@ -364,6 +383,8 @@ export class HudPage implements OnInit, OnDestroy {
       // Fechar a consulta antes de parar: o palco volta a ficar vazio e o orbe retoma o centro.
       this.player.fecharConsulta();
       this.player.parar();
+      // E o mesmo Esc recolhe a conversa: a tela volta a ser só o orbe.
+      if (!this.rascunho().trim()) this.conversa.recolher();
       return;
     }
     if (
@@ -391,6 +412,19 @@ export class HudPage implements OnInit, OnDestroy {
       OCIOSO_ATE_ESCONDER_MS,
     );
   }
+}
+
+/** "14 out · 07:13" — hora do aparelho, que é onde a tela está pendurada. */
+function agora(): string {
+  const data = new Date();
+  return (
+    data
+      .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+      .replace('.', '')
+      .toUpperCase() +
+    ' · ' +
+    data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  );
 }
 
 function explicar(erro: unknown): string {

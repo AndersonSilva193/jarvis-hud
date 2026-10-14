@@ -8,7 +8,9 @@ import { OrbeComponent } from '../../componentes/orbe/orbe';
 import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
 import { JarvisApiService } from '../../nucleo/jarvis-api.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
+import { ConversaService } from '../../nucleo/conversa.service';
 import type { Briefing } from '../../nucleo/briefing.modelos';
+import type { RespostaConversa } from '../../nucleo/conversa.modelos';
 
 const BRIEFING: Briefing = {
   geradoEm: '2026-10-13T08:00:00-03:00',
@@ -44,7 +46,13 @@ describe('o palco do HUD', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
-        { provide: JarvisApiService, useValue: { ultimoBriefing: async () => null } },
+        {
+          provide: JarvisApiService,
+          useValue: {
+            ultimoBriefing: async () => null,
+            baixarAnexo: async () => new Blob(['x'], { type: 'image/png' }),
+          },
+        },
         {
           provide: JarvisEventosService,
           useValue: {
@@ -113,6 +121,59 @@ describe('o palco do HUD', () => {
 
     expect(tela.nativeElement.querySelector('.card-principal')).toBeNull();
     expect(clima.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('fala simples não vira card; o que se olha, sim', () => {
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+    const conversa = TestBed.inject(ConversaService);
+    const fala: RespostaConversa = {
+      id: '1',
+      canal: 'hud',
+      texto: 'Tudo certo por aqui, senhor.',
+      anexos: [],
+      confirmacao: null,
+      concluidoEm: '2026-10-14T10:00:00Z',
+      erro: null,
+    };
+
+    // Texto puro: fica na voz e no histórico, e o centro continua sendo do orbe.
+    conversa.receber(fala);
+    tela.detectChanges();
+    expect(tela.nativeElement.querySelector('.card-principal')).toBeNull();
+    expect(tela.nativeElement.querySelector('.orbe--livre')).not.toBeNull();
+
+    conversa.receber({
+      ...fala,
+      id: '2',
+      anexos: [
+        {
+          id: 'a',
+          tipo: 'imagem',
+          nome: 'Print',
+          mime: 'image/png',
+          url: '/api/anexos/a',
+          expiraEm: null,
+        },
+      ],
+    });
+    tela.detectChanges();
+    expect(tela.nativeElement.querySelector('.card-principal')).not.toBeNull();
+
+    tela.nativeElement.querySelector('[aria-label="Fechar resposta"]').click();
+    tela.detectChanges();
+    expect(tela.nativeElement.querySelector('.card-principal')).toBeNull();
+  });
+
+  it('o diálogo só aparece com o chat aberto', () => {
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+    expect(tela.nativeElement.querySelector('app-dialogo-conversa')).toBeNull();
+
+    tela.nativeElement.querySelector('.compacta button').click();
+    tela.detectChanges();
+    expect(tela.nativeElement.querySelector('app-dialogo-conversa')).not.toBeNull();
+    expect(TestBed.inject(ConversaService).chatAberto()).toBe(true);
   });
 
   it('sem briefing nenhum, a tela é só o orbe e a linha de estado', () => {
