@@ -1,73 +1,58 @@
-<section class="hud">
+<div class="hud">
   <div class="vinheta" aria-hidden="true"></div><div class="grade" aria-hidden="true"></div>
   <div class="cantos" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div class="varredura" aria-hidden="true"></div>
   <header class="cabecalho">
-    <a class="marca" routerLink="/">J.A.R.V.I.S.<span>ASSISTENTE PESSOAL</span></a>
+    <h1 class="nome-hud"><a class="marca" routerLink="/">J.A.R.V.I.S.<span>ASSISTENTE PESSOAL</span></a></h1>
     <span class="conexao"><span class="luz" [class.luz--online]="eventos.status() === 'online'" aria-hidden="true"></span>{{ estadoDaConexao() }}</span>
     <span class="sinal-voz" [class.sinal-voz--ligado]="escuta.disponivel && escuta.ligada()" [class.sinal-voz--ativo]="voz.falando() || escuta.ouvindo()">
       <span class="barras" aria-hidden="true"><i></i><i></i><i></i><i></i></span>{{ sinalDeVoz() }}
     </span>
     <span class="relogio" aria-hidden="true">{{ relogio() }}</span>
-    <app-historico-conversa [trocas]="conversa.trocas()" [ocupada]="conversa.ocupada()" (limpar)="limparConversa()" />
+    <app-historico-conversa [(aberto)]="tela.historicoAberto" [trocas]="conversa.trocas()" [ocupada]="conversa.ocupada()" (limpar)="limparConversa()" />
   </header>
   <div class="estado-central">
     <p class="falando" role="status" aria-live="polite"><span class="ponto" [class.ponto--ativo]="voz.falando() || escuta.ouvindo() || conversa.ocupada()" aria-hidden="true"></span>{{ estadoApresentacao() }}</p>
     <div class="tracos" aria-hidden="true"></div>
   </div>
-  <main class="conteudo">
+  <main class="conteudo" aria-label="Janelas do Jarvis">
     <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
     <app-sondas class="sondas" [class.sondas--livre]="orbeLivre()" [recuada]="!orbeLivre()" [estado]="estadoOrbe()" [escutaDisponivel]="escuta.disponivel" [escutaLigada]="escuta.ligada()" [ditando]="escuta.ditando()" [progresso]="conversa.progresso()" [rotuloVoz]="cota.rotulo()" />
-    <div class="palco">
-      <!-- O palco é só para o que se olha: um anexo, um código de confirmação, um erro ou o
-           briefing. Fala simples do Jarvis é voz, legenda e histórico — não ocupa a tela. -->
-      @if (conversa.cartao(); as resposta) {
-        <article class="card-principal" aria-label="Resposta do Jarvis" animate.enter="entrando" animate.leave="saindo">
-          <div class="cabecalho-card">
-            <p class="rotulo-bloco">Jarvis</p>
-            <span class="selo">RESPOSTA</span>
-            <button class="fechar" type="button" aria-label="Fechar resposta" (click)="conversa.dispensar()">✕</button>
-          </div>
-          <app-resposta-conversa [resposta]="resposta" [erro]="conversa.erro()" [ocupada]="conversa.ocupada()" (comando)="enviarTexto($event)" />
-        </article>
-      } @else {
-        <!-- Lista de zero ou um: o card entra, e ao sair de uso desce para a fileira e libera o orbe. -->
-        @for (bloco of briefingNoPalco(); track bloco.id) {
-          <article class="card-principal" [attr.aria-label]="bloco.rotulo" animate.enter="entrando" animate.leave="saindo">
-            <div class="cabecalho-card">
-              <p class="rotulo-bloco">{{ bloco.rotulo }}</p>
-              <span class="selo">{{ player.selecionado() ? 'CONSULTA' : 'BRIEFING' }}</span>
-              @if (player.selecionado()) { <button class="fechar" type="button" aria-label="Fechar consulta" (click)="player.fecharConsulta()">✕</button> }
-            </div>
-            @switch (bloco.tipo) {
-              @case ('clima') { <app-card-clima [dados]="bloco.dados" /> }
-              @case ('lembretes') { <app-card-lembretes [dados]="bloco.dados" /> }
-              @case ('sistemas') { <app-card-sistemas [dados]="bloco.dados" /> }
-              @case ('noticia') { <app-card-noticia [dados]="bloco.dados" /> }
-              @case ('abertura') { <app-card-texto [linhas]="bloco.linhas" /> }
-              @default { <app-card-texto [linhas]="bloco.linhas" [comFalha]="true" /> }
-            }
-          </article>
-        }
+    <div class="palco" #areaJanelas>
+      @for (janela of janelas.janelas(); track janela.id) {
+        <app-janela [janela]="janela" [miniPlayer]="janela.estado === 'minimizada' && midia.bandeja() === janela.id">
+          <app-conteudo-janela [janela]="janela" [ocupada]="conversa.ocupada()" (comando)="enviarTexto($event)" />
+        </app-janela>
       }
     </div>
   </main>
   @if (!conversa.naTela() && concluidos().length) {
-    <section class="arquivo">
+    <section class="arquivo" aria-label="Arquivo do briefing">
       <p class="rotulo-arquivo">{{ player.restaurado() ? 'Último briefing' : 'Briefing' }} <span>· gerado em {{ geracaoBriefing() }}</span></p>
       <nav class="fileira" aria-label="Cards do briefing">
         @for (bloco of concluidos(); track bloco.id) {
-          <button class="miniatura" type="button" [class.miniatura--ativa]="player.selecionado()?.id === bloco.id" [attr.aria-pressed]="player.selecionado()?.id === bloco.id" (click)="consultarCard(bloco)">
+          <button class="miniatura" type="button" [class.miniatura--ativa]="tela.consultada(bloco)" [attr.aria-pressed]="tela.consultada(bloco)" (click)="consultarCard(bloco)">
             <span class="rotulo-bloco">{{ bloco.rotulo }}</span>
             <strong>{{ resumoCard(bloco) }}</strong>
-            <span class="mini-acao">{{ player.selecionado()?.id === bloco.id ? 'Fechar' : 'Consultar' }} <span aria-hidden="true">↗</span></span>
+            <span class="mini-acao">{{ tela.consultada(bloco) ? 'Fechar' : 'Consultar' }} <span aria-hidden="true">↗</span></span>
           </button>
         }
       </nav>
     </section>
   }
-  <p class="legenda-voz" aria-live="off">@if (voz.trechoAtual()) {<span class="legenda-quem" aria-hidden="true">Jarvis</span>}{{ voz.trechoAtual() }}</p>
-  <div class="doca">
+  <p class="legenda-voz" role="region" aria-label="Legenda da fala" aria-live="off">@if (voz.trechoAtual()) {<span class="legenda-quem" aria-hidden="true">Jarvis</span>}{{ voz.trechoAtual() }}</p>
+  @if (janelas.minimizadas().length) {
+    <section class="bandeja" aria-label="Janelas minimizadas">
+      @if (midia.bandeja()) { <div class="espaco-player" #bandejaPlayer></div> }
+      <nav aria-label="Restaurar janelas">@for (janela of janelas.minimizadas(); track janela.id) {
+        <button type="button" (click)="janelas.restaurar(janela.id)" [attr.aria-label]="'Restaurar ' + janela.titulo">{{ janela.titulo }} ↗</button>
+        @if ((janela.tipo === 'video' || janela.tipo === 'musica') && midia.bandeja() !== janela.id) {
+          <button type="button" (click)="midia.mostrarBandeja(janela.id)" [attr.aria-label]="'Mostrar player de ' + janela.titulo">▶ Player</button>
+        }
+      }</nav>
+    </section>
+  }
+  <div class="doca" role="region" aria-label="Conversa com o Jarvis">
     @if (conversa.conversando()) {
       <app-dialogo-conversa [trocas]="conversa.trocas()" [resposta]="conversa.resposta()" [ocultar]="conversa.cartao()?.id ?? ''" [progresso]="conversa.progresso()" [erro]="conversa.erro()" />
     }
@@ -75,6 +60,7 @@
   </div>
   <footer class="rodape">
     <div class="avisos" role="status">
+      @if (janelas.aviso()) { <span>{{ janelas.aviso() }}</span> }
       @if (erro()) { <span class="erro">{{ erro() }}</span> }
       @if (escuta.motivo() === 'permissao-negada') { <span class="erro">Microfone bloqueado pelo navegador</span> }
       @if (briefingGuardado()) { <span>Um briefing está disponível para consulta.</span> }
@@ -89,4 +75,4 @@
       <button class="botao bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo() || conversa.ocupada()">{{ pedindo() ? 'Preparando…' : 'Briefing' }}</button>
     </div>
   </footer>
-</section>
+</div>

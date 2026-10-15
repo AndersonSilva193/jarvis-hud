@@ -1,0 +1,11 @@
+@use '../../estilos/hud' as hud;
+:host{position:absolute;display:block;pointer-events:auto;min-width:0}
+:host(.minimizada){display:none}:host(.com-player){display:block}
+.card-principal{height:100%;display:flex;flex-direction:column;background:linear-gradient(160deg,#0a203ef5,#030c1afa);border:1px solid #47758d;box-shadow:0 10px 35px #0008;color:hud.$texto;position:relative;border-radius:3px;padding:.8rem}
+:host(.em-foco) .card-principal{border-color:hud.$ciano;box-shadow:0 0 18px #2d7dff33}
+.card-principal:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+.cabecalho-card{display:flex;align-items:center;gap:.6rem;flex-shrink:0;padding-bottom:.7rem;cursor:grab;touch-action:none;min-height:38px}
+.rotulo-bloco{margin:0;font:600 .7rem hud.$mono;letter-spacing:.08em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.selo{font:.55rem hud.$mono;color:#b2def2;border:1px solid #547d95;border-radius:12px;padding:.25rem .4rem}
+.botoes{display:flex;gap:.25rem}button{background:#0b253c;color:#a6f8ff;border:1px solid #608ba3;width:28px;height:28px;cursor:pointer;padding:0;line-height:1}button:hover,button[aria-pressed=true]{background:#24506a;color:#fff}button:focus-visible{outline:2px solid #fff;outline-offset:2px}.conteudo-janela{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:.2rem .4rem .6rem;user-select:text}.alca{position:absolute;right:0;bottom:0;cursor:nwse-resize;touch-action:none;border-width:1px 0 0 1px;width:22px;height:22px}:host(.com-player) .card-principal{padding:.5rem}:host(.com-player) .selo{display:none}:host(.com-player) .conteudo-janela{padding:0;overflow:auto}
+@media(max-width:600px){.selo{display:none}.card-principal{padding:.5rem}.cabecalho-card{gap:.3rem}.rotulo-bloco{font-size:.6rem}}

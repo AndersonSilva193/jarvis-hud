@@ -45,3 +45,6 @@ Thumbs.db
 
 # Vercel
 .vercel
+/test-results/
+/playwright-report/
+/*-validacao.log

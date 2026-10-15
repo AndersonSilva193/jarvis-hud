@@ -19,7 +19,7 @@ ferramenta em curso, provedor e cota de voz). As sondas apagam quando há card n
 abaixo de 1100 px. No cabeçalho, o selo **Voz online / Voz em espera** diz se a ativação por voz
 está ligada, e as barras dele mexem enquanto há som entrando ou saindo.
 
-O palco tem **no máximo um card**, e só entra nele **o que se olha**: um bloco do briefing, uma
+O palco tem **até seis janelas em destaque**, e respostas de conversa só entram quando têm **o que se olha**: um bloco do briefing, uma
 imagem ou arquivo anexado, um código de confirmação, um erro. Fala simples do Jarvis não vira card
 — ela é falada, aparece na legenda embaixo do orbe e fica no histórico. Para ler a conversa, abra o
 chat (**Conversar**) ou o **Histórico** no topo; para conversar por texto o tempo todo, há o
@@ -73,7 +73,7 @@ Do lado do Jarvis, `HUD_ORIGEM` precisa listar a origem de onde o HUD é aberto 
 Abaixo do orbe, uma legenda discreta mostra o trecho que está sendo falado agora — é o texto
 entregue à síntese, sem simular sincronia palavra a palavra, que o navegador não informa.
 
-Teclas: `→` pula o bloco atual, `Esc` fecha a consulta e encerra a reprodução.
+Teclas: `→` pula o bloco atual; `Esc` fecha primeiro o histórico aberto ou a janela focada. Sem janela, cancela ditado/fala. `Alt + setas` move a janela; setas com foco na alça redimensionam.
 
 A barra de conversa fica compacta em repouso (**Conversar** e o microfone) e só expande ao clicar ou
 ao começar um ditado. Ela nunca se recolhe sozinha enquanto houver rascunho ou ditado em curso.
@@ -153,8 +153,8 @@ As respostas da HUD usam a mesma voz do briefing e aparecem como texto em dois l
 em cima da barra, enquanto o chat está aberto, e no histórico. **O card central é só para o que se
 olha** — anexo, código de confirmação ou erro —, e esse card sai no **✕**, no **Esc** ou no **Ver
 briefing**; um card restaurado ao abrir a tela não volta sozinho ao palco. O histórico lateral
-recolhível mostra as dez últimas trocas dos dois canais. Mensagens do Telegram só atualizam essa
-coluna: não assumem o card central e não são faladas. **Limpar conversa** limpa também o histórico
+recolhível mostra as dez últimas trocas dos dois canais. Respostas de conversa do Telegram só atualizam essa
+coluna e não são faladas. Eventos `tela.card` do Telegram abrem janelas normalmente. **Limpar conversa** limpa também o histórico
 do Telegram e a última resposta; fica indisponível durante um pedido pendente.
 
 Iniciar conversa interrompe briefing e pergunta de observações. Briefings recebidos durante a
@@ -264,3 +264,53 @@ npm run build       # build de produção
 | Cards aparecem, mas ninguém fala | Falta o clique inicial (clique em **Briefing**) ou não há voz pt-BR no sistema                                                                 |
 | Clicar **Briefing** não muda nada | Dentro de 60 s a API devolve o briefing anterior sem emitir SSE; o HUD toca o da resposta HTTP, então isso deveria funcionar — veja o console |
 | Card de notícia sem foto         | O feed não trouxe imagem, ou a CDN recusou o hotlink: o card tem estado próprio para isso                                                     |
+
+## Janelas e cards dirigidos pelo Jarvis
+
+Cada janela pode ser movida, redimensionada, minimizada, maximizada, fixada ou fechada.
+Posição e tamanho normais são lembrados por tipo no navegador; conteúdo não é persistido.
+Ao abrir ou restaurar a sétima janela, a mais antiga não fixada é minimizada. Se as seis
+estiverem fixadas, a próxima fica na bandeja. Limpar preserva fixadas; fechar tudo também as fecha.
+Nenhuma dessas operações apaga o histórico compartilhado.
+
+O briefing continua bloco a bloco, com miniaturas; fixar um bloco conserva sua janela ao avançar.
+Consultas de miniaturas são independentes e silenciosas. Respostas só geram janela para anexos,
+confirmações ou erros, e fechar uma resposta a dispensa sem apagar o histórico.
+
+Pesquisa aceita ranking, ficha, lista, linha_do_tempo e destaque. Fontes expandem no próprio card.
+Página usa a indicação incorporavel do backend; a prévia está disponível também quando o site
+recusa o iframe. A HUD nunca envia seu token para embeds. Os botões Abrir passam por
+AbrirLinkService, ponto de troca para a futura integração com o agente do PC.
+
+Vídeo e música usam a mesma YouTube IFrame API, carregada uma vez. O player fica visível,
+inclusive minimizado (mínimo 200 × 200 px). Só uma mídia toca por vez; iniciar outra pausa a anterior.
+A mídia ativa na bandeja conserva iframe e posição. Outros players minimizados ficam pausados.
+Durante a fala do Jarvis, o volume cai a 20% do escolhido e depois volta. O navegador pode exigir
+um clique em Play; vídeos que recusam incorporação oferecem Abrir no YouTube.
+
+Comandos locais por texto ou após Jarvis: limpa a tela, fecha tudo, abre o histórico,
+fecha o histórico, pausa, continua, aumenta o volume, abaixa o volume e fecha o vídeo/a música/a pesquisa.
+Só frases completas são interceptadas. Mídia usa a janela focada ou a única candidata; fechamento
+por tipo exige uma única candidata. Ambiguidade e outras frases vão ao Jarvis normalmente.
+
+### Contratos de tela
+
+- SSE tela.card: {id,tipo,titulo,dados,origem,criadoEm}; o id do servidor é preservado.
+- SSE tela.comando: {acao,alvo,valor}; valor é texto, inclusive segundos em avancar/voltar.
+- POST /api/tela/estado, Bearer: {janelas:[{id,tipo,titulo,estado,fixado,emFoco,tocando}],historicoAberto,briefingNaTela}.
+- No POST, estado é normal/minimizado/maximizado. Conteúdo e geometria não são enviados.
+- Mudanças usam debounce de 500 ms e POSTs serializados; reconexão e pulso de cinco minutos renovam o retrato.
+- Instale primeiro o backend que aceita resposta e mais de 24 janelas; o contexto mantém o teto de 12 linhas.
+
+### Verificação
+
+Execute npm test -- --watch=false e npm run build. Em PowerShell com scripts desabilitados,
+use npm.cmd. npm run test:e2e usa Chrome instalado, Playwright e AXE, com API/SSE simulados e
+sem credenciais reais. Os testes cobrem layouts, teclado, geometria, comandos locais, estado,
+continuidade do player e as falhas de incorporação: vídeo que recusa o embed cai na miniatura com
+Abrir no YouTube, página que não incorpora oferece a prévia e imagem indisponível some do card.
+Capturas e traces ficam em test-results/ (ignorado pelo Git).
+
+O embed real do YouTube fica fora da suíte determinística, que usa player simulado. Para conferi-lo
+no navegador, rode `TESTAR_YOUTUBE_REAL=1 npx playwright test -g "@externo"`: o teste aceita
+reprodução, play explícito pelo autoplay bloqueado ou erro declarado, e guarda a captura do player.

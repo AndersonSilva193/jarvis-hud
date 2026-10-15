@@ -6,6 +6,7 @@ import { ConfigStore, normalizarUrl } from './config.store';
 import type { HistoricoConversa, RespostaConversa } from './conversa.modelos';
 import type { Briefing } from './briefing.modelos';
 import type { RespostaVoz, StatusVoz } from './voz.modelos';
+import type { EstadoTela } from './tela.modelos';
 
 /** Por que uma tentativa de conexão não deu certo — o suficiente para a tela explicar. */
 export type ResultadoTeste = 'ok' | 'token-invalido' | 'api-inacessivel' | 'conteudo-misto';
@@ -164,5 +165,9 @@ export class JarvisApiService {
 
   private autorizacao(): HttpHeaders {
     return new HttpHeaders({ Authorization: `Bearer ${this.config.token()}` });
+  }
+
+  enviarEstadoTela(estado: EstadoTela): Promise<void> {
+    return firstValueFrom(this.http.post<void>(this.config.rota('/api/tela/estado'), estado, { headers: this.autorizacao() }));
   }
 }

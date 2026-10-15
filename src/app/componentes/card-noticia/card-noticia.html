@@ -2,10 +2,12 @@
   @if (comImagem()) {
     <img
       class="imagem"
-      [src]="dados().imagemUrl"
+      [ngSrc]="dados().imagemUrl"
+      fill
+      sizes="100vw"
       [alt]="dados().titulo"
       referrerpolicy="no-referrer"
-      loading="eager"
+      priority
       (error)="aoFalharImagem()"
     />
   } @else {
@@ -17,4 +19,4 @@
 <p class="fonte">{{ fonte() }}</p>
 <h2 class="manchete">{{ dados().titulo }}</h2>
 
-@if (linkSeguro()) { <a class="abrir-fonte" [href]="linkSeguro()" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Abrir fonte ↗</a> }
+@if (linkSeguro()) { <button class="abrir-fonte" type="button" (click)="links.abrir(linkSeguro())">Abrir fonte ↗</button> }

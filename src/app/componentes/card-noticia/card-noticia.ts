@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { NgOptimizedImage } from '@angular/common';
+import { AbrirLinkService } from '../../nucleo/abrir-link.service';
 
 import type { ItemNoticia } from '../../nucleo/briefing.modelos';
 
@@ -10,11 +12,12 @@ import type { ItemNoticia } from '../../nucleo/briefing.modelos';
  */
 @Component({
   selector: 'app-card-noticia',
+  imports: [NgOptimizedImage],
   templateUrl: './card-noticia.html',
   styleUrl: './card-noticia.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CardNoticiaComponent {
+  protected readonly links = inject(AbrirLinkService);
   readonly dados = input.required<ItemNoticia>();
 
   private readonly imagemFalhou = signal(false);

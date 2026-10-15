@@ -55,4 +55,4 @@
   color: hud.$texto;
 }
 
-.abrir-fonte { display:inline-block;margin-top:1rem;color:#a6f8ff;font-size:.85rem; } .abrir-fonte:focus-visible { outline:2px solid #a6f8ff;outline-offset:4px; }
+.abrir-fonte { display:inline-block;margin-top:1rem;color:#a6f8ff;font-size:.85rem;background:#0c2943;border:1px solid #6fa6c3;padding:.5rem .8rem;cursor:pointer; } .abrir-fonte:focus-visible { outline:2px solid #a6f8ff;outline-offset:4px; }

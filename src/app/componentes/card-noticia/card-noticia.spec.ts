@@ -26,10 +26,10 @@ describe('card de notícia', () => {
     tela.componentRef.setInput('dados', manchete());
     tela.detectChanges();
 
-    const elo: HTMLAnchorElement = tela.nativeElement.querySelector('.abrir-fonte');
-    expect(elo.href).toBe('https://g1.globo.com/1');
-    expect(elo.rel).toContain('noopener');
-    expect(elo.rel).toContain('noreferrer');
+    const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+    const elo: HTMLButtonElement = tela.nativeElement.querySelector('.abrir-fonte');
+    elo.click();
+    expect(abrir).toHaveBeenCalledWith('https://g1.globo.com/1', '_blank', 'noopener,noreferrer');
   });
 
   it.each([

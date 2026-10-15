@@ -4,6 +4,7 @@ import { ConfigStore } from './config.store';
 import { JarvisApiService, type ResultadoTeste } from './jarvis-api.service';
 import type { PedidoConversa, ProgressoConversa, RespostaConversa } from './conversa.modelos';
 import type { Briefing } from './briefing.modelos';
+import { lerCardTela, lerComandoTela, type CardTela, type ComandoTela } from './tela.modelos';
 
 export type StatusConexao = 'desligado' | 'conectando' | 'online' | 'reconectando';
 
@@ -11,6 +12,8 @@ export type StatusConexao = 'desligado' | 'conectando' | 'online' | 'reconectand
 export type MotivoQueda = 'token-invalido' | 'api-inacessivel' | null;
 
 export interface OuvintesDoBriefing {
+  card?: (card: CardTela) => void;
+  comando?: (comando: ComandoTela) => void;
   conectado?: () => void;
   pensando?: (pedido: PedidoConversa) => void;
   ferramenta?: (progresso: ProgressoConversa) => void;
@@ -112,6 +115,8 @@ export class JarvisEventosService {
     receber<RespostaConversa>('conversa.resposta', (dados) => this.ouvintes?.resposta?.(dados));
     receber<RespostaConversa>('conversa.erro', (dados) => this.ouvintes?.erroConversa?.(dados));
     receber<unknown>('conversa.historico', () => this.ouvintes?.historico?.());
+    receber<unknown>('tela.card', dados => { const card = lerCardTela(dados); if (card) this.ouvintes?.card?.(card); });
+    receber<unknown>('tela.comando', dados => { const comando = lerComandoTela(dados); if (comando) this.ouvintes?.comando?.(comando); });
 
     fonte.onerror = () => {
       if (this.fonte !== fonte) return;

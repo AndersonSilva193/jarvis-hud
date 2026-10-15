@@ -28,6 +28,8 @@ describe('SSE de conversa', () => {
     conectado: vi.fn(),
     resposta: vi.fn(),
     historico: vi.fn(),
+    card: vi.fn(),
+    comando: vi.fn(),
   };
   beforeEach(() => {
     vi.useFakeTimers();
@@ -85,5 +87,14 @@ describe('SSE de conversa', () => {
     eventos.conectar(ouvintes);
     antiga.emitir('briefing', {});
     expect(ouvintes.briefing).not.toHaveBeenCalled();
+  });
+  it('valida os novos eventos antes de entregar e aceita a origem Telegram', () => {
+    eventos.conectar(ouvintes);
+    const fonte = Fonte.criadas[0];
+    const card = { id: 'c123', tipo: 'noticia', titulo: 'Teste', origem: 'telegram', criadoEm: '2026-10-14', dados: { titulo: 'Teste', tema: '', fonte: '', link: '', imagemUrl: '' } };
+    fonte.emitir('tela.card', card); expect(ouvintes.card).toHaveBeenCalledWith(card);
+    fonte.emitir('tela.card', { ...card, dados: '<script>' }); expect(ouvintes.card).toHaveBeenCalledTimes(1);
+    fonte.emitir('tela.comando', { acao: 'pausar', alvo: 'c123', valor: '' }); expect(ouvintes.comando).toHaveBeenCalledWith({ acao: 'pausar', alvo: 'c123', valor: '' });
+    fonte.emitir('tela.comando', { acao: 'executar_script', valor: 'alert(1)' }); expect(ouvintes.comando).toHaveBeenCalledTimes(1);
   });
 });

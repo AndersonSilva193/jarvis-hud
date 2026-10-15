@@ -1,6 +1,7 @@
 @use '../../estilos/hud' as hud;
 
 :host{display:block;height:100%;color:hud.$texto}
+.nome-hud{margin:0;font-size:inherit;font-weight:inherit}
 // --respiro é a margem lateral: o campo da onda usa o mesmo valor para ir de borda a borda.
 .hud{--respiro:clamp(1rem,3vw,3.5rem);position:relative;isolation:isolate;min-height:100%;height:100dvh;display:flex;flex-direction:column;gap:clamp(.6rem,1.4vh,1rem);padding:1.4rem var(--respiro);overflow-x:hidden;overflow-y:auto;background:hud.$fundo}
 
@@ -35,7 +36,7 @@
 .orbe--livre,.sondas--livre{--escala:1.06}
 .orbe--livre{opacity:1}
 
-.palco{position:relative;width:min(100%,43rem);z-index:1}
+.palco{position:absolute;inset:0;z-index:5;pointer-events:none}
 // O canto cortado é a assinatura dos cards do briefing — a miniatura de fileira.scss é o mesmo card.
 .card-principal,.miniatura{@include hud.moldura(14px)}
 .card-principal{padding:clamp(1rem,2.4vw,1.8rem);max-height:48vh;overflow:auto}
@@ -58,7 +59,7 @@
 // A saída desce e encolhe: o card vai na direção da fileira, onde ele reaparece como miniatura.
 @keyframes saindo{to{opacity:0;transform:translateY(2.5rem) scale(.9)}}
 
-@media(min-width:1800px){.hud{--respiro:clamp(3rem,7vw,11rem)}.conteudo{--orbe:min(66vh,50rem)}.palco{width:min(100%,46rem)}}
+@media(min-width:1800px){.hud{--respiro:clamp(3rem,7vw,11rem)}.conteudo{--orbe:min(66vh,50rem)}}
 @media(max-width:700px){.hud{--respiro:1rem;padding:1rem;gap:.75rem}.cabecalho{padding-right:7rem;gap:.8rem;flex-wrap:wrap}.marca{font-size:.8rem}.relogio{font-size:.58rem;letter-spacing:.14em}.conteudo{min-height:18rem;--orbe:100vw}.sinal-voz{display:none}.orbe--livre{--escala:1.03}.card-principal{max-height:none}.legenda-voz{font-size:.8rem;gap:.5rem}}
 
 // As sondas ficam fora do quadrado do orbe: abaixo desta largura elas cairiam em cima dele.

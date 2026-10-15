@@ -1,10 +1,11 @@
-import { Component, input, output, signal } from '@angular/core';
+import { Component, ElementRef, afterRenderEffect, input, output, model, viewChild } from '@angular/core';
 import type { TrocaConversa } from '../../nucleo/conversa.modelos';
 
 @Component({
   selector: 'app-historico-conversa',
   template: ` <button
       class="alternar"
+      #botao
       type="button"
       (click)="aberto.set(!aberto())"
       [attr.aria-expanded]="aberto()"
@@ -13,7 +14,7 @@ import type { TrocaConversa } from '../../nucleo/conversa.modelos';
       {{ aberto() ? 'Fechar histórico' : 'Histórico' }}
     </button>
     @if (aberto()) {
-      <aside id="historico-conversa" aria-label="Últimas dez trocas">
+      <aside #painel id="historico-conversa" aria-label="Últimas dez trocas" tabindex="-1">
         <h2>Últimas conversas</h2>
         <button type="button" [disabled]="ocupada()" (click)="limpar.emit()">
           Limpar conversa
@@ -36,7 +37,7 @@ import type { TrocaConversa } from '../../nucleo/conversa.modelos';
       position: absolute;
       right: 1rem;
       top: 1rem;
-      z-index: 8;
+      z-index: 100;
     }
     button {
       font: 500 0.65rem monospace;
@@ -125,5 +126,15 @@ export class HistoricoConversaComponent {
   readonly trocas = input<TrocaConversa[]>([]);
   readonly ocupada = input(false);
   readonly limpar = output<void>();
-  readonly aberto = signal(false);
+  readonly aberto = model(false);
+  private readonly botao = viewChild<ElementRef<HTMLButtonElement>>('botao');
+  private readonly painel = viewChild<ElementRef<HTMLElement>>('painel');
+  private anterior = false;
+  constructor() {
+    afterRenderEffect(() => {
+      const aberto = this.aberto();
+      const alvo = aberto ? this.painel() : this.botao();
+      if (aberto !== this.anterior) { this.anterior = aberto; alvo?.nativeElement.focus({ preventScroll: true }); }
+    });
+  }
 }

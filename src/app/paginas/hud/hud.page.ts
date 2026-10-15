@@ -1,17 +1,15 @@
-import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { JanelaComponent } from '../../componentes/janela/janela';
+import { ConteudoJanelaComponent } from '../../componentes/janela/conteudo-janela';
+import { TelaService } from '../../nucleo/tela.service';
+import { TelaEstadoService } from '../../nucleo/tela-estado.service';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal, afterRenderEffect, viewChild, ElementRef } from '@angular/core';
 import { ConversaService } from '../../nucleo/conversa.service';
 import { BarraConversaComponent } from '../../componentes/conversa/barra-conversa';
-import { RespostaConversaComponent } from '../../componentes/conversa/resposta-conversa';
 import { DialogoConversaComponent } from '../../componentes/conversa/dialogo-conversa';
 import { HistoricoConversaComponent } from '../../componentes/conversa/historico-conversa';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 
-import { CardClimaComponent } from '../../componentes/card-clima/card-clima';
-import { CardLembretesComponent } from '../../componentes/card-lembretes/card-lembretes';
-import { CardNoticiaComponent } from '../../componentes/card-noticia/card-noticia';
-import { CardSistemasComponent } from '../../componentes/card-sistemas/card-sistemas';
-import { CardTextoComponent } from '../../componentes/card-texto/card-texto';
 import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
 import { SondasComponent } from '../../componentes/sondas/sondas';
 import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
@@ -49,23 +47,26 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
 @Component({
   selector: 'app-hud',
   imports: [
+    JanelaComponent,
+    ConteudoJanelaComponent,
     BarraConversaComponent,
-    RespostaConversaComponent,
     DialogoConversaComponent,
     HistoricoConversaComponent,
     OrbeComponent,
     SondasComponent,
-    CardClimaComponent,
-    CardLembretesComponent,
-    CardNoticiaComponent,
-    CardSistemasComponent,
-    CardTextoComponent,
     RouterLink,
   ],
   templateUrl: './hud.page.html',
-  styleUrls: ['./hud.page.scss', './fileira.scss', './conversa.scss'],
+  styleUrls: ['./hud.page.scss', './fileira.scss', './conversa.scss', './janelas.scss'],
 })
 export class HudPage implements OnInit, OnDestroy {
+  protected readonly tela = inject(TelaService);
+  protected readonly janelas = this.tela.janelas;
+  protected readonly midia = this.tela.midia;
+  private readonly estadoTela = inject(TelaEstadoService);
+  private readonly areaJanelas = viewChild<ElementRef<HTMLElement>>('areaJanelas');
+  private readonly bandejaPlayer = viewChild<ElementRef<HTMLElement>>('bandejaPlayer');
+
   protected readonly conversa = inject(ConversaService);
   protected readonly rascunho = signal('');
   protected readonly briefingGuardado = signal<Briefing | null>(null);
@@ -121,7 +122,7 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly briefingNoPalco = computed(() => (this.conversa.naTela() ? [] : this.palco()));
   /** Sem nada no palco o orbe cresce e assume o centro — é o Jarvis em repouso, sem card por cima. */
   protected readonly orbeLivre = computed(
-    () => !this.conversa.cartao() && this.briefingNoPalco().length === 0,
+    () => this.janelas.visiveis().length === 0,
   );
   protected readonly concluidos = computed(() => this.player.blocos().slice(0, Math.max(0,this.player.indiceAtual())));
   protected readonly geracaoBriefing = computed(() => { const b = this.player.briefing(); return b ? contextoBriefing(b).geracao : ''; });
@@ -135,7 +136,7 @@ export class HudPage implements OnInit, OnDestroy {
     if (this.escuta.ouvindo()) return this.escuta.ditando() ? 'Ouvindo sua mensagem' : 'Ouvindo';
     return 'Às suas ordens';
   });
-  protected consultarCard(bloco: Bloco): void { this.player.consultar(bloco); }
+  protected consultarCard(bloco: Bloco): void { this.tela.consultar(bloco); }
   protected resumoCard(bloco: Bloco): string {
     switch(bloco.tipo) {
       case 'clima': return bloco.dados.temperaturaAtual + '° · ' + bloco.dados.cidade;
@@ -153,6 +154,27 @@ export class HudPage implements OnInit, OnDestroy {
   private observacoes: AbortController | null = null;
 
   constructor() {
+    afterRenderEffect((limpar) => {
+      const area = this.areaJanelas()?.nativeElement;
+      const bandeja = this.bandejaPlayer()?.nativeElement;
+      if (!area || typeof ResizeObserver === 'undefined') return;
+      const medir = () => {
+        const retangulo = area.getBoundingClientRect();
+        this.janelas.origemArea.set({ x: retangulo.x, y: retangulo.y });
+        this.janelas.definirArea(retangulo.width, retangulo.height);
+        if (bandeja) {
+          const b = bandeja.getBoundingClientRect();
+          this.janelas.bandejaArea.set({ x: b.x, y: b.y, largura: b.width, altura: b.height });
+        }
+      };
+      const observador = new ResizeObserver(medir);
+      observador.observe(area);
+      if (bandeja) observador.observe(bandeja);
+      window.addEventListener('resize', medir);
+      window.addEventListener('scroll', medir, true);
+      medir();
+      limpar(() => { observador.disconnect(); window.removeEventListener('resize', medir); window.removeEventListener('scroll', medir, true); });
+    });
     effect(() => {
       if (this.escuta.ditando()) this.rascunho.set(this.escuta.transcricao());
     });
@@ -164,6 +186,8 @@ export class HudPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.conversa.abrir();
+    this.tela.ativa.set(true);
+    this.tela.mostrarBriefing = () => this.consultarBriefing();
     this.cota.acompanhar();
     this.eventos.conectar({
       gerando: () => {
@@ -173,7 +197,9 @@ export class HudPage implements OnInit, OnDestroy {
         if (this.conversa.naTela() || this.escuta.ditando()) this.briefingGuardado.set(briefing);
         else void this.player.tocar(briefing);
       },
-      conectado: () => void this.conversa.recuperar(),
+      conectado: () => { void this.conversa.recuperar(); this.estadoTela.reenviar(); },
+      card: card => this.tela.receber(card),
+      comando: comando => { this.tela.executar(comando); },
       pensando: (pedido) => {
         this.escuta.cancelarDitado();
         this.conversa.pensando(pedido);
@@ -210,6 +236,7 @@ export class HudPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.ativa = false;
+    this.tela.encerrar();
     this.cota.parar();
     this.conversa.fechar();
     this.eventos.desconectar();
@@ -281,6 +308,10 @@ export class HudPage implements OnInit, OnDestroy {
   private aoOuvir(frase: string): void {
     if (this.conversa.ocupada() || this.escuta.ditando()) return;
     if (!this.ativa || !this.escuta.ligada() || this.voz.falando()) return;
+    if (/^jarvis\b/i.test(frase.trim()) && this.tela.rapido(frase)) {
+      this.ultimaAtivacao = Date.now();
+      return;
+    }
     const fase = this.player.fase();
     if (fase !== 'ocioso' && fase !== 'concluido') {
       return;
@@ -340,7 +371,7 @@ export class HudPage implements OnInit, OnDestroy {
     const texto = comando ?? this.rascunho();
     this.voz.destravar();
     this.escuta.cancelarDitado();
-    if (await this.conversa.enviar(texto)) {
+    if (this.tela.rapido(texto) || await this.conversa.enviar(texto)) {
       if (comando === undefined && this.rascunho() === texto) this.rascunho.set('');
     }
   }
@@ -389,7 +420,11 @@ export class HudPage implements OnInit, OnDestroy {
   }
 
   private readonly aoTeclar = (evento: KeyboardEvent): void => {
+    if (evento.defaultPrevented) return;
     if (evento.key === 'Escape') {
+      if (this.tela.historicoAberto()) { this.tela.historicoAberto.set(false); evento.preventDefault(); return; }
+      const foco = this.janelas.foco();
+      if (foco) { this.janelas.fechar(foco); evento.preventDefault(); return; }
       this.escuta.cancelarDitado();
       this.voz.parar();
       // Fechar a consulta antes de parar: o palco volta a ficar vazio e o orbe retoma o centro.
