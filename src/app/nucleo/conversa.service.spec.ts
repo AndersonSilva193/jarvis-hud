@@ -104,6 +104,17 @@ describe('ConversaService', () => {
     expect(voz.falar).toHaveBeenCalledTimes(1);
     expect(api.enviarConversa).toHaveBeenCalledTimes(1);
   });
+  it('entrega a narração de resposta recuperada, mas não reabre a antiga nem a do Telegram', async () => {
+    const recebido = vi.fn();
+    servico.aoReceber = recebido;
+    servico.pensando(pedido());
+    historico = { ...vazio(), revisao: 2, ultima: resposta() };
+    await servico.recuperar();
+    expect(recebido).toHaveBeenCalledOnce();
+    expect(recebido.mock.calls[0]?.[1]).toBeInstanceOf(Promise);
+    servico.receber(resposta('t', 'telegram'));
+    expect(recebido).toHaveBeenCalledOnce();
+  });
   it('restaura silenciosamente e deixa mensagens do Telegram apenas no histórico', async () => {
     historico = {
       ...vazio(),

@@ -14,12 +14,9 @@ import { InicializacaoComponent } from '../../componentes/inicializacao/iniciali
 import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
 import { SondasComponent } from '../../componentes/sondas/sondas';
 import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
-import {
-  normalizar,
-  EscutaService,
-  contem,
-  respostaDasObservacoes,
-} from '../../nucleo/escuta.service';
+import { normalizar, EscutaService, contem } from '../../nucleo/escuta.service';
+import { EscutaDeRespostaService } from '../../nucleo/escuta-de-resposta.service';
+import { normalizarCodigo } from '../../nucleo/normalizar-codigo';
 import { JarvisApiService } from '../../nucleo/jarvis-api.service';
 import { InicializacaoService } from '../../nucleo/inicializacao.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
@@ -34,9 +31,6 @@ const OCIOSO_ATE_ESCONDER_MS = 5_000;
 /** O relógio do cabeçalho: um HUD sem hora na tela não parece um HUD. */
 const RELOGIO_MS = 1_000;
 
-/** A pergunta do fim do briefing, e quanto tempo ele espera o "sim". */
-const PERGUNTA_DAS_OBSERVACOES = 'O senhor quer ouvir as observações?';
-const JANELA_DA_RESPOSTA_MS = 8_000;
 /** Duas frases finais no mesmo fôlego não podem pedir dois briefings. */
 const DESCANSO_DA_ATIVACAO_MS = 3_000;
 
@@ -78,6 +72,7 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly cota = inject(VozCotaService);
   protected readonly eventos = inject(JarvisEventosService);
   protected readonly escuta = inject(EscutaService);
+  protected readonly escutaDeResposta = inject(EscutaDeRespostaService);
   protected readonly inicio = inject(InicializacaoService);
   private readonly api = inject(JarvisApiService);
 
@@ -134,6 +129,9 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly geracaoBriefing = computed(() => { const b = this.player.briefing(); return b ? contextoBriefing(b).geracao : ''; });
   protected readonly estadoApresentacao = computed(() => {
     if (this.voz.falando()) return 'Falando';
+    if (this.escutaDeResposta.fase() === 'ouvindo') return 'Ouvindo sua resposta';
+    if (this.escutaDeResposta.fase() === 'preparando') return 'Aguardando resposta';
+    if (this.escutaDeResposta.fase() === 'opcoes') return 'Aguardando sua resposta';
     if (this.escuta.aguardandoResposta()) return 'Aguardando resposta';
     if (this.conversa.ocupada()) return this.conversa.progresso() || 'Pensando';
     // Na fase `gerando` quem tem o texto é a fila; aqui em cima fica só a decisão de qual estado mostrar.
@@ -157,7 +155,6 @@ export class HudPage implements OnInit, OnDestroy {
   private pendulo: ReturnType<typeof setInterval> | null = null;
   private ultimaAtivacao = -Infinity;
   private ativa = true;
-  private observacoes: AbortController | null = null;
 
   constructor() {
     afterRenderEffect((limpar) => {
@@ -182,24 +179,35 @@ export class HudPage implements OnInit, OnDestroy {
       limpar(() => { observador.disconnect(); window.removeEventListener('resize', medir); window.removeEventListener('scroll', medir, true); });
     });
     effect(() => {
-      if (this.escuta.ditando()) this.rascunho.set(this.escuta.transcricao());
+      if (this.escuta.ditando() && this.escutaDeResposta.fase() !== 'ouvindo') {
+        this.rascunho.set(this.escuta.transcricao());
+      }
     });
     // Enquanto há rascunho ou ditado, a conversa segura a tela: nada se recolhe por baixo da mão.
     effect(() => {
-      this.conversa.compondo.set(!!this.rascunho().trim() || this.escuta.ditando());
+      this.conversa.compondo.set(
+        !!this.rascunho().trim() ||
+        (this.escuta.ditando() && this.escutaDeResposta.fase() !== 'ouvindo'),
+      );
     });
   }
 
   ngOnInit(): void {
+    this.conversa.aoReceber = (resposta, narracao) => {
+      if (resposta.escuta && narracao) this.escutaDeResposta.receberResposta(resposta, narracao);
+      else this.escutaDeResposta.cancelar();
+    };
     this.conversa.abrir();
     this.tela.ativa.set(true);
     this.tela.mostrarBriefing = () => this.consultarBriefing();
     this.cota.acompanhar();
     this.eventos.conectar({
       gerando: () => {
+        this.escutaDeResposta.cancelar();
         if (!this.conversa.naTela() && !this.escuta.ditando()) this.player.gerando();
       },
       briefing: (briefing) => {
+        this.escutaDeResposta.cancelar();
         if (this.conversa.naTela() || this.escuta.ditando()) this.briefingGuardado.set(briefing);
         else void this.player.tocar(briefing);
       },
@@ -240,9 +248,10 @@ export class HudPage implements OnInit, OnDestroy {
     // A escuta abre sozinha quando ficou ligada da última vez: num monitor 24 h, pedir um clique
     // a cada recarga não faz sentido. O que o clique traz é o destravar() da fala.
     this.escuta.escutar((frase) => this.aoOuvir(frase));
-    this.player.epilogo = (briefing, sinal) => this.perguntarObservacoes(briefing, sinal);
+    this.player.epilogo = (briefing, sinal) => this.escutaDeResposta.perguntarObservacoes(briefing, sinal);
 
     window.addEventListener('keydown', this.aoTeclar);
+    window.addEventListener('click', this.aoClicar);
     window.addEventListener('mousemove', this.aoMexerOMouse);
     this.pendulo = setInterval(() => this.relogio.set(agora()), RELOGIO_MS);
     this.agendarEsconderCursor();
@@ -250,6 +259,8 @@ export class HudPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.ativa = false;
+    this.escutaDeResposta.cancelar();
+    this.conversa.aoReceber = null;
     this.inicio.cancelar(false);
     this.tela.encerrar();
     this.cota.parar();
@@ -259,6 +270,7 @@ export class HudPage implements OnInit, OnDestroy {
     this.player.epilogo = null;
     this.escuta.soltarMicrofone();
     window.removeEventListener('keydown', this.aoTeclar);
+    window.removeEventListener('click', this.aoClicar);
     window.removeEventListener('mousemove', this.aoMexerOMouse);
     if (this.ocioso !== null) {
       clearTimeout(this.ocioso);
@@ -276,6 +288,7 @@ export class HudPage implements OnInit, OnDestroy {
    */
   protected async bomDia(): Promise<void> {
     if (this.conversa.ocupada()) return;
+    this.escutaDeResposta.cancelar();
     this.escuta.cancelarDitado();
     this.conversa.mostrarBriefing();
     this.voz.destravar();
@@ -290,7 +303,7 @@ export class HudPage implements OnInit, OnDestroy {
    */
   protected alternarEscuta(): void {
     this.voz.destravar();
-    if (this.escuta.ligada()) this.observacoes?.abort();
+    this.escutaDeResposta.cancelar();
     this.escuta.alternar();
   }
 
@@ -325,6 +338,7 @@ export class HudPage implements OnInit, OnDestroy {
     if (this.conversa.ocupada() || this.escuta.ditando()) return;
     if (!this.ativa || !this.escuta.ligada() || this.voz.falando()) return;
     if (/^jarvis\b/i.test(frase.trim()) && this.tela.rapido(frase)) {
+      this.escutaDeResposta.registrarAtivacao();
       this.ultimaAtivacao = Date.now();
       return;
     }
@@ -339,52 +353,20 @@ export class HudPage implements OnInit, OnDestroy {
       .replace(/[^a-z ]/g, '')
       .trim();
     if (/^(?:(?:bom dia|boa tarde|boa noite)(?: jarvis)?|jarvis (?:bom dia|boa tarde|boa noite))$/.test(saudacao)) {
+      this.escutaDeResposta.registrarAtivacao();
       this.ultimaAtivacao = Date.now();
       this.conversa.mostrarBriefing();
       void this.pedirBriefing();
     } else if (contem(frase, ['jarvis'])) {
+      this.escutaDeResposta.registrarAtivacao();
       this.ultimaAtivacao = Date.now();
       void this.ditar(frase.replace(/^.*?\bjarvis\b[\s,.:!-]*/i, ''));
     }
   }
 
-  /**
-   * O fim do briefing: ele oferece as observações e escuta a resposta por alguns segundos.
-   *
-   * Sem microfone ligado a pergunta não é feita — ficaria uma pergunta no vazio. Sem
-   * encerramento (backend antigo, ou narração que falhou) também não há o que oferecer.
-   */
-  private async perguntarObservacoes(briefing: Briefing, sinal: AbortSignal): Promise<void> {
-    const encerramento = briefing.encerramento?.trim() ?? '';
-    if (!encerramento || !this.escuta.ligada() || !this.ativa || sinal.aborted) return;
-    const controle = new AbortController();
-    this.observacoes?.abort();
-    this.observacoes = controle;
-    const cancelar = () => controle.abort();
-    sinal.addEventListener('abort', cancelar, { once: true });
-    try {
-      await this.voz.falar(PERGUNTA_DAS_OBSERVACOES, controle.signal);
-      if (controle.signal.aborted || !this.escuta.ligada()) return;
-      const resposta = await this.escuta.ouvirPor(
-        JANELA_DA_RESPOSTA_MS,
-        controle.signal,
-        (frase) => respostaDasObservacoes(frase) !== null,
-      );
-      if (
-        !controle.signal.aborted &&
-        this.escuta.ligada() &&
-        respostaDasObservacoes(resposta) === 'sim'
-      ) {
-        await this.voz.falar(encerramento, controle.signal);
-      }
-    } finally {
-      sinal.removeEventListener('abort', cancelar);
-      if (this.observacoes === controle) this.observacoes = null;
-    }
-  }
-
   protected async enviarTexto(comando?: string): Promise<void> {
     const texto = comando ?? this.rascunho();
+    this.escutaDeResposta.cancelar();
     this.voz.destravar();
     this.escuta.cancelarDitado();
     if (this.tela.rapido(texto) || await this.conversa.enviar(texto)) {
@@ -399,6 +381,7 @@ export class HudPage implements OnInit, OnDestroy {
       return;
     }
     this.voz.destravar();
+    this.escutaDeResposta.cancelar();
     this.conversa.assumirPalco();
     const texto = await this.escuta.ditar(inicial);
     if (!this.ativa || !texto) return;
@@ -416,6 +399,7 @@ export class HudPage implements OnInit, OnDestroy {
 
   protected consultarBriefing(): void {
     if (this.conversa.ocupada()) return;
+    this.escutaDeResposta.cancelar();
     this.escuta.cancelarDitado();
     this.conversa.mostrarBriefing();
     const briefing = this.briefingGuardado();
@@ -431,6 +415,7 @@ export class HudPage implements OnInit, OnDestroy {
       window.confirm('Apagar o histórico compartilhado da HUD e do Telegram?')
     ) {
       this.escuta.cancelarDitado();
+      this.escutaDeResposta.cancelar();
       void this.conversa.limpar();
     }
   }
@@ -438,6 +423,7 @@ export class HudPage implements OnInit, OnDestroy {
   private readonly aoTeclar = (evento: KeyboardEvent): void => {
     if (evento.defaultPrevented) return;
     if (evento.key === 'Escape') {
+      this.escutaDeResposta.cancelar();
       // Antes de tudo: quem apertou Esc durante a abertura quer a tela, não o filme.
       if (this.inicio.rodando()) { this.inicio.cancelar(); evento.preventDefault(); return; }
       if (this.tela.historicoAberto()) { this.tela.historicoAberto.set(false); evento.preventDefault(); return; }
@@ -452,6 +438,10 @@ export class HudPage implements OnInit, OnDestroy {
       if (!this.rascunho().trim()) this.conversa.recolher();
       return;
     }
+    if (evento.target instanceof HTMLTextAreaElement && evento.target.id === 'mensagem-jarvis' &&
+        evento.key.length === 1 && !evento.ctrlKey && !evento.metaKey && !evento.altKey) {
+      this.escutaDeResposta.cancelar();
+    }
     if (
       evento.target instanceof HTMLElement &&
       (evento.target.closest('input, textarea, button, [contenteditable=true]') ||
@@ -461,6 +451,16 @@ export class HudPage implements OnInit, OnDestroy {
     if (evento.key === 'ArrowRight') {
       this.player.pular();
     }
+  };
+
+  protected aoDigitar(): void {
+    this.escutaDeResposta.cancelar();
+  }
+
+  private readonly aoClicar = (evento: MouseEvent): void => {
+    if (!(evento.target instanceof Element)) return;
+    if (evento.target.closest('[data-escuta-opcao]')) return;
+    this.escutaDeResposta.registrarClique();
   };
 
   private readonly aoMexerOMouse = (): void => {
@@ -503,26 +503,4 @@ function explicar(erro: unknown): string {
     return `a API respondeu ${erro.status}`;
   }
   return 'não consegui pedir o briefing';
-}
-
-/** Aceita também códigos numéricos ditados dígito por dígito. */
-function normalizarCodigo(texto: string): string {
-  const digitos: Record<string, string> = {
-    zero: '0',
-    um: '1',
-    uma: '1',
-    dois: '2',
-    duas: '2',
-    tres: '3',
-    quatro: '4',
-    cinco: '5',
-    seis: '6',
-    sete: '7',
-    oito: '8',
-    nove: '9',
-  };
-  return normalizar(texto)
-    .split(/[^a-z0-9]+/)
-    .map((parte) => digitos[parte] ?? parte)
-    .join('');
 }

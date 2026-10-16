@@ -16,6 +16,19 @@
   </header>
   <div class="estado-central">
     <p class="falando" role="status" aria-live="polite"><span class="ponto" [class.ponto--ativo]="voz.falando() || escuta.ouvindo() || conversa.ocupada()" aria-hidden="true"></span>{{ estadoApresentacao() }}</p>
+    @if (escutaDeResposta.fase() !== 'inativa') {
+      @if (escutaDeResposta.motivo()) { <p class="motivo-resposta">{{ escutaDeResposta.motivo() }}</p> }
+      @if (escutaDeResposta.fase() === 'opcoes' && !escutaDeResposta.opcoes().length) {
+        <p class="motivo-resposta">{{ escuta.ligada() ? 'Diga Jarvis ou escreva para continuar.' : 'Escreva para continuar.' }}</p>
+      }
+      @if (escutaDeResposta.opcoes().length) {
+        <div class="opcoes-resposta" role="group" aria-label="Opções de resposta">
+          @for (opcao of escutaDeResposta.opcoes(); track $index) {
+            <button data-escuta-opcao type="button" (click)="escutaDeResposta.selecionarOpcao(opcao)">{{ opcao }}</button>
+          }
+        </div>
+      }
+    }
     <div class="tracos" aria-hidden="true"></div>
   </div>
   <main class="conteudo" aria-label="Janelas do Jarvis">
@@ -59,13 +72,14 @@
     @if (conversa.conversando()) {
       <app-dialogo-conversa [trocas]="conversa.trocas()" [resposta]="conversa.resposta()" [ocultar]="conversa.cartao()?.id ?? ''" [progresso]="conversa.progresso()" [erro]="conversa.erro()" />
     }
-    <app-barra-conversa [(texto)]="rascunho" [(aberta)]="conversa.chatAberto" [ocupada]="conversa.ocupada()" [ditando]="escuta.ditando()" [vozDisponivel]="escuta.disponivel" (enviar)="enviarTexto()" (microfone)="ditar()" />
+    <app-barra-conversa [(texto)]="rascunho" [(aberta)]="conversa.chatAberto" [ocupada]="conversa.ocupada()" [ditando]="escuta.ditando() && escutaDeResposta.fase() !== 'ouvindo'" [vozDisponivel]="escuta.disponivel" (enviar)="enviarTexto()" (microfone)="ditar()" (digitando)="aoDigitar()" />
   </div>
   <footer class="rodape">
     <div class="avisos" role="status">
       @if (janelas.aviso()) { <span>{{ janelas.aviso() }}</span> }
       @if (erro()) { <span class="erro">{{ erro() }}</span> }
       @if (escuta.motivo() === 'permissao-negada') { <span class="erro">Microfone bloqueado pelo navegador</span> }
+      @if (escutaDeResposta.aviso()) { <span>{{ escutaDeResposta.aviso() }}</span> }
       @if (briefingGuardado()) { <span>Um briefing está disponível para consulta.</span> }
     </div>
     <div class="acoes">

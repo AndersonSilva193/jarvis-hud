@@ -6,6 +6,7 @@ import { VozService } from './voz.service';
 
 class Reconhecimento {
   static sessoes: Reconhecimento[] = [];
+  static iniciarAutomaticamente = true;
   lang = '';
   continuous = false;
   interimResults = false;
@@ -16,7 +17,7 @@ class Reconhecimento {
   onerror: ((e: { error: string }) => void) | null = null;
   onspeechstart: (() => void) | null = null;
   onspeechend: (() => void) | null = null;
-  start = vi.fn(() => this.onstart?.());
+  start = vi.fn(() => { if (Reconhecimento.iniciarAutomaticamente) this.onstart?.(); });
   stop = vi.fn();
   abort = vi.fn();
   constructor() {
@@ -35,6 +36,7 @@ describe('ditado pontual', () => {
     vi.useFakeTimers();
     localStorage.clear();
     Reconhecimento.sessoes = [];
+    Reconhecimento.iniciarAutomaticamente = true;
     falando.set(false);
     vi.stubGlobal('SpeechRecognition', Reconhecimento);
     TestBed.configureTestingModule({
@@ -95,6 +97,34 @@ describe('ditado pontual', () => {
     sessao().onerror?.({ error: 'not-allowed' });
     await expect(negado).resolves.toBe('');
     expect(escuta.motivo()).toBe('permissao-negada');
+  });
+  it('conta o prazo de resposta só após onstart e não corta fala já iniciada', async () => {
+    Reconhecimento.iniciarAutomaticamente = false;
+    const resultado = escuta.ditar('', { tempoParaComecarMs: 4000 });
+    const r = sessao();
+    await vi.advanceTimersByTimeAsync(3999);
+    r.onstart?.();
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(r.stop).not.toHaveBeenCalled();
+    r.onspeechstart?.();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(r.stop).not.toHaveBeenCalled();
+    r.ouvir('amanhã às nove');
+    r.onspeechend?.();
+    await vi.advanceTimersByTimeAsync(1499);
+    expect(r.stop).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(r.stop).toHaveBeenCalledOnce();
+    r.onend?.();
+    await expect(resultado).resolves.toBe('amanhã às nove');
+  });
+  it('abort signal fecha o ditado sem entregar texto parcial', async () => {
+    const controle = new AbortController();
+    const resultado = escuta.ditar('', { sinal: controle.signal });
+    sessao().ouvir('não enviar');
+    controle.abort();
+    await expect(resultado).resolves.toBe('');
+    expect(escuta.ditando()).toBe(false);
   });
   it('cancela sincronicamente antes da fala e ignora resultado antigo', async () => {
     escuta.ligar();

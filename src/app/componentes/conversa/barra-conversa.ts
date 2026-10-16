@@ -222,7 +222,9 @@ export class BarraConversaComponent {
   readonly vozDisponivel = input(false);
   readonly enviar = output<void>();
   readonly microfone = output<void>();
+  readonly digitando = output<void>();
   protected editar(evento: Event): void {
+    this.digitando.emit();
     this.texto.set((evento.target as HTMLTextAreaElement).value);
   }
   protected teclar(evento: KeyboardEvent): void {

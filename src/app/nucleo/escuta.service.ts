@@ -44,6 +44,7 @@ export class EscutaService {
   readonly ditando = signal(false);
   readonly transcricao = signal('');
   private ditado: {
+    iniciar: () => void;
     receber: (evento: SpeechRecognitionEvent) => void;
     atividade: () => void;
     silencio: () => void;
@@ -187,10 +188,15 @@ export class EscutaService {
   }
 
   /** Um ditado por acionamento; não muda a preferência da escuta por palavra-chave. */
-  ditar(inicial = ''): Promise<string> {
+  ditar(
+    inicial = '',
+    opcoes: { tempoParaComecarMs?: number; sinal?: AbortSignal; aoAbrir?: () => void } = {},
+  ): Promise<string> {
     this.cancelarDitado();
     this.pontual?.cancelar();
-    if (!this.disponivel || this.ouvinte === null || this.voz.falando()) return Promise.resolve('');
+    if (!this.disponivel || this.ouvinte === null || this.voz.falando() || opcoes.sinal?.aborted) {
+      return Promise.resolve('');
+    }
     this.fechar();
     this.pausada = false;
     this.ditando.set(true);
@@ -198,19 +204,29 @@ export class EscutaService {
     return new Promise<string>((resolver) => {
       let encerrado = false;
       let finalizando = false;
+      let iniciada = false;
+      let comecou = !!inicial.trim();
       let prefixo = inicial.trim();
       const trechos = new Map<number, string>();
       let silencio: ReturnType<typeof setTimeout> | null = null;
       let final: ReturnType<typeof setTimeout> | null = null;
-      const vazio = setTimeout(() => {
-        if (!this.transcricao().trim()) concluir('');
-      }, 10000);
+      let prazo: ReturnType<typeof setTimeout> | null = setTimeout(
+        () => concluir(''),
+        ESPERA_PELO_MICROFONE_MS,
+      );
+      const marcarInicio = () => {
+        if (comecou) return;
+        comecou = true;
+        if (prazo !== null) clearTimeout(prazo);
+        prazo = null;
+      };
       const concluir = (texto: string) => {
         if (encerrado) return;
         encerrado = true;
-        clearTimeout(vazio);
+        if (prazo !== null) clearTimeout(prazo);
         if (silencio !== null) clearTimeout(silencio);
         if (final !== null) clearTimeout(final);
+        opcoes.sinal?.removeEventListener('abort', cancelar);
         this.ditado = null;
         this.ditando.set(false);
         this.fechar();
@@ -230,9 +246,17 @@ export class EscutaService {
       };
       const agendar = () => {
         if (silencio !== null) clearTimeout(silencio);
-        if (!finalizando && this.transcricao().trim()) silencio = setTimeout(encerrar, 1500);
+        if (!finalizando && comecou) silencio = setTimeout(encerrar, 1500);
       };
+      const cancelar = () => concluir('');
       this.ditado = {
+        iniciar: () => {
+          if (encerrado || iniciada) return;
+          iniciada = true;
+          if (prazo !== null) clearTimeout(prazo);
+          prazo = comecou ? null : setTimeout(cancelar, opcoes.tempoParaComecarMs ?? 10_000);
+          opcoes.aoAbrir?.();
+        },
         receber: (evento) => {
           for (const indice of trechos.keys()) {
             if (indice >= evento.results.length) trechos.delete(indice);
@@ -244,9 +268,11 @@ export class EscutaService {
             .join(' ')
             .trim();
           this.transcricao.set(texto);
+          if (texto) marcarInicio();
           agendar();
         },
         atividade: () => {
+          marcarInicio();
           if (silencio !== null) clearTimeout(silencio);
         },
         silencio: agendar,
@@ -258,8 +284,9 @@ export class EscutaService {
             this.reabrirDepois(ESPERA_PARA_RELIGAR_MS);
           }
         },
-        cancelar: () => concluir(''),
+        cancelar,
       };
+      opcoes.sinal?.addEventListener('abort', cancelar, { once: true });
       this.abrir();
       agendar();
     });
@@ -300,6 +327,7 @@ export class EscutaService {
       if (this.sessao !== sessao || !this.podeOuvir()) return;
       this.tentativas = 0;
       this.ouvindo.set(true);
+      this.ditado?.iniciar();
       this.pontual?.iniciar();
     };
     sessao.onspeechstart = () => {

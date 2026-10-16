@@ -57,6 +57,8 @@ export class ConversaService {
   private revisao = -1;
   private readonly faladas = new Set<string>();
   private readonly encerradas = new Set<string>();
+  /** A HUD coordena a escuta apenas para respostas realmente recebidas nesta sessão. */
+  aoReceber: ((resposta: RespostaConversa, narracao: Promise<void> | null) => void) | null = null;
 
   abrir(): void {
     this.ativa = true;
@@ -162,11 +164,13 @@ export class ConversaService {
     if (this.pendente() === resposta.id) this.guardarPendente(null);
     this.progresso.set('');
     this.erro.set(resposta.erro ?? '');
+    let narracao: Promise<void> | null = null;
     if (narrar && !resposta.erro && !this.faladas.has(resposta.id)) {
       this.player.parar();
       this.faladas.add(resposta.id);
-      void this.voz.falar(resposta.texto);
+      narracao = this.voz.falar(resposta.texto);
     }
+    this.aoReceber?.(resposta, narracao);
     void this.recuperar();
   }
 

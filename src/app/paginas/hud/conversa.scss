@@ -1,5 +1,9 @@
 @use '../../estilos/hud' as hud;
 
+.motivo-resposta{margin:.4rem 0 0;color:#b8cbe0;font:500 .68rem hud.$mono;letter-spacing:.05em}
+.opcoes-resposta{display:flex;justify-content:center;flex-wrap:wrap;gap:.5rem;margin:.7rem auto 0}
+.opcoes-resposta button{@include hud.botao(7px);min-height:38px}
+
 // O rodapé: avisos à esquerda, controles à direita, todos com o mesmo botão de HUD.
 .rodape{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.8rem;flex-shrink:0;margin-top:.1rem}
 .avisos{font-size:.72rem;color:#b8cbe0;max-width:28rem}

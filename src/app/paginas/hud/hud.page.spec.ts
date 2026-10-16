@@ -12,6 +12,8 @@ import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
 import { ConversaService } from '../../nucleo/conversa.service';
 import type { Briefing } from '../../nucleo/briefing.modelos';
 import type { RespostaConversa } from '../../nucleo/conversa.modelos';
+import { EscutaDeRespostaService } from '../../nucleo/escuta-de-resposta.service';
+import { EscutaService } from '../../nucleo/escuta.service';
 
 const BRIEFING: Briefing = {
   geradoEm: '2026-10-13T08:00:00-03:00',
@@ -194,6 +196,45 @@ describe('o palco do HUD', () => {
 
     expect(iniciar).not.toHaveBeenCalled();
     expect(tela.nativeElement.querySelector('app-inicializacao')).toBeNull();
+  });
+
+  it('mostra motivo e opções acessíveis; Esc, digitação e clique fora cancelam', () => {
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+    const espera = TestBed.inject(EscutaDeRespostaService);
+    espera.fase.set('opcoes');
+    espera.motivo.set('confirmar o horário');
+    espera.opcoes.set(['Agora', 'Mais tarde']);
+    tela.detectChanges();
+    expect(tela.nativeElement.querySelector('.motivo-resposta').textContent).toContain('confirmar o horário');
+    expect(tela.nativeElement.querySelector('[aria-label="Opções de resposta"] button').textContent).toContain('Agora');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(espera.fase()).toBe('inativa');
+    espera.fase.set('opcoes');
+    tela.nativeElement.querySelector('.compacta button').click();
+    tela.detectChanges();
+    espera.fase.set('opcoes');
+    const campo: HTMLTextAreaElement = tela.nativeElement.querySelector('#mensagem-jarvis');
+    campo.value = 'o';
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(espera.fase()).toBe('inativa');
+    espera.fase.set('opcoes');
+    tela.nativeElement.querySelector('.conteudo').click();
+    expect(espera.fase()).toBe('inativa');
+  });
+
+  it('ditado automático não copia a transcrição para o rascunho', () => {
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+    const espera = TestBed.inject(EscutaDeRespostaService);
+    const escuta = TestBed.inject(EscutaService);
+    espera.fase.set('ouvindo');
+    escuta.ditando.set(true);
+    escuta.transcricao.set('amanhã às nove');
+    tela.detectChanges();
+    expect(tela.componentInstance['rascunho']()).toBe('');
+    expect(tela.nativeElement.querySelector('.falando').textContent).toContain('Ouvindo sua resposta');
   });
 
   it('com ?inicio=1 a abertura cobre a tela e o orbe se forma', () => {

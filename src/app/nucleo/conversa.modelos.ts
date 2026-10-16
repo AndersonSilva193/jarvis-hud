@@ -19,6 +19,11 @@ export interface RespostaConversa {
   confirmacao: ConfirmacaoConversa | null;
   concluidoEm: string;
   erro: string | null;
+  escuta?: {
+    tempoSegundos: number;
+    opcoes?: string[];
+    motivo?: string;
+  };
 }
 export interface PedidoConversa {
   id: string;
