@@ -297,10 +297,44 @@ por tipo exige uma única candidata. Ambiguidade e outras frases vão ao Jarvis 
 
 - SSE tela.card: {id,tipo,titulo,dados,origem,criadoEm}; o id do servidor é preservado.
 - SSE tela.comando: {acao,alvo,valor}; valor é texto, inclusive segundos em avancar/voltar.
+- SSE voz.falar: {texto}; uma frase pronta para a tela dizer, sem card nem janela. Hoje vem do
+  despertar por palmas encontrando a HUD já aberta.
 - POST /api/tela/estado, Bearer: {janelas:[{id,tipo,titulo,estado,fixado,emFoco,tocando}],historicoAberto,briefingNaTela}.
 - No POST, estado é normal/minimizado/maximizado. Conteúdo e geometria não são enviados.
 - Mudanças usam debounce de 500 ms e POSTs serializados; reconexão e pulso de cinco minutos renovam o retrato.
 - Instale primeiro o backend que aceita resposta e mais de 24 janelas; o contexto mantém o teto de 12 linhas.
+
+## Abertura por palmas (?inicio=1)
+
+Quando o [agente do PC](../jarvis-agente-pc) acorda o Jarvis — duas palmas ou "Jarvis, iniciar" —
+ele abre esta tela com `?inicio=1`. Aí a HUD não aparece direto: toca uma sequência de abertura
+antes.
+
+1. Tela escura, cantos acendendo, o orbe se formando (`.orbe--formando`: escala, opacidade e
+   desfoque — sem estado novo no canvas).
+2. Quatro linhas de checagem aparecem uma a uma, cada uma com o estado **real**:
+   `CONECTANDO AO SERVIDOR` (o SSE), `SÍNTESE DE VOZ` (`/api/voz/status`), `MICROFONE`
+   (`escuta.disponivel`) e `SISTEMAS MONITORADOS ... 3/3` (da resposta de `/api/inicializacao`).
+   Quem falha aparece como `FALHOU` e **não** interrompe o resto.
+3. O Jarvis fala a introdução de `POST /api/inicializacao` (no máximo três frases). API fora do
+   ar: fala a frase fixa de reserva, em vez de ficar muda.
+4. A escuta liga sozinha e o `?inicio=1` sai da URL por `history.replaceState` — sem isso, um F5
+   repetiria a introdução inteira.
+
+Tudo isso em 4 a 6 segundos, que é de propósito o mesmo orçamento do backend: a chamada à API
+parte junto com a animação, não depois dela. Com `prefers-reduced-motion` a sequência encurta e
+chega ao mesmo estado final — o Playwright roda com `reducedMotion: 'reduce'`, e uma abertura que
+não terminasse travaria o e2e.
+
+O `Esc` corta a abertura a qualquer momento.
+
+**Autoplay:** o agente abre o Chrome com `--autoplay-policy=no-user-gesture-required`, que é o que
+permite falar sem clique. Abrindo a HUD à mão com `?inicio=1`, a fala pode sair pela voz do
+navegador ou não sair — a sequência roda igual, sem travar.
+
+**Perfil próprio:** a tela abre num perfil do Chrome só dela, que nasce sem `localStorage`. Na
+primeira vez a HUD cai em `/configuracao` e você preenche URL e token uma vez; depois o perfil
+persiste. Ver o README do agente.
 
 ### Verificação
 

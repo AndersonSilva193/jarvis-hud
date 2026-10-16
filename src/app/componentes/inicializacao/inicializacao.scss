@@ -1,0 +1,161 @@
+@use '../../estilos/hud' as hud;
+
+// A sobreposição da abertura. Fica acima do HUD inteiro, mas abaixo de nada: enquanto ela está
+// na tela, não há o que clicar.
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+// O escuro que vai abrindo para o HUD aparecer por trás.
+.fundo {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(7, 22, 44, 0.55), hud.$fundo-abissal 70%),
+    hud.$fundo-abissal;
+  animation: inicio-clarear 4.4s ease-out forwards;
+}
+
+// Os quatro cantos acendendo, no mesmo traço dos cantos do HUD.
+.cantos i {
+  position: absolute;
+  width: 92px;
+  height: 92px;
+  border: 1px solid hud.$ciano;
+  opacity: 0;
+  animation: inicio-canto 0.7s ease-out forwards;
+
+  &:nth-child(1) {
+    top: 26px;
+    left: 26px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+  &:nth-child(2) {
+    top: 26px;
+    right: 26px;
+    border-left: 0;
+    border-bottom: 0;
+    animation-delay: 0.12s;
+  }
+  &:nth-child(3) {
+    bottom: 26px;
+    right: 26px;
+    border-left: 0;
+    border-top: 0;
+    animation-delay: 0.24s;
+  }
+  &:nth-child(4) {
+    bottom: 26px;
+    left: 26px;
+    border-right: 0;
+    border-top: 0;
+    animation-delay: 0.36s;
+  }
+}
+
+.checagens {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  width: min(30rem, calc(100vw - 2rem));
+  display: grid;
+  gap: 0.55rem;
+}
+
+.checagem {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 0.6rem;
+  opacity: 0;
+  animation: inicio-linha 0.45s ease-out forwards;
+
+  @for $i from 1 through 6 {
+    &:nth-child(#{$i}) {
+      animation-delay: #{0.6 + $i * 0.9}s;
+    }
+  }
+}
+
+.rotulo {
+  @include hud.rotulo(0.64rem);
+  letter-spacing: 0.22em;
+}
+
+// Os pontinhos entre o rótulo e o veredito, como num terminal de diagnóstico.
+.pontilhado {
+  border-bottom: 1px dotted rgba(95, 242, 255, 0.28);
+  transform: translateY(-0.2em);
+}
+
+.veredito {
+  @include hud.rotulo(0.64rem);
+  @include hud.brilho-texto(hud.$ok, 0.5);
+  letter-spacing: 0.18em;
+  color: hud.$ok;
+  min-width: 4.5rem;
+  text-align: right;
+}
+
+// Falha não trava nada: fica escrita, em vermelho, e a sequência segue.
+.checagem[data-estado='falhou'] .veredito {
+  @include hud.brilho-texto(hud.$erro, 0.5);
+  color: hud.$erro;
+}
+
+.checagem[data-estado='pendente'] .rotulo {
+  color: hud.$texto-fraco;
+}
+
+@keyframes inicio-clarear {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes inicio-canto {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+}
+
+@keyframes inicio-linha {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+// O `styles.scss` global já zera toda animação com prefers-reduced-motion, e é isso que faz a
+// sequência chegar ao estado final na hora em vez de ficar invisível: sem animação, o
+// `opacity: 0` do estado inicial valeria para sempre. Por isso o opacity volta aqui.
+@media (prefers-reduced-motion: reduce) {
+  .cantos i,
+  .checagem {
+    opacity: 1;
+  }
+
+  .fundo {
+    opacity: 0.25;
+  }
+}

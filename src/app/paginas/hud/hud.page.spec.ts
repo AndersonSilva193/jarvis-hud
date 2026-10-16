@@ -7,6 +7,7 @@ import { HudPage } from './hud.page';
 import { OrbeComponent } from '../../componentes/orbe/orbe';
 import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
 import { JarvisApiService } from '../../nucleo/jarvis-api.service';
+import { InicializacaoService } from '../../nucleo/inicializacao.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
 import { ConversaService } from '../../nucleo/conversa.service';
 import type { Briefing } from '../../nucleo/briefing.modelos';
@@ -184,5 +185,38 @@ describe('o palco do HUD', () => {
     expect(tela.nativeElement.querySelector('.arquivo')).toBeNull();
     expect(tela.nativeElement.querySelector('.orbe--livre')).not.toBeNull();
     expect(tela.nativeElement.querySelector('.falando').textContent).toContain('Às suas ordens');
+  });
+
+  it('sem ?inicio=1 a abertura não toca: abrir a HUD à mão é tela normal', () => {
+    const iniciar = vi.spyOn(TestBed.inject(InicializacaoService), 'iniciar');
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+
+    expect(iniciar).not.toHaveBeenCalled();
+    expect(tela.nativeElement.querySelector('app-inicializacao')).toBeNull();
+  });
+
+  it('com ?inicio=1 a abertura cobre a tela e o orbe se forma', () => {
+    // É a marca que o agente do PC põe na URL ao acordar o Jarvis por palmas ou por voz.
+    history.replaceState(null, '', '/?inicio=1');
+    const servico = TestBed.inject(InicializacaoService);
+    const iniciar = vi.spyOn(servico, 'iniciar').mockImplementation(async () => {
+      servico.fase.set('animando');
+    });
+
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+
+    expect(iniciar).toHaveBeenCalledOnce();
+    expect(tela.nativeElement.querySelector('app-inicializacao')).not.toBeNull();
+    expect(tela.nativeElement.querySelector('.orbe--formando')).not.toBeNull();
+
+    // Terminada a abertura, a sobreposição sai e a tela volta a ser a de sempre.
+    servico.fase.set('pronta');
+    tela.detectChanges();
+    expect(tela.nativeElement.querySelector('app-inicializacao')).toBeNull();
+    expect(tela.nativeElement.querySelector('.orbe--formando')).toBeNull();
+
+    history.replaceState(null, '', '/');
   });
 });

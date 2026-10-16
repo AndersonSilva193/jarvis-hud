@@ -35,6 +35,10 @@
 // Sem drop-shadow aqui: o brilho já vem do canvas, e um filtro sobre o campo (largura da tela) custaria a cada quadro.
 .orbe--livre,.sondas--livre{--escala:1.06}
 .orbe--livre{opacity:1}
+// "O orbe se formando" da abertura: nasce pequeno, apagado e borrado, e cresce até o normal.
+// É só CSS de propósito — um estado novo no canvas obrigaria a mexer nas três uniões paralelas
+// (EstadoOrbe, EstadoDesenho, EstadoDasSondas) por um efeito que a transição aqui já entrega.
+.orbe--formando{--escala:.55;opacity:.1;filter:blur(14px);transition:transform 2.4s ease-out,opacity 2.4s ease-out,filter 2.4s ease-out}
 
 .palco{position:absolute;inset:0;z-index:5;pointer-events:none}
 // O canto cortado é a assinatura dos cards do briefing — a miniatura de fileira.scss é o mesmo card.

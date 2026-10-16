@@ -22,6 +22,13 @@ export interface OuvintesDoBriefing {
   historico?: () => void;
   gerando: () => void;
   briefing: (briefing: Briefing) => void;
+  /** Uma frase pronta para a tela dizer; hoje vem do despertar por palmas com a HUD já aberta. */
+  falar?: (fala: FalaDaTela) => void;
+}
+
+/** O corpo do evento `voz.falar`. */
+export interface FalaDaTela {
+  texto: string;
 }
 
 const ESPERA_INICIAL_MS = 1_000;
@@ -117,6 +124,7 @@ export class JarvisEventosService {
     receber<unknown>('conversa.historico', () => this.ouvintes?.historico?.());
     receber<unknown>('tela.card', dados => { const card = lerCardTela(dados); if (card) this.ouvintes?.card?.(card); });
     receber<unknown>('tela.comando', dados => { const comando = lerComandoTela(dados); if (comando) this.ouvintes?.comando?.(comando); });
+    receber<unknown>('voz.falar', dados => { const fala = lerFalaDaTela(dados); if (fala) this.ouvintes?.falar?.(fala); });
 
     fonte.onerror = () => {
       if (this.fonte !== fonte) return;
@@ -192,6 +200,23 @@ function motivoDe(resultado: ResultadoTeste): MotivoQueda {
     default:
       return 'api-inacessivel';
   }
+}
+
+/**
+ * Valida o corpo do `voz.falar` antes de mandar a tela falar.
+ *
+ * O texto vem do catálogo fechado do servidor, mas conferir aqui custa três linhas e é o mesmo
+ * cuidado que `lerCardTela` e `lerComandoTela` já tomam com o resto do SSE.
+ */
+function lerFalaDaTela(dados: unknown): FalaDaTela | null {
+  if (typeof dados !== 'object' || dados === null) {
+    return null;
+  }
+  const texto = (dados as Record<string, unknown>)['texto'];
+  if (typeof texto !== 'string' || texto.trim().length === 0) {
+    return null;
+  }
+  return { texto: texto.trim() };
 }
 
 function interpretar<T>(evento: Event): T | null {

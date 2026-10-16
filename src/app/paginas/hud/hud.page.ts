@@ -10,6 +10,7 @@ import { HistoricoConversaComponent } from '../../componentes/conversa/historico
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 
+import { InicializacaoComponent } from '../../componentes/inicializacao/inicializacao';
 import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
 import { SondasComponent } from '../../componentes/sondas/sondas';
 import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
@@ -20,6 +21,7 @@ import {
   respostaDasObservacoes,
 } from '../../nucleo/escuta.service';
 import { JarvisApiService } from '../../nucleo/jarvis-api.service';
+import { InicializacaoService } from '../../nucleo/inicializacao.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
 import { VozService } from '../../nucleo/voz.service';
 import { VozCotaService } from '../../nucleo/voz-cota.service';
@@ -54,6 +56,7 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
     HistoricoConversaComponent,
     OrbeComponent,
     SondasComponent,
+    InicializacaoComponent,
     RouterLink,
   ],
   templateUrl: './hud.page.html',
@@ -75,6 +78,7 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly cota = inject(VozCotaService);
   protected readonly eventos = inject(JarvisEventosService);
   protected readonly escuta = inject(EscutaService);
+  protected readonly inicio = inject(InicializacaoService);
   private readonly api = inject(JarvisApiService);
 
   protected readonly pedindo = signal(false);
@@ -124,6 +128,8 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly orbeLivre = computed(
     () => this.janelas.visiveis().length === 0,
   );
+  /** Durante a abertura o orbe "se forma": escala, opacidade e desfoque, só com CSS. */
+  protected readonly orbeFormando = computed(() => this.inicio.fase() === 'animando');
   protected readonly concluidos = computed(() => this.player.blocos().slice(0, Math.max(0,this.player.indiceAtual())));
   protected readonly geracaoBriefing = computed(() => { const b = this.player.briefing(); return b ? contextoBriefing(b).geracao : ''; });
   protected readonly estadoApresentacao = computed(() => {
@@ -208,7 +214,15 @@ export class HudPage implements OnInit, OnDestroy {
       resposta: (resposta) => this.conversa.receber(resposta),
       erroConversa: (resposta) => this.conversa.receber(resposta),
       historico: () => void this.conversa.recuperar(),
+      // O despertar por palmas achando a tela já aberta: só a frase curta, sem card nenhum.
+      falar: (fala) => void this.voz.falar(fala.texto),
     });
+
+    // Abriu com ?inicio=1, ou seja: o agente do PC acabou de acender esta tela por palmas ou por
+    // voz. A abertura toca por cima de tudo e só então liga a escuta.
+    if (this.inicio.pedidoNaUrl()) {
+      void this.inicio.iniciar();
+    }
 
     // Conectar no SSE não traz nada: quem pinta a tela ao abrir é o último briefing.
     this.api
@@ -236,6 +250,7 @@ export class HudPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.ativa = false;
+    this.inicio.cancelar();
     this.tela.encerrar();
     this.cota.parar();
     this.conversa.fechar();
@@ -422,6 +437,8 @@ export class HudPage implements OnInit, OnDestroy {
   private readonly aoTeclar = (evento: KeyboardEvent): void => {
     if (evento.defaultPrevented) return;
     if (evento.key === 'Escape') {
+      // Antes de tudo: quem apertou Esc durante a abertura quer a tela, não o filme.
+      if (this.inicio.rodando()) { this.inicio.cancelar(); evento.preventDefault(); return; }
       if (this.tela.historicoAberto()) { this.tela.historicoAberto.set(false); evento.preventDefault(); return; }
       const foco = this.janelas.foco();
       if (foco) { this.janelas.fechar(foco); evento.preventDefault(); return; }

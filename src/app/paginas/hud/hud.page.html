@@ -1,4 +1,7 @@
 <div class="hud">
+  @if (inicio.rodando()) {
+    <app-inicializacao />
+  }
   <div class="vinheta" aria-hidden="true"></div><div class="grade" aria-hidden="true"></div>
   <div class="cantos" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div class="varredura" aria-hidden="true"></div>
@@ -16,7 +19,7 @@
     <div class="tracos" aria-hidden="true"></div>
   </div>
   <main class="conteudo" aria-label="Janelas do Jarvis">
-    <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
+    <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [class.orbe--formando]="orbeFormando()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
     <app-sondas class="sondas" [class.sondas--livre]="orbeLivre()" [recuada]="!orbeLivre()" [estado]="estadoOrbe()" [escutaDisponivel]="escuta.disponivel" [escutaLigada]="escuta.ligada()" [ditando]="escuta.ditando()" [progresso]="conversa.progresso()" [rotuloVoz]="cota.rotulo()" />
     <div class="palco" #areaJanelas>
       @for (janela of janelas.janelas(); track janela.id) {

@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { ConfigStore, normalizarUrl } from './config.store';
 import type { HistoricoConversa, RespostaConversa } from './conversa.modelos';
 import type { Briefing } from './briefing.modelos';
+import type { Introducao } from './inicializacao.modelos';
 import type { RespostaVoz, StatusVoz } from './voz.modelos';
 import type { EstadoTela } from './tela.modelos';
 
@@ -143,6 +144,20 @@ export class JarvisApiService {
   /** Endereço absoluto do MP3, com o token na query: o elemento <audio> não manda header. */
   urlDoAudio(rotaRelativa: string): string {
     return `${this.config.rota(rotaRelativa)}?token=${encodeURIComponent(this.config.token())}`;
+  }
+
+  /**
+   * A apresentação falada da abertura, com os números das checagens.
+   *
+   * A API junta clima, lembretes, sites e servidor em paralelo (3 s de prazo cada) e faz UMA
+   * chamada ao Claude, com cache de 2 minutos — duas palmas seguidas não geram duas introduções.
+   */
+  inicializacao(): Promise<Introducao> {
+    return firstValueFrom(
+      this.http.post<Introducao>(this.config.rota('/api/inicializacao'), null, {
+        headers: this.autorizacao(),
+      }),
+    );
   }
 
   statusVoz(): Promise<StatusVoz> {
