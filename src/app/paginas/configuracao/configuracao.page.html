@@ -60,5 +60,17 @@
         <span class="voz-aviso">— nenhuma voz pt-BR instalada neste sistema</span>
       }
     </p>
+
+    @if (google()?.configurado) {
+      <section aria-label="Google Sheets">
+        <p>Google Sheets: {{ google()?.autorizado ? 'conectado' : 'não conectado' }}</p>
+        @if (!google()?.autorizado) {
+          <button type="button" class="conectar" [disabled]="conectandoGoogle()" (click)="conectarGoogle()">
+            {{ conectandoGoogle() ? 'Conectando…' : 'Conectar Google Sheets' }}
+          </button>
+        }
+        @if (mensagemGoogle()) { <p role="status">{{ mensagemGoogle() }}</p> }
+      </section>
+    }
   </form>
 </section>

@@ -179,6 +179,16 @@ export class JarvisApiService {
     );
   }
 
+  statusGoogle(): Promise<{ configurado: boolean; autorizado: boolean }> {
+    return firstValueFrom(this.http.get<{ configurado: boolean; autorizado: boolean }>(
+      this.config.rota('/api/google/status'), { headers: this.autorizacao() }));
+  }
+
+  iniciarGoogle(): Promise<{ url: string }> {
+    return firstValueFrom(this.http.post<{ url: string }>(
+      this.config.rota('/api/google/oauth/iniciar'), null, { headers: this.autorizacao() }));
+  }
+
   private autorizacao(): HttpHeaders {
     return new HttpHeaders({ Authorization: `Bearer ${this.config.token()}` });
   }

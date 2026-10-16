@@ -1,5 +1,13 @@
 # jarvis-hud
 
+## Google Sheets
+
+Na tela de configuração, “Conectar Google Sheets” abre a autorização OAuth quando a API
+Jarvis possui credenciais Google configuradas. A HUD consulta o estado da conexão; os tokens
+ficam somente no backend, cifrados no volume persistente. A ferramenta do Jarvis cria
+planilhas novas e devolve um link, ou oferece XLSX para importação quando não há autorização.
+
+
 A tela de conversa e briefing do [Jarvis](../jarvis): fundo azul-escuro com grade, orbe de energia no centro e
 cards translúcidos que entram um por um enquanto o Jarvis lê cada bloco em voz alta. Feita para
 ficar aberta em tela cheia num monitor.

@@ -37,6 +37,40 @@ export class ConfiguracaoPage {
   protected readonly token = signal(this.config.token());
   protected readonly testando = signal(false);
   protected readonly mensagem = signal('');
+  protected readonly google = signal<{ configurado: boolean; autorizado: boolean } | null>(null);
+  protected readonly conectandoGoogle = signal(false);
+  protected readonly mensagemGoogle = signal('');
+
+  constructor() {
+    if (this.config.configurado()) void this.atualizarGoogle();
+  }
+
+  private async atualizarGoogle(): Promise<void> {
+    try { this.google.set(await this.api.statusGoogle()); }
+    catch { this.mensagemGoogle.set('Não consegui consultar a conexão Google.'); }
+  }
+
+  protected async conectarGoogle(): Promise<void> {
+    const janela = window.open('', '_blank');
+    this.conectandoGoogle.set(true);
+    this.mensagemGoogle.set('');
+    try {
+      const { url } = await this.api.iniciarGoogle();
+      if (janela) janela.location.href = url;
+      else { this.mensagemGoogle.set('Permita pop-ups para autorizar o Google.'); return; }
+      for (let tentativa = 0; tentativa < 60; tentativa++) {
+        await new Promise<void>(resolve => setTimeout(resolve, 2000));
+        const estado = await this.api.statusGoogle();
+        this.google.set(estado);
+        if (estado.autorizado) { this.mensagemGoogle.set('Google Sheets conectado.'); return; }
+        if (janela.closed) break;
+      }
+      this.mensagemGoogle.set('A conexão não foi concluída. Tente novamente.');
+    } catch {
+      janela?.close();
+      this.mensagemGoogle.set('Não consegui iniciar a conexão Google.');
+    } finally { this.conectandoGoogle.set(false); }
+  }
 
   protected readonly avisoDeConteudoMisto = computed(() => conteudoMisto(this.url()));
   protected readonly podeConectar = computed(
