@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { ConfigStore, conteudoMisto, urlValida } from '../../nucleo/config.store';
 import { JarvisApiService, type ResultadoTeste } from '../../nucleo/jarvis-api.service';
@@ -25,12 +25,12 @@ const MENSAGENS: Record<Exclude<ResultadoTeste, 'ok'>, string> = {
   selector: 'app-configuracao',
   templateUrl: './configuracao.page.html',
   styleUrl: './configuracao.page.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ConfiguracaoPage {
   private readonly config = inject(ConfigStore);
   private readonly api = inject(JarvisApiService);
   private readonly router = inject(Router);
+  private readonly rota = inject(ActivatedRoute);
   protected readonly voz = inject(VozService);
 
   protected readonly url = signal(this.config.urlApi());
@@ -65,7 +65,10 @@ export class ConfiguracaoPage {
       const resultado = await this.api.testar(this.url(), this.token());
       if (resultado === 'ok') {
         this.config.salvar(this.url(), this.token());
-        await this.router.navigate(['/']);
+        await this.router.navigate(['/'], {
+          queryParams: this.rota.snapshot.queryParamMap.get('inicio') === '1' ? { inicio: '1' } : {},
+          replaceUrl: true,
+        });
         return;
       }
       this.mensagem.set(MENSAGENS[resultado]);

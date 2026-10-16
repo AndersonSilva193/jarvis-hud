@@ -156,6 +156,7 @@ export class JarvisApiService {
     return firstValueFrom(
       this.http.post<Introducao>(this.config.rota('/api/inicializacao'), null, {
         headers: this.autorizacao(),
+        timeout: 15_000,
       }),
     );
   }

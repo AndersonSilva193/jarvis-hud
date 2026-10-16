@@ -1,4 +1,4 @@
-import { Service, inject, signal } from '@angular/core';
+import { Service, computed, inject, signal } from '@angular/core';
 
 import { ConfigStore } from './config.store';
 import { EscutaService } from './escuta.service';
@@ -53,9 +53,10 @@ export class InicializacaoService {
   readonly linhas = signal<LinhaDeChecagem[]>([]);
 
   /** Verdadeiro enquanto a sobreposição de abertura deve cobrir a tela. */
-  readonly rodando = () => this.fase() === 'animando' || this.fase() === 'falando';
+  readonly rodando = computed(() => this.fase() === 'animando' || this.fase() === 'falando');
 
   private rodada = 0;
+  private cancelamento: AbortController | null = null;
 
   /** Verdadeiro quando a URL atual pede a sequência de abertura. */
   pedidoNaUrl(): boolean {
@@ -71,10 +72,13 @@ export class InicializacaoService {
    * Nunca lança — é chamada do `ngOnInit` e não pode derrubar a página.
    */
   async iniciar(): Promise<void> {
-    if (this.rodando()) {
+    if (this.fase() !== 'inativa') {
       return;
     }
     const minhaVez = ++this.rodada;
+    this.cancelamento = new AbortController();
+    limparParametro();
+    this.escuta.suspenderInicializacao();
     this.fase.set('animando');
     this.linhas.set(linhasIniciais());
 
@@ -84,7 +88,7 @@ export class InicializacaoService {
     this.voz.destravar();
 
     // A chamada parte agora e é esperada lá embaixo: ela e a animação ocupam o mesmo tempo.
-    const introducao = this.pedirIntroducao();
+    const introducao = this.pedirIntroducao(this.cancelamento.signal);
 
     try {
       await this.animar(introducao, minhaVez);
@@ -102,21 +106,32 @@ export class InicializacaoService {
   }
 
   /** Corta a abertura pela metade — o Esc, ou a página sendo destruída. */
-  cancelar(): void {
-    if (this.fase() === 'inativa') {
+  cancelar(retomarEscuta = true): void {
+    if (!this.rodando()) {
       return;
     }
     this.rodada++;
+    this.cancelamento?.abort();
     this.voz.parar();
     this.fase.set('pronta');
+    this.escuta.liberarInicializacao(retomarEscuta);
   }
 
-  private async pedirIntroducao(): Promise<Introducao | null> {
-    try {
-      return await this.api.inicializacao();
-    } catch {
-      return null;
-    }
+  private pedirIntroducao(sinal: AbortSignal): Promise<Introducao | null> {
+    return new Promise((resolver) => {
+      let encerrada = false;
+      const concluir = (dados: Introducao | null) => {
+        if (encerrada) return;
+        encerrada = true;
+        clearTimeout(prazo);
+        sinal.removeEventListener('abort', cancelar);
+        resolver(dados);
+      };
+      const cancelar = () => concluir(null);
+      const prazo = setTimeout(cancelar, 15_000);
+      sinal.addEventListener('abort', cancelar, { once: true });
+      void this.api.inicializacao().then(concluir, cancelar);
+    });
   }
 
   /** As quatro linhas, uma a uma, cada uma com o resultado da sua checagem de verdade. */
@@ -206,8 +221,7 @@ export class InicializacaoService {
    */
   private terminar(): void {
     this.fase.set('pronta');
-    this.escuta.ligar();
-    limparParametro();
+    this.escuta.liberarInicializacao(true);
   }
 }
 

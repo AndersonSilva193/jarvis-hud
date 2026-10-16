@@ -250,7 +250,7 @@ export class HudPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.ativa = false;
-    this.inicio.cancelar();
+    this.inicio.cancelar(false);
     this.tela.encerrar();
     this.cota.parar();
     this.conversa.fechar();
@@ -321,6 +321,7 @@ export class HudPage implements OnInit, OnDestroy {
    * peçam dois briefings.
    */
   private aoOuvir(frase: string): void {
+    if (this.inicio.rodando() || /^jarvis[\s,.:;!?-]+iniciar[\s.!?]*$/i.test(frase.trim())) return;
     if (this.conversa.ocupada() || this.escuta.ditando()) return;
     if (!this.ativa || !this.escuta.ligada() || this.voz.falando()) return;
     if (/^jarvis\b/i.test(frase.trim()) && this.tela.rapido(frase)) {

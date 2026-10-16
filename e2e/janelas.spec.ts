@@ -32,6 +32,25 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/'); await expect(page.locator('.orbe--livre')).toBeVisible();
 });
 
+test('inicialização consome URL, permite Escape e não reaparece na recarga', async ({ page }) => {
+  let pedidos = 0;
+  await page.route('https://api.hud.test/api/inicializacao', async route => {
+    pedidos++;
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    await route.fulfill({ json: { texto: 'Boa noite, senhor.', sitesOk: 1, sitesTotal: 1, climaOk: true, lembretesHoje: 0, geradoEm: '2026-10-15T20:00:00-03:00' } });
+  });
+  await page.goto('/?inicio=1');
+  await expect(page.locator('app-inicializacao')).toBeVisible();
+  await expect(page).not.toHaveURL(/inicio=1/);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('app-inicializacao')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.orbe--livre')).toBeVisible();
+  await expect(page.locator('app-inicializacao')).toHaveCount(0);
+  expect(pedidos).toBe(1);
+});
+
 test('pesquisas acessíveis, foco, teclado, bandeja e estado autenticado', async ({ page }) => {
   const erros: string[] = []; page.on('pageerror', e => erros.push(e.message));
   for (const layout of ['ranking', 'ficha', 'lista', 'linha_do_tempo', 'destaque']) {

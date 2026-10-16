@@ -61,6 +61,7 @@ export class EscutaService {
     cancelar: () => void;
   } | null = null;
   private pausada = false;
+  private suspensaPelaInicializacao = false;
   private reabertura: ReturnType<typeof setTimeout> | null = null;
   private tentativas = 0;
 
@@ -102,6 +103,19 @@ export class EscutaService {
       gravarLigada(true);
     }
     this.abrir();
+  }
+
+  /** Bloqueio temporário independente da fala, sem mudar a preferência salva. */
+  suspenderInicializacao(): void {
+    this.suspensaPelaInicializacao = true;
+    this.cancelarDitado();
+    this.pontual?.cancelar();
+    this.fechar();
+  }
+
+  liberarInicializacao(ativar: boolean): void {
+    this.suspensaPelaInicializacao = false;
+    if (ativar) this.ligar();
   }
 
   desligar(): void {
@@ -259,6 +273,7 @@ export class EscutaService {
       this.ouvinte !== null &&
       (this.ligada() || this.ditado !== null) &&
       !this.pausada &&
+      !this.suspensaPelaInicializacao &&
       !this.voz.falando()
     );
   }

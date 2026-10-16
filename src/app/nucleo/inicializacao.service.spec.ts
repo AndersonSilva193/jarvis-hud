@@ -26,6 +26,8 @@ describe('abertura da HUD', () => {
   const falar = vi.fn<(t: string) => Promise<void>>();
   const destravar = vi.fn();
   const ligar = vi.fn();
+  const suspenderInicializacao = vi.fn();
+  const liberarInicializacao = vi.fn((ativar: boolean) => { if (ativar) ligar(); });
   const status = signal('online');
 
   /** Deixa a abertura inteira correr: 4 passos de 900 ms mais a fala. */
@@ -39,6 +41,8 @@ describe('abertura da HUD', () => {
     falar.mockReset().mockResolvedValue(undefined);
     destravar.mockReset();
     ligar.mockReset();
+    suspenderInicializacao.mockClear();
+    liberarInicializacao.mockClear();
     status.set('online');
     history.replaceState(null, '', '/?inicio=1');
 
@@ -46,7 +50,7 @@ describe('abertura da HUD', () => {
       providers: [
         { provide: JarvisApiService, useValue: { inicializacao, statusVoz, testar } },
         { provide: VozService, useValue: { falar, destravar, parar: vi.fn() } },
-        { provide: EscutaService, useValue: { disponivel: true, ligar } },
+        { provide: EscutaService, useValue: { disponivel: true, ligar, suspenderInicializacao, liberarInicializacao } },
         { provide: JarvisEventosService, useValue: { status } },
         {
           provide: ConfigStore,
@@ -138,7 +142,7 @@ describe('abertura da HUD', () => {
       providers: [
         { provide: JarvisApiService, useValue: { inicializacao, statusVoz, testar } },
         { provide: VozService, useValue: { falar, destravar, parar: vi.fn() } },
-        { provide: EscutaService, useValue: { disponivel: false, ligar } },
+        { provide: EscutaService, useValue: { disponivel: false, ligar, suspenderInicializacao, liberarInicializacao } },
         { provide: JarvisEventosService, useValue: { status } },
         {
           provide: ConfigStore,
@@ -179,5 +183,38 @@ describe('abertura da HUD', () => {
 
     expect(inicializacao).toHaveBeenCalledOnce();
     expect(falar).toHaveBeenCalledOnce();
+  });
+
+  it('consome a URL imediatamente e suspende a escuta durante a animação', async () => {
+    const servico = TestBed.inject(InicializacaoService);
+    void servico.iniciar();
+    expect(location.search).toBe('');
+    expect(suspenderInicializacao).toHaveBeenCalledOnce();
+    expect(liberarInicializacao).not.toHaveBeenCalled();
+    await correrTudo();
+    expect(liberarInicializacao).toHaveBeenCalledWith(true);
+    await servico.iniciar();
+    expect(inicializacao).toHaveBeenCalledOnce();
+  });
+
+  it('API que não responde libera a tela e usa reserva aos 15 segundos', async () => {
+    inicializacao.mockReturnValue(new Promise(() => {}));
+    const servico = TestBed.inject(InicializacaoService);
+    const pronto = servico.iniciar();
+    await vi.advanceTimersByTimeAsync(15_000);
+    await pronto;
+    expect(falar).toHaveBeenCalledExactlyOnceWith(FALA_DE_RESERVA);
+    expect(servico.fase()).toBe('pronta');
+  });
+
+  it('destruir a página cancela sem religar a captura nem falar depois', async () => {
+    const servico = TestBed.inject(InicializacaoService);
+    void servico.iniciar();
+    servico.cancelar(false);
+    await correrTudo();
+    expect(liberarInicializacao).toHaveBeenCalledExactlyOnceWith(false);
+    expect(ligar).not.toHaveBeenCalled();
+    expect(falar).not.toHaveBeenCalled();
+    expect(location.search).toBe('');
   });
 });
