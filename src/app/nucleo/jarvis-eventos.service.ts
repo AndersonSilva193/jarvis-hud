@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 
 import { ConfigStore } from './config.store';
-import { JarvisApiService, type ResultadoTeste } from './jarvis-api.service';
+import { JarvisApiService, type ResultadoTeste, type TarefaComputer } from './jarvis-api.service';
 import type { PedidoConversa, ProgressoConversa, RespostaConversa } from './conversa.modelos';
 import type { Briefing } from './briefing.modelos';
 import { lerCardTela, lerComandoTela, type CardTela, type ComandoTela } from './tela.modelos';
@@ -20,6 +20,7 @@ export interface OuvintesDoBriefing {
   resposta?: (resposta: RespostaConversa) => void;
   erroConversa?: (resposta: RespostaConversa) => void;
   historico?: () => void;
+  tarefaComputer?: (tarefa: TarefaComputer) => void;
   gerando: () => void;
   briefing: (briefing: Briefing) => void;
   /** Uma frase pronta para a tela dizer; hoje vem do despertar por palmas com a HUD já aberta. */
@@ -122,6 +123,7 @@ export class JarvisEventosService {
     receber<RespostaConversa>('conversa.resposta', (dados) => this.ouvintes?.resposta?.(dados));
     receber<RespostaConversa>('conversa.erro', (dados) => this.ouvintes?.erroConversa?.(dados));
     receber<unknown>('conversa.historico', () => this.ouvintes?.historico?.());
+    receber<TarefaComputer>('computer.progresso', dados => this.ouvintes?.tarefaComputer?.(dados));
     receber<unknown>('tela.card', dados => { const card = lerCardTela(dados); if (card) this.ouvintes?.card?.(card); });
     receber<unknown>('tela.comando', dados => { const comando = lerComandoTela(dados); if (comando) this.ouvintes?.comando?.(comando); });
     receber<unknown>('voz.falar', dados => { const fala = lerFalaDaTela(dados); if (fala) this.ouvintes?.falar?.(fala); });

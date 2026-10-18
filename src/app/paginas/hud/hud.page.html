@@ -75,6 +75,15 @@
     <app-barra-conversa [(texto)]="rascunho" [(aberta)]="conversa.chatAberto" [ocupada]="conversa.ocupada()" [ditando]="escuta.ditando() && escutaDeResposta.fase() !== 'ouvindo'" [vozDisponivel]="escuta.disponivel" (enviar)="enviarTexto()" (microfone)="ditar()" (digitando)="aoDigitar()" />
   </div>
   <footer class="rodape">
+    @if (tarefaComputer(); as tarefa) {
+      <div role="status" aria-live="polite">
+        Tarefa no PC: {{ tarefa.estado }} · {{ tarefa.ciclos }} ciclos · {{ tarefa.acoes }} ações
+        @if (tarefa.motivo) { <span>{{ tarefa.motivo }}</span> }
+        @if (tarefa.estado === 'pendente' || tarefa.estado === 'executando') {
+          <button class="botao" type="button" (click)="cancelarComputer(tarefa.id)">Parar tarefa no PC</button>
+        }
+      </div>
+    }
     <div class="avisos" role="status">
       @if (janelas.aviso()) { <span>{{ janelas.aviso() }}</span> }
       @if (erro()) { <span class="erro">{{ erro() }}</span> }

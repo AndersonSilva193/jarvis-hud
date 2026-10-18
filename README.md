@@ -183,6 +183,11 @@ hora. Referências externas aceitam somente HTTP/HTTPS e nunca recebem o token d
 
 Confirmações aparecem somente com metadados explícitos da API: código grande, descrição,
 validade e botões **Confirmar** / **Cancelar**. Enviam **confirmo <código>** / **cancelo <código>**.
+
+As tarefas visuais do PC aparecem no rodapé com estado, ciclos, ações e botão de parada. A HUD
+recupera a última tarefa por HTTP ao reconectar; o progresso chega por `computer.progresso`.
+O botão de confirmação existente envia uma nova mensagem autenticada, consumida diretamente
+pelo servidor para ações do PC e rotinas.
 Também é possível acionar o microfone e dizer o código válido; números podem ser ditados dígito
 por dígito. Esta entrega testa os componentes com metadados simulados. As ferramentas atuais
 não criam arquivos, prints nem ações protegidas; a geração e validação de confirmações ficam

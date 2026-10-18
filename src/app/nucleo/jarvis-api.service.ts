@@ -11,6 +11,16 @@ import type { EstadoTela } from './tela.modelos';
 
 /** Por que uma tentativa de conexão não deu certo — o suficiente para a tela explicar. */
 export type ResultadoTeste = 'ok' | 'token-invalido' | 'api-inacessivel' | 'conteudo-misto';
+export interface TarefaComputer {
+  id: string;
+  estado: string;
+  provedor: string;
+  modelo: string;
+  ciclos: number;
+  acoes: number;
+  motivo: string;
+  iniciadoEm: string;
+}
 
 /**
  * As chamadas HTTP da API do Jarvis.
@@ -103,6 +113,17 @@ export class JarvisApiService {
         { headers: this.autorizacao() },
       ),
     );
+  }
+  ultimaTarefaComputer(): Promise<TarefaComputer | null> {
+    return firstValueFrom(this.http.get<TarefaComputer | null>(
+      this.config.rota('/api/computer/ultima'), { headers: this.autorizacao() },
+    ));
+  }
+  cancelarTarefaComputer(id: string): Promise<void> {
+    return firstValueFrom(this.http.post<void>(
+      this.config.rota(`/api/computer/${encodeURIComponent(id)}/cancelar`), null,
+      { headers: this.autorizacao() },
+    ));
   }
   historicoConversa(): Promise<HistoricoConversa> {
     return firstValueFrom(

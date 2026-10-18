@@ -17,7 +17,7 @@ import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
 import { normalizar, EscutaService, contem } from '../../nucleo/escuta.service';
 import { EscutaDeRespostaService } from '../../nucleo/escuta-de-resposta.service';
 import { normalizarCodigo } from '../../nucleo/normalizar-codigo';
-import { JarvisApiService } from '../../nucleo/jarvis-api.service';
+import { JarvisApiService, type TarefaComputer } from '../../nucleo/jarvis-api.service';
 import { InicializacaoService } from '../../nucleo/inicializacao.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
 import { VozService } from '../../nucleo/voz.service';
@@ -78,7 +78,13 @@ export class HudPage implements OnInit, OnDestroy {
 
   protected readonly pedindo = signal(false);
   protected readonly erro = signal('');
+  protected readonly tarefaComputer = signal<TarefaComputer | null>(null);
   protected readonly relogio = signal(agora());
+
+  protected async cancelarComputer(id: string): Promise<void> {
+    try { await this.api.cancelarTarefaComputer(id); }
+    catch { this.erro.set('Não consegui pedir a parada da tarefa no PC. Use o atalho local.'); }
+  }
 
   protected readonly estadoOrbe = computed<EstadoOrbe>(() => {
     if (this.conversa.ocupada()) return 'pensando';
@@ -211,7 +217,11 @@ export class HudPage implements OnInit, OnDestroy {
         if (this.conversa.naTela() || this.escuta.ditando()) this.briefingGuardado.set(briefing);
         else void this.player.tocar(briefing);
       },
-      conectado: () => { void this.conversa.recuperar(); this.estadoTela.reenviar(); },
+      conectado: () => {
+        void this.conversa.recuperar(); this.estadoTela.reenviar();
+        void this.api.ultimaTarefaComputer().then(tarefa => this.tarefaComputer.set(tarefa))
+          .catch(() => { });
+      },
       card: card => this.tela.receber(card),
       comando: comando => { this.tela.executar(comando); },
       pensando: (pedido) => {
@@ -222,6 +232,7 @@ export class HudPage implements OnInit, OnDestroy {
       resposta: (resposta) => this.conversa.receber(resposta),
       erroConversa: (resposta) => this.conversa.receber(resposta),
       historico: () => void this.conversa.recuperar(),
+      tarefaComputer: tarefa => this.tarefaComputer.set(tarefa),
       // O despertar por palmas achando a tela já aberta: só a frase curta, sem card nenhum.
       falar: (fala) => void this.voz.falar(fala.texto),
     });
