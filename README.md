@@ -1,13 +1,5 @@
 # jarvis-hud
 
-## Google Sheets
-
-Na tela de configuração, “Conectar Google Sheets” abre a autorização OAuth quando a API
-Jarvis possui credenciais Google configuradas. A HUD consulta o estado da conexão; os tokens
-ficam somente no backend, cifrados no volume persistente. A ferramenta do Jarvis cria
-planilhas novas e devolve um link, ou oferece XLSX para importação quando não há autorização.
-
-
 A tela de conversa e briefing do [Jarvis](../jarvis): fundo azul-escuro com grade, orbe de energia no centro e
 cards translúcidos que entram um por um enquanto o Jarvis lê cada bloco em voz alta. Feita para
 ficar aberta em tela cheia num monitor.
@@ -39,6 +31,13 @@ livre, sem nada por cima.
 
 Angular 22 (standalone, zoneless, sem SSR). Nenhum segredo no build: a URL da API e o `HUD_TOKEN`
 são digitados na primeira tela e ficam no `localStorage` do navegador.
+
+## Google Sheets
+
+Na tela de configuração, “Conectar Google Sheets” abre a autorização OAuth quando a API
+Jarvis possui credenciais Google configuradas. A HUD consulta o estado da conexão; os tokens
+ficam somente no backend, cifrados no volume persistente. A ferramenta do Jarvis cria
+planilhas novas e devolve um link, ou oferece XLSX para importação quando não há autorização.
 
 ## Rodar
 
@@ -107,7 +106,12 @@ cache do backend deixa de ser reaproveitado quando vira a data ou muda o períod
 
 ## Voz
 
-`speechSynthesis` com `lang="pt-BR"`, preferindo a voz que tenha **Google** e **Brasil** no nome
+São dois caminhos, e o backend decide qual. Com `VOZ_PROVEDOR=elevenlabs` no Jarvis, a HUD pede o
+MP3 em `POST /api/voz/sintetizar` e toca num elemento `<audio>` — é a voz boa, e a intensidade do
+orbe vem da análise real do áudio. Com a ElevenLabs desligada, sem cota ou após uma falha (e aí com
+um descanso antes de tentar de novo), a fala cai para o `speechSynthesis` do navegador.
+
+No caminho do navegador é `lang="pt-BR"`, preferindo a voz que tenha **Google** e **Brasil** no nome
 (a tela de configuração mostra qual voz foi escolhida). Duas coisas no código existem por causa do
 navegador:
 
@@ -173,9 +177,11 @@ Na abertura e reconexão SSE, consulta histórico e última resposta. Uma respos
 pedido pendente é exibida e falada uma vez; restauração sem pedido pendente é silenciosa. IDs e
 revisões descartam duplicatas e consultas antigas. Se o POST perdeu a resposta, a HUD consulta
 o estado e não o reenvia automaticamente. Se o backend perdeu o pedido ao reiniciar, informa a
-interrupção e permite novo envio. O histórico do servidor fica em memória.
+interrupção e permite novo envio. O histórico do servidor é persistido em disco pelo Jarvis (um
+JSON por chat) e restaurado na partida, com a sessão renovada: o que volta é lista para olhar, não
+resposta para falar de novo.
 
-### Anexos e confirmações futuras
+### Anexos e confirmações
 
 Anexos de imagem usam preview; arquivos têm **Abrir** para download. A HUD baixa conteúdo com
 Bearer, cria URLs locais e as libera ao remover o card. O servidor expira os arquivos em uma
@@ -186,12 +192,13 @@ validade e botões **Confirmar** / **Cancelar**. Enviam **confirmo <código>** /
 
 As tarefas visuais do PC aparecem no rodapé com estado, ciclos, ações e botão de parada. A HUD
 recupera a última tarefa por HTTP ao reconectar; o progresso chega por `computer.progresso`.
-O botão de confirmação existente envia uma nova mensagem autenticada, consumida diretamente
+O botão de confirmação envia uma nova mensagem autenticada, consumida diretamente
 pelo servidor para ações do PC e rotinas.
 Também é possível acionar o microfone e dizer o código válido; números podem ser ditados dígito
-por dígito. Esta entrega testa os componentes com metadados simulados. As ferramentas atuais
-não criam arquivos, prints nem ações protegidas; a geração e validação de confirmações ficam
-para essas futuras integrações.
+por dígito. Os anexos e as confirmações já são usados de verdade: `criar_arquivo` e `ler_arquivo`
+entregam documento, `captura_tela` entrega imagem, e desligar o PC, rodar rotina, iniciar tarefa
+visual, sobrescrever arquivo e desfazer edição passam pela confirmação. A suíte automatizada
+continua exercitando os componentes com metadados simulados.
 
 ### Roteiro de teste com microfone físico
 
@@ -204,9 +211,9 @@ para essas futuras integrações.
    depois no **✕**, e veja o orbe voltar ao centro.
 7. Mude o relógio do servidor para manhã, tarde, noite e madrugada e confira que o cumprimento
    exibido é idêntico ao falado. O período vem do servidor, nunca do relógio do navegador.
-5. Na pergunta das observações, teste “sim”, “não quero” e silêncio. Saia da página durante a espera: o microfone não deve reabrir.
-6. Derrube e restaure a conexão durante um pedido. Deve recuperar a resposta sem executar o pedido novamente.
-7. Reabra a HUD: a preferência de ativação deve ser lembrada e as respostas restauradas silenciosamente.
+8. Na pergunta das observações, teste “sim”, “não quero” e silêncio. Saia da página durante a espera: o microfone não deve reabrir.
+9. Derrube e restaure a conexão durante um pedido. Deve recuperar a resposta sem executar o pedido novamente.
+10. Reabra a HUD: a preferência de ativação deve ser lembrada e as respostas restauradas silenciosamente.
 
 Os testes automatizados simulam reconhecimento, áudio, API e ferramentas. Não substituem essa
 checagem física nem as políticas de permissão e áudio do navegador.
@@ -242,14 +249,28 @@ src/app/
     config.store.ts              URL + token no localStorage
     conversa.service.ts          pedido, histórico e recuperação sem repetir POST
     conversa.modelos.ts          contratos de conversa, anexos e confirmação
-    escuta.service.ts            ativação, ditado e resposta às observações
+    escuta.service.ts            ativação por voz e ditado
+    escuta-de-resposta.service.ts  a espera pela resposta falada a uma pergunta do Jarvis
+    comandos-rapidos.ts          as frases que a própria tela resolve, sem ir ao Jarvis
+    normalizar-codigo.ts         código de confirmação ditado dígito por dígito
     jarvis-api.service.ts        POST /api/briefing, GET /ultimo, teste de conexão
     jarvis-eventos.service.ts    SSE com reconexão e diagnóstico da queda
-    voz.service.ts               speechSynthesis pt-BR e a intensidade do orbe
+    voz.service.ts               a fala: voz do navegador ou da ElevenLabs, e a intensidade do orbe
+    voz-cota.service.ts          provedor em uso e cota restante (/api/voz/status)
     briefing-player.service.ts   a fila: um bloco por vez, falado até o fim
+    tela.service.ts              os eventos tela.card / tela.comando vindos do Jarvis
+    tela-estado.service.ts       o POST /api/tela/estado do que está aberto
+    janelas.service.ts           as seis janelas do palco: foco, fixar, bandeja
+    midia.service.ts             uma mídia por vez e o volume que abaixa durante a fala
+    youtube.service.ts           a YouTube IFrame API, carregada uma vez
+    inicializacao.service.ts     a abertura falada do ?inicio=1
+    abrir-link.service.ts        única porta de saída para link externo, só http/https
+    exige-configuracao.guard.ts  sem URL e token, cai na tela 1
   paginas/configuracao/          tela 1
   paginas/hud/                   tela 2: orbe, palco, fileira e controles (um .scss por área)
+  componentes/janela/            a moldura arrastável e redimensionável das janelas
   componentes/conversa/          barra, diálogo em curso, resposta, anexos e histórico
+  componentes/inicializacao/     a sequência de abertura por palmas
   componentes/orbe/              OrbeComponent: ciclo de vida dos dois canvas (reator e campo da onda)
   componentes/orbe/desenho-orbe.ts  o desenho em funções puras: reator, onda, espectro e partículas
   componentes/sondas/            SondasComponent: os quatro cards-satélite e os fios até o reator
@@ -257,6 +278,9 @@ src/app/
   componentes/card-lembretes/    CardLembretesComponent
   componentes/card-noticia/      CardNoticiaComponent
   componentes/card-sistemas/     CardSistemasComponent
+  componentes/card-pesquisa/     ranking, ficha, lista, linha do tempo e destaque
+  componentes/card-video/, card-musica/, card-midia/  os players do YouTube
+  componentes/card-pagina/       a página incorporada, ou a prévia quando o site recusa o iframe
   componentes/card-texto/        abertura e qualquer seção sem dados estruturados
   estilos/_hud.scss              cores, fonte mono, a moldura dos cards e o botão do HUD
 ```
@@ -319,7 +343,8 @@ por tipo exige uma única candidata. Ambiguidade e outras frases vão ao Jarvis 
 
 ## Abertura por palmas (?inicio=1)
 
-Quando o [agente do PC](../jarvis-agente-pc) acorda o Jarvis — duas palmas ou "Jarvis, iniciar" —
+Quando o [agente do PC](../jarvis-agente-pc) acorda o Jarvis — duas palmas ou a palavra
+"Jarvis" dita sozinha —
 ele abre esta tela com `?inicio=1`. Aí a HUD não aparece direto: toca uma sequência de abertura
 antes.
 
