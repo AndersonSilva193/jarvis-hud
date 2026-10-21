@@ -35,10 +35,10 @@ export class EscutaDeRespostaService {
   receberResposta(resposta: RespostaConversa, narracao: Promise<void>): void {
     this.cancelar();
     if (resposta.canal !== 'hud' || resposta.erro || !resposta.escuta) return;
-    const { tempoSegundos, opcoes = [], motivo = '' } = resposta.escuta;
+    const { tempoSegundos, motivo = '' } = resposta.escuta;
     if (!Number.isFinite(tempoSegundos) || tempoSegundos <= 0) return;
     this.aviso.set('');
-    this.opcoes.set(opcoes.filter((opcao) => !!opcao.trim()));
+    this.opcoes.set(opcoesDe(resposta));
     this.motivo.set(motivo.trim());
     this.fase.set('preparando');
     const controle = new AbortController();
@@ -154,6 +154,9 @@ export class EscutaDeRespostaService {
   }
 
   private mensagemDaResposta(texto: string, resposta: RespostaConversa): string {
+    // Sem opções a oferecer, a fala vale como mensagem digitada: quem decide se foi sim ou não é
+    // o servidor, e achatar "agora não, só amanhã" em `cancelar` perderia a resposta.
+    if (opcoesDe(resposta).length === 0) return texto;
     const confirmacao = resposta.confirmacao;
     if (!confirmacao || Date.parse(confirmacao.expiraEm) <= Date.now()) return texto;
     if (contem(texto, ['cancelar', 'não'])) return 'cancelar';
@@ -191,6 +194,11 @@ export class EscutaDeRespostaService {
       // Autoplay pode bloquear o bip, sem bloquear a resposta.
     }
   }
+}
+
+/** As opções que a resposta realmente oferece — texto em branco não é opção. */
+function opcoesDe(resposta: RespostaConversa): string[] {
+  return (resposta.escuta?.opcoes ?? []).filter((opcao) => !!opcao.trim());
 }
 
 function esperar(ms: number, sinal: AbortSignal): Promise<boolean> {

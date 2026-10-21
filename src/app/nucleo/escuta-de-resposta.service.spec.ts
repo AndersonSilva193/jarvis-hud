@@ -21,6 +21,20 @@ function resposta(id = '1'): RespostaConversa {
   };
 }
 
+/** A pergunta de aprovação: o servidor não oferece botões, a pessoa simplesmente fala. */
+function semOpcoes(id = '1'): RespostaConversa {
+  const pergunta = resposta(id);
+  pergunta.escuta = { tempoSegundos: 4, motivo: 'confirmar o envio do relatório', opcoes: [] };
+  return pergunta;
+}
+
+function comConfirmacao(pergunta: RespostaConversa): RespostaConversa {
+  pergunta.confirmacao = {
+    codigo: '1234', descricao: 'Confirmar?', expiraEm: new Date(Date.now() + 60_000).toISOString(),
+  };
+  return pergunta;
+}
+
 describe('EscutaDeRespostaService', () => {
   const falando = signal(false);
   const ligada = signal(true);
@@ -73,9 +87,8 @@ describe('EscutaDeRespostaService', () => {
     expect(enviar).toHaveBeenCalledExactlyOnceWith('Às três da tarde');
   });
 
-  it('confirma código ditado e envia cancelar para negativa', async () => {
-    const pergunta = resposta();
-    pergunta.confirmacao = { codigo: '1234', descricao: 'Confirmar?', expiraEm: new Date(Date.now() + 60_000).toISOString() };
+  it('com opções preenchidas, confirma código ditado e envia cancelar para negativa', async () => {
+    const pergunta = comConfirmacao(resposta());
     ditar.mockResolvedValueOnce('um dois três quatro').mockResolvedValueOnce('não');
     servico.receberResposta(pergunta, Promise.resolve());
     await vi.advanceTimersByTimeAsync(300);
@@ -160,6 +173,53 @@ describe('EscutaDeRespostaService', () => {
     servico.receberResposta(resposta('2'), Promise.resolve());
     await vi.advanceTimersByTimeAsync(300);
     expect(ditar).toHaveBeenCalledTimes(1);
+  });
+
+  it('com opções vazias, envia a fala crua como mensagem normal', async () => {
+    ditar.mockResolvedValue('pode mandar amanhã');
+    servico.receberResposta(semOpcoes(), Promise.resolve());
+    await vi.advanceTimersByTimeAsync(300);
+    expect(enviar).toHaveBeenCalledExactlyOnceWith('pode mandar amanhã');
+    expect(ditar.mock.calls[0]?.[1]).toMatchObject({ tempoParaComecarMs: 4000 });
+  });
+
+  it('com opções vazias, não traduz negativa nem código de confirmação', async () => {
+    ditar.mockResolvedValueOnce('não').mockResolvedValueOnce('um dois três quatro');
+    servico.receberResposta(comConfirmacao(semOpcoes()), Promise.resolve());
+    await vi.advanceTimersByTimeAsync(300);
+    expect(enviar).toHaveBeenLastCalledWith('não');
+    servico.receberResposta(comConfirmacao(semOpcoes('2')), Promise.resolve());
+    await vi.advanceTimersByTimeAsync(300);
+    expect(enviar).toHaveBeenLastCalledWith('um dois três quatro');
+    expect(enviar).not.toHaveBeenCalledWith('cancelar');
+    expect(enviar).not.toHaveBeenCalledWith('confirmo 1234');
+  });
+
+  it('com opções vazias, mostra o motivo e a fase ouvindo durante a escuta', async () => {
+    ditar.mockReturnValue(new Promise(() => {}));
+    servico.receberResposta(semOpcoes(), Promise.resolve());
+    await vi.advanceTimersByTimeAsync(300);
+    expect(servico.fase()).toBe('ouvindo');
+    expect(servico.motivo()).toBe('confirmar o envio do relatório');
+    expect(servico.opcoes()).toEqual([]);
+  });
+
+  it('com opções vazias, encerra sem enviar quando ninguém fala', async () => {
+    servico.receberResposta(semOpcoes(), Promise.resolve());
+    await vi.advanceTimersByTimeAsync(300);
+    expect(enviar).not.toHaveBeenCalled();
+    expect(servico.fase()).toBe('inativa');
+    expect(servico.aviso()).toBe('Sem resposta. Diga Jarvis quando quiser continuar.');
+  });
+
+  it('com opções vazias, respeita o limite de aberturas automáticas', async () => {
+    for (let n = 1; n <= 6; n++) {
+      servico.receberResposta(semOpcoes(String(n)), Promise.resolve());
+      await vi.advanceTimersByTimeAsync(300);
+    }
+    expect(ditar).toHaveBeenCalledTimes(5);
+    expect(servico.fase()).toBe('opcoes');
+    expect(servico.opcoes()).toEqual([]);
   });
 
   it('resposta do Telegram nunca abre o microfone', async () => {

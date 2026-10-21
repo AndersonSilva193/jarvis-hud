@@ -235,6 +235,10 @@ describe('o palco do HUD', () => {
     tela.detectChanges();
     expect(tela.componentInstance['rascunho']()).toBe('');
     expect(tela.nativeElement.querySelector('.falando').textContent).toContain('Ouvindo sua resposta');
+    // A transcrição da resposta aparece no centro, com o indicador de escuta, e não na barra.
+    const ouvindo = tela.nativeElement.querySelector('.ouvindo-resposta');
+    expect(ouvindo.textContent).toContain('Jarvis está ouvindo');
+    expect(ouvindo.querySelector('.parcial').textContent).toContain('amanhã às nove');
   });
 
   it('com ?inicio=1 a abertura cobre a tela e o orbe se forma', () => {

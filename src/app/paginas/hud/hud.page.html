@@ -18,6 +18,12 @@
     <p class="falando" role="status" aria-live="polite"><span class="ponto" [class.ponto--ativo]="voz.falando() || escuta.ouvindo() || conversa.ocupada()" aria-hidden="true"></span>{{ estadoApresentacao() }}</p>
     @if (escutaDeResposta.fase() !== 'inativa') {
       @if (escutaDeResposta.motivo()) { <p class="motivo-resposta">{{ escutaDeResposta.motivo() }}</p> }
+      @if (escutaDeResposta.fase() === 'ouvindo') {
+        <p class="ouvindo-resposta">
+          <span class="ouvindo-resposta__pulso" aria-hidden="true"></span>Jarvis está ouvindo
+          @if (escuta.transcricao()) { <span class="parcial">{{ escuta.transcricao() }}</span> }
+        </p>
+      }
       @if (escutaDeResposta.fase() === 'opcoes' && !escutaDeResposta.opcoes().length) {
         <p class="motivo-resposta">{{ escuta.ligada() ? 'Diga Jarvis ou escreva para continuar.' : 'Escreva para continuar.' }}</p>
       }

@@ -1,6 +1,11 @@
 @use '../../estilos/hud' as hud;
 
 .motivo-resposta{margin:.4rem 0 0;color:#b8cbe0;font:500 .68rem hud.$mono;letter-spacing:.05em}
+.ouvindo-resposta{display:flex;justify-content:center;align-items:center;gap:.45rem;margin:.35rem 0 0;color:#9cefff;font:500 .68rem hud.$mono;letter-spacing:.05em}
+.ouvindo-resposta__pulso{width:8px;height:8px;border-radius:50%;background:hud.$ciano;box-shadow:0 0 10px hud.$azul-energia;animation:pulso-escuta 1.2s ease-in-out infinite}
+.ouvindo-resposta .parcial{color:#b8cbe0;font-weight:400}
+@media (prefers-reduced-motion:reduce){.ouvindo-resposta__pulso{animation:none}}
+@keyframes pulso-escuta{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
 .opcoes-resposta{display:flex;justify-content:center;flex-wrap:wrap;gap:.5rem;margin:.7rem auto 0}
 .opcoes-resposta button{@include hud.botao(7px);min-height:38px}
 
