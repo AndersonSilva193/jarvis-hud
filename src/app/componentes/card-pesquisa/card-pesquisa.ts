@@ -1,5 +1,6 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { AbrirLinkService, urlSegura } from '../../nucleo/abrir-link.service';
+import { GraficoHudComponent } from '../grafico-hud/grafico-hud';
 import type { DadosPesquisa } from '../../nucleo/tela.modelos';
 
 @Component({
@@ -26,6 +27,7 @@ import type { DadosPesquisa } from '../../nucleo/tela.modelos';
       @case ('lista') { <ul class="lista">@for (item of pesquisa.itens; track $index) { <li>{{ item.texto }}</li> }</ul> }
       @case ('linha_do_tempo') { <ol class="linha-tempo">@for (item of pesquisa.itens; track $index) { <li><strong>{{ item.data }}</strong><p>{{ item.texto }}</p></li> }</ol> }
       @case ('destaque') { <div class="destaques">@for (item of pesquisa.itens; track $index) { <p><strong>{{ item.valor }}</strong><span>{{ item.legenda }}</span></p> }</div> }
+      @case ('grafico') { <app-grafico-hud [grafico]="pesquisa.grafico" [titulo]="titulo()" /> }
     }
     <section class="caixa resumo" aria-label="Em resumo"><h3>EM RESUMO</h3><p>{{ dados().resumo }}</p></section>
     <footer><button type="button" (click)="fontesAbertas.update(inverter)" [attr.aria-expanded]="fontesAbertas()">{{ dados().fontes.length }} FONTES</button><span>CONSULTADO ÀS {{ horario() }}</span></footer>
@@ -35,6 +37,7 @@ import type { DadosPesquisa } from '../../nucleo/tela.modelos';
       } @empty { <li>Nenhuma fonte informada.</li> }</ul>
     }
   `,
+  imports: [GraficoHudComponent],
   styleUrl: './card-pesquisa.scss',
 })
 export class CardPesquisaComponent {

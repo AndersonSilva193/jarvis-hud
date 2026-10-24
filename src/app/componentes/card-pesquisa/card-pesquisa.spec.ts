@@ -10,6 +10,7 @@ const layouts: DadosPesquisa[] = [
   { ...base, layout: 'lista', itens: [{ texto: 'Primeiro item' }] },
   { ...base, layout: 'linha_do_tempo', itens: [{ data: '2026', texto: 'Marco' }] },
   { ...base, layout: 'destaque', itens: [{ valor: '100', legenda: 'Megawatts' }] },
+  { ...base, layout: 'grafico', itens: [], grafico: { tipo: 'linha', eixoX: ['seg', 'ter', 'qua', 'qui'], series: [{ nome: 'Máxima', valores: [31, 29, 26, 23] }], unidade: '°C', destaque: { serie: 0, indice: 3 }, origem: 'pesquisa' } },
 ];
 afterEach(() => { TestBed.resetTestingModule(); vi.restoreAllMocks(); });
 describe('pesquisa', () => {
@@ -21,6 +22,7 @@ describe('pesquisa', () => {
     f.nativeElement.querySelector('footer button').click(); f.detectChanges(); f.nativeElement.querySelector('.fontes button').click();
     expect(abrir).toHaveBeenCalledWith('https://example.com/', '_blank', 'noopener,noreferrer');
     if (dados.layout === 'ranking') expect(f.nativeElement.querySelectorAll('.trilho span')[1].style.width).toBe('50%');
+    if (dados.layout === 'grafico') { expect(f.nativeElement.querySelector('svg[role="img"]').getAttribute('aria-label')).toBe('Energia em números'); expect(f.nativeElement.querySelector('table.oculto').textContent).toContain('31'); }
   });
   it('trata marcação como texto e desabilita URL executável', () => {
     const f = TestBed.createComponent(CardPesquisaComponent);

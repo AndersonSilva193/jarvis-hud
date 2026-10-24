@@ -1,0 +1,226 @@
+@use '../../estilos/hud' as hud;
+
+:host {
+  display: block;
+  margin: 0.4rem 0 0.2rem;
+}
+
+// A caixa carrega a mesma proporção do `viewBox`: assim o SVG a preenche sem sobra e a dica pode
+// se posicionar em % das coordenadas do desenho. O teto de largura é o que evita o gráfico virar
+// um painel gigante com a janela maximizada.
+.area {
+  position: relative;
+  width: 100%;
+  max-width: calc(46vh * 640 / 300);
+  aspect-ratio: 640 / 300;
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  font-family: hud.$mono;
+}
+
+// Grade discreta: está ali para dar referência de altura, não para ser lida.
+.grade {
+  line {
+    stroke: hud.$ciano-fraco;
+    stroke-width: 1;
+    opacity: 0.45;
+  }
+
+  .eixo {
+    opacity: 0.9;
+  }
+
+  text {
+    fill: hud.$texto-fraco;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
+  .marca-y {
+    text-anchor: end;
+  }
+
+  .marca-x {
+    text-anchor: middle;
+  }
+}
+
+// As séries só definem `color`; linha, barra, ponto e legenda puxam de `currentColor`.
+.serie--0 {
+  color: hud.$ciano;
+}
+
+.serie--1 {
+  color: hud.$azul-energia;
+}
+
+.serie--2 {
+  color: hud.$ok;
+}
+
+.linha {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px currentColor);
+  // `pathLength="1"` no template é o que deixa este traço valer para qualquer comprimento.
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: desenhar 0.62s ease-out var(--atraso, 0ms) forwards;
+}
+
+.barra {
+  fill: currentColor;
+  fill-opacity: 0.68;
+  stroke: currentColor;
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  animation: crescer 0.42s ease-out var(--atraso, 0ms) forwards;
+
+  &.acesa {
+    fill-opacity: 0.9;
+  }
+
+  &.destacada {
+    color: hud.$alerta;
+    fill-opacity: 0.85;
+    filter: drop-shadow(0 0 7px hud.$alerta);
+  }
+}
+
+.ponto {
+  fill: hud.$fundo;
+  stroke: currentColor;
+  stroke-width: 2;
+
+  &.aceso {
+    fill: currentColor;
+  }
+
+  &.destacado {
+    color: hud.$alerta;
+    fill: hud.$alerta;
+    filter: drop-shadow(0 0 7px hud.$alerta);
+  }
+}
+
+// Área de toque generosa: o ponto desenhado tem 3,5 de raio, pequeno demais para o dedo.
+.alvo {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.valor {
+  fill: hud.$texto;
+  font-size: 12px;
+  font-weight: 600;
+
+  &.destacado {
+    fill: hud.$alerta;
+  }
+}
+
+.dica {
+  position: absolute;
+  transform: translate(-50%, -118%);
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid hud.$ciano-fraco;
+  background: rgba(3, 12, 26, 0.94);
+  box-shadow: 0 0 18px rgba(45, 125, 255, 0.28);
+  font-family: hud.$mono;
+  font-size: 0.66rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+
+  span {
+    display: block;
+  }
+
+  .dica-rotulo {
+    color: hud.$ciano;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .dica-serie {
+    color: hud.$texto-fraco;
+  }
+
+  strong {
+    color: hud.$texto;
+    font-size: 0.85rem;
+  }
+}
+
+.legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: hud.$mono;
+  font-size: 0.66rem;
+  color: hud.$texto-fraco;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  i {
+    width: 0.8rem;
+    height: 2px;
+    background: currentColor;
+    box-shadow: 0 0 6px currentColor;
+  }
+}
+
+// Visualmente oculta, mas ainda no fluxo do leitor de tela: `display: none` a tiraria dos dois.
+.oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes desenhar {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes crescer {
+  to {
+    transform: scaleY(1);
+  }
+}
+
+// O `styles.scss` global desliga `animation` com `!important` aqui, então sem este bloco o estado
+// inicial ficaria congelado: a linha invisível e as barras achatadas.
+@media (prefers-reduced-motion: reduce) {
+  .linha {
+    stroke-dashoffset: 0;
+  }
+
+  .barra {
+    transform: none;
+  }
+}
