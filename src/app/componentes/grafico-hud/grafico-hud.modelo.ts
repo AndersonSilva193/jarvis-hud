@@ -8,7 +8,7 @@
  * justamente o caso em que medir não funcionaria).
  */
 
-import type { Grafico } from '../../nucleo/tela.modelos';
+import type { Grafico, TipoGrafico } from '../../nucleo/tela.modelos';
 
 /** A área do `viewBox`. A margem direita é larga para caber o valor escrito ao lado do ponto. */
 export const AREA = { largura: 640, altura: 300 } as const;
@@ -29,6 +29,22 @@ const LARGURA_CARACTERE = 6.6;
 const FOLGA_ROTULO = 10;
 /** A fração da faixa de cada rótulo ocupada pelo grupo de barras. O resto é respiro. */
 const OCUPACAO_DO_GRUPO = 0.68;
+
+/** Teto de fatias da rosca: acima disso as menores viram uma fatia só, "Outros". */
+const MAX_FATIAS = 6;
+/** A fração do raio que fica vazada. É ela que faz anel em vez de pizza e abre o espaço do total. */
+const FURO = 0.62;
+/**
+ * O anel: centrado na área, com o raio interno em número inteiro para o `d` sair limpo.
+ * Exportado porque o componente escreve o total no centro e os testes conferem o furo.
+ */
+export const ROSCA = {
+  centro: { x: AREA.largura / 2, y: AREA.altura / 2 },
+  raio: 118,
+  raioInterno: Math.round(118 * FURO),
+} as const;
+/** Respiro entre fatias, em radianos. Nunca come mais de um quarto do arco da fatia. */
+const VAO_ANGULAR = 0.03;
 
 export interface MarcaY {
   readonly valor: number;
@@ -51,6 +67,8 @@ export interface PontoGrafico {
   readonly y: number;
   readonly valor: number;
   readonly destacado: boolean;
+  /** O rótulo da dica, quando não é o `eixoX[indice]`: só a fatia agregada da rosca usa. */
+  readonly rotulo?: string;
 }
 
 export interface BarraGrafico extends PontoGrafico {
@@ -58,6 +76,16 @@ export interface BarraGrafico extends PontoGrafico {
   readonly topo: number;
   readonly largura: number;
   readonly altura: number;
+}
+
+export interface FatiaRosca extends PontoGrafico {
+  /** O caminho do segmento de anel. */
+  readonly d: string;
+  readonly rotulo: string;
+  /** A parte do total, de 0 a 1. */
+  readonly fracao: number;
+  /** Quantas categorias a fatia resume: 1 na fatia comum, mais de 1 em "Outros". */
+  readonly agregadas: number;
 }
 
 export interface RotuloX {
@@ -71,7 +99,11 @@ export interface ValorEscrito extends PontoGrafico {
 }
 
 export interface Desenho {
-  readonly tipo: 'linha' | 'barras';
+  readonly tipo: TipoGrafico;
+  /** Barras ou empilhadas: uma coluna por faixa do eixo X, e a escala parte do zero. */
+  readonly colunas: boolean;
+  /** Rosca: não há eixo nem grade para desenhar. */
+  readonly rosca: boolean;
   readonly escala: EscalaY;
   /** O y da linha do zero, de onde as barras crescem. Só faz sentido em barras. */
   readonly yDoZero: number;
@@ -79,17 +111,27 @@ export interface Desenho {
   readonly caminhos: readonly { readonly serie: number; readonly d: string }[];
   readonly pontos: readonly PontoGrafico[];
   readonly barras: readonly BarraGrafico[];
-  /** Pontos ou barras, o que o gráfico usar: é por aqui que a dica acha a coordenada. */
+  readonly fatias: readonly FatiaRosca[];
+  /** Pontos, barras ou fatias, o que o gráfico usar: é por aqui que a dica acha a coordenada. */
   readonly marcas: readonly PontoGrafico[];
+  /** A soma das séries em cada índice: a altura da coluna empilhada e a coluna "Total" da tabela. */
+  readonly totais: readonly number[];
+  /** O total do anel, já com a unidade. `null` fora da rosca. */
+  readonly total: string | null;
   readonly rotulosX: readonly RotuloX[];
   /** Último ponto de cada linha mais o destaque, sem repetir. Vazio em barras sem destaque. */
   readonly valoresEscritos: readonly ValorEscrito[];
-  /** Vazia quando há uma série só: aí o título do card já diz o que a linha é. */
+  /** Vazia com uma série só: aí o título do card já diz o que a linha é. Na rosca, as fatias. */
   readonly legenda: readonly { readonly serie: number; readonly nome: string }[];
 }
 
 export function numero(valor: number): string {
   return valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+}
+
+/** O número como ele aparece ao lado do ponto, na dica e no centro do anel. */
+export function comUnidade(valor: number, unidade: string): string {
+  return unidade ? `${numero(valor)} ${unidade}` : numero(valor);
 }
 
 /** O menor passo "redondo" que cobre `bruto`, na forma 1 / 2 / 2,5 / 5 × 10ⁿ. */
@@ -181,19 +223,111 @@ export function indicesComRotulo(eixoX: readonly string[]): number[] {
   return indices;
 }
 
+/** Um ponto do anel, já em coordenada do `viewBox`. */
+function noAnel(raio: number, angulo: number): string {
+  const x = ROSCA.centro.x + raio * Math.cos(angulo);
+  const y = ROSCA.centro.y + raio * Math.sin(angulo);
+  return `${x.toFixed(2)} ${y.toFixed(2)}`;
+}
+
+/**
+ * Um segmento de anel: arco externo, corta para dentro, arco interno de volta, fecha. O caminho
+ * nunca passa pelo centro — é isso que faz rosca em vez de pizza.
+ *
+ * Com uma fatia só o arco daria a volta inteira, e um `A` que começa onde termina não desenha
+ * nada: nesse caso o anel sai em dois meios-arcos de cada raio, e o furo vem do `fill-rule`.
+ */
+function anel(de: number, ate: number): string {
+  const { raio: re, raioInterno: ri } = ROSCA;
+  if (ate - de >= 2 * Math.PI - 1e-9) {
+    const meio = de + Math.PI;
+    return (
+      `M${noAnel(re, de)} A${re} ${re} 0 0 1 ${noAnel(re, meio)} A${re} ${re} 0 0 1 ${noAnel(re, de)} Z ` +
+      `M${noAnel(ri, de)} A${ri} ${ri} 0 0 1 ${noAnel(ri, meio)} A${ri} ${ri} 0 0 1 ${noAnel(ri, de)} Z`
+    );
+  }
+  const grande = ate - de > Math.PI ? 1 : 0;
+  return (
+    `M${noAnel(re, de)} A${re} ${re} 0 ${grande} 1 ${noAnel(re, ate)} ` +
+    `L${noAnel(ri, ate)} A${ri} ${ri} 0 ${grande} 0 ${noAnel(ri, de)} Z`
+  );
+}
+
+/**
+ * As fatias do anel, no máximo `MAX_FATIAS`.
+ *
+ * As categorias vêm da única série, ordenadas da maior para a menor — é assim que o olho compara
+ * ângulo. Passando do teto, as menores viram uma fatia "Outros", sempre a última: cortar a cauda
+ * fora faria os ângulos não fecharem o total. A fatia agregada nunca é o destaque, porque ela não
+ * é uma categoria do payload.
+ */
+function fatiasDaRosca(g: Grafico): FatiaRosca[] {
+  const escolhidas = (g.series[0]?.valores ?? [])
+    .map((valor, indice) => ({ indice, rotulo: g.eixoX[indice] ?? '', valor, agregadas: 1 }))
+    // Valor zero não tem arco: sairia só como um risco na borda da fatia vizinha.
+    .filter(c => c.valor > 0)
+    .sort((a, b) => b.valor - a.valor);
+
+  if (escolhidas.length > MAX_FATIAS) {
+    const cauda = escolhidas.slice(MAX_FATIAS - 1);
+    escolhidas.length = MAX_FATIAS - 1;
+    escolhidas.push({
+      indice: -1,
+      rotulo: 'Outros',
+      valor: cauda.reduce((soma, c) => soma + c.valor, 0),
+      agregadas: cauda.length,
+    });
+  }
+
+  const total = escolhidas.reduce((soma, c) => soma + c.valor, 0);
+  if (!(total > 0)) return [];
+
+  const vao = escolhidas.length > 1 ? VAO_ANGULAR : 0;
+  const raioMedio = (ROSCA.raio + ROSCA.raioInterno) / 2;
+  // Começa no topo e corre no sentido do relógio, que é por onde o olho entra no anel.
+  let inicio = -Math.PI / 2;
+
+  return escolhidas.map(c => {
+    const fracao = c.valor / total;
+    const abertura = fracao * 2 * Math.PI;
+    // O respiro nunca come mais de um quarto do arco: numa fatia fina ele a apagaria.
+    const recuo = Math.min(vao, abertura / 4);
+    const de = inicio + recuo / 2;
+    const ate = inicio + abertura - recuo / 2;
+    inicio += abertura;
+    const meio = (de + ate) / 2;
+    return {
+      serie: 0,
+      indice: c.indice,
+      valor: c.valor,
+      destacado: c.indice >= 0 && g.destaque?.serie === 0 && g.destaque?.indice === c.indice,
+      rotulo: c.rotulo,
+      fracao,
+      agregadas: c.agregadas,
+      d: anel(de, ate),
+      x: ROSCA.centro.x + raioMedio * Math.cos(meio),
+      y: ROSCA.centro.y + raioMedio * Math.sin(meio),
+    };
+  });
+}
+
 export function desenhar(g: Grafico): Desenho {
-  const doZero = g.tipo === 'barras';
-  const escala = escalaY(g.series.flatMap(s => s.valores), doZero, g.unidade);
+  const empilhado = g.tipo === 'barras_empilhadas';
+  const colunas = g.tipo === 'barras' || empilhado;
+  const rosca = g.tipo === 'rosca';
+  const totais = g.eixoX.map((_, i) => g.series.reduce((soma, s) => soma + (s.valores[i] ?? 0), 0));
+  // No empilhado é a coluna inteira que tem de caber no eixo, não o maior valor solto.
+  const escala = escalaY(empilhado ? totais : g.series.flatMap(s => s.valores), colunas, g.unidade);
   const y = (valor: number) => yNaEscala(valor, escala.min, escala.max);
   const yDoZero = y(Math.min(Math.max(0, escala.min), escala.max));
   const quantos = g.eixoX.length;
   const destacado = (serie: number, indice: number) =>
     g.destaque?.serie === serie && g.destaque?.indice === indice;
 
-  // Linha: pontos nas pontas da área. Barras: um ponto no meio de cada faixa, para a barra caber.
+  // Linha: pontos nas pontas da área. Colunas: um ponto no meio de cada faixa, para a barra caber.
   const faixa = LARGURA / Math.max(quantos, 1);
   const xDoIndice = (i: number) =>
-    g.tipo === 'barras'
+    colunas
       ? ESQUERDA + faixa * (i + 0.5)
       : quantos === 1
         ? ESQUERDA + LARGURA / 2
@@ -202,13 +336,34 @@ export function desenhar(g: Grafico): Desenho {
   const pontos: PontoGrafico[] = [];
   const barras: BarraGrafico[] = [];
   const larguraDoGrupo = faixa * OCUPACAO_DO_GRUPO;
-  const larguraDaBarra = larguraDoGrupo / Math.max(g.series.length, 1);
+  // Empilhado: uma coluna por faixa, e as séries se dividem na altura, não na largura.
+  const larguraDaBarra = empilhado ? larguraDoGrupo : larguraDoGrupo / Math.max(g.series.length, 1);
+  /** O quanto de cada coluna já foi empilhado: o próximo segmento nasce no topo do anterior. */
+  const acumulado = g.eixoX.map(() => 0);
 
   g.series.forEach((serie, s) => {
     serie.valores.forEach((valor, i) => {
       const centro = xDoIndice(i);
       const alturaNaEscala = y(valor);
-      if (g.tipo === 'barras') {
+      if (empilhado) {
+        // Segmento de valor zero sairia como um fio de 1 de altura colado na coluna.
+        if (valor === 0) return;
+        const base = acumulado[i]!;
+        acumulado[i] = base + valor;
+        const topo = y(base + valor);
+        barras.push({
+          serie: s,
+          indice: i,
+          valor,
+          destacado: destacado(s, i),
+          esquerda: centro - larguraDoGrupo / 2,
+          largura: larguraDoGrupo,
+          topo,
+          altura: Math.max(y(base) - topo, 1),
+          x: centro,
+          y: topo,
+        });
+      } else if (g.tipo === 'barras') {
         const esquerda = centro - larguraDoGrupo / 2 + s * larguraDaBarra;
         const vao = Math.min(2, larguraDaBarra * 0.18);
         barras.push({
@@ -223,7 +378,7 @@ export function desenhar(g: Grafico): Desenho {
           x: esquerda + larguraDaBarra / 2,
           y: Math.min(alturaNaEscala, yDoZero),
         });
-      } else {
+      } else if (g.tipo === 'linha') {
         pontos.push({ serie: s, indice: i, valor, destacado: destacado(s, i), x: centro, y: alturaNaEscala });
       }
     });
@@ -240,27 +395,41 @@ export function desenhar(g: Grafico): Desenho {
         }))
       : [];
 
-  const marcas = g.tipo === 'barras' ? barras : pontos;
+  const fatias = rosca ? fatiasDaRosca(g) : [];
+  const marcas = rosca ? fatias : colunas ? barras : pontos;
   return {
     tipo: g.tipo,
+    colunas,
+    rosca,
     escala,
     yDoZero,
     eixo: { esquerda: ESQUERDA, direita: DIREITA, base: BASE },
     caminhos,
     pontos,
     barras,
+    fatias,
     marcas,
-    rotulosX: indicesComRotulo(g.eixoX).map(i => ({ indice: i, texto: g.eixoX[i]!, x: xDoIndice(i) })),
+    totais,
+    total: rosca ? comUnidade(fatias.reduce((soma, f) => soma + f.valor, 0), g.unidade) : null,
+    rotulosX: rosca
+      ? []
+      : indicesComRotulo(g.eixoX).map(i => ({ indice: i, texto: g.eixoX[i]!, x: xDoIndice(i) })),
     valoresEscritos: valoresEscritos(g, marcas),
-    legenda: g.series.length > 1 ? g.series.map((s, i) => ({ serie: i, nome: s.nome })) : [],
+    legenda: rosca
+      ? fatias.map((f, i) => ({ serie: i, nome: f.rotulo }))
+      : g.series.length > 1
+        ? g.series.map((s, i) => ({ serie: i, nome: s.nome }))
+        : [],
   };
 }
 
 /**
  * O que ganha o valor por escrito: o fim de cada linha (onde o olho para) e o destaque. Em barras
- * só o destaque — a altura já compara, e um número por barra encheria o gráfico de texto.
+ * só o destaque — a altura já compara, e um número por barra encheria o gráfico de texto. Na rosca
+ * nenhum: o texto cairia sobre o arco, e o total no centro mais a dica já dão os números.
  */
 function valoresEscritos(g: Grafico, marcas: readonly PontoGrafico[]): ValorEscrito[] {
+  if (g.tipo === 'rosca') return [];
   const escolhidas = new Map<string, PontoGrafico>();
   if (g.tipo === 'linha') {
     g.series.forEach((_, s) => {
@@ -274,8 +443,5 @@ function valoresEscritos(g: Grafico, marcas: readonly PontoGrafico[]): ValorEscr
     const ponto = marcas.find(p => p.serie === d.serie && p.indice === d.indice);
     if (ponto) escolhidas.set(`${d.serie}:${d.indice}`, ponto);
   }
-  return [...escolhidas.values()].map(p => ({
-    ...p,
-    texto: g.unidade ? `${numero(p.valor)} ${g.unidade}` : numero(p.valor),
-  }));
+  return [...escolhidas.values()].map(p => ({ ...p, texto: comUnidade(p.valor, g.unidade) }));
 }

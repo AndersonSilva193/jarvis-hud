@@ -4,8 +4,10 @@ import type { RespostaConversa } from './conversa.modelos';
 export interface FontePesquisa { nome: string; url: string }
 export interface SerieGrafico { nome: string; valores: number[] }
 export interface DestaqueGrafico { serie: number; indice: number }
+export const TIPOS_GRAFICO = ['linha', 'barras', 'barras_empilhadas', 'rosca'] as const;
+export type TipoGrafico = typeof TIPOS_GRAFICO[number];
 export interface Grafico {
-  tipo: 'linha' | 'barras';
+  tipo: TipoGrafico;
   eixoX: string[];
   series: SerieGrafico[];
   unidade: string;
@@ -71,12 +73,24 @@ function numeros(v: unknown, quantidade: number): v is number[] {
 }
 /** O bloco `grafico` vem solto no payload: sem esta conferência o SVG desenharia com `NaN`. */
 function graficoValido(v: unknown): boolean {
-  if (!objeto(v) || v['tipo'] !== 'linha' && v['tipo'] !== 'barras' || !textos(v, ['unidade', 'origem'])) return false;
+  if (!objeto(v) || !TIPOS_GRAFICO.some(t => t === v['tipo']) || !textos(v, ['unidade', 'origem'])) return false;
   const eixoX = v['eixoX'];
   if (!Array.isArray(eixoX) || !eixoX.length || !eixoX.every(r => typeof r === 'string')) return false;
   const series = v['series'];
   if (!Array.isArray(series) || !series.length) return false;
   if (!series.every(s => objeto(s) && textos(s, ['nome']) && numeros(s['valores'], eixoX.length))) return false;
+  const valores = (series as SerieGrafico[]).map(s => s.valores);
+  const tipo = v['tipo'] as TipoGrafico;
+  // Valor negativo embaralha a altura da coluna empilhada e não tem ângulo de fatia.
+  if (tipo === 'barras_empilhadas' || tipo === 'rosca') {
+    if (!valores.every(vs => vs.every(n => n >= 0))) return false;
+  }
+  // Rosca é uma fatia por rótulo: com duas séries não se sabe qual delas o anel mostra, e
+  // soma zero dividiria por zero no ângulo de cada fatia.
+  if (tipo === 'rosca') {
+    if (series.length !== 1) return false;
+    if (!(valores[0]!.reduce((a, b) => a + b, 0) > 0)) return false;
+  }
   const destaque = v['destaque'];
   if (destaque == null) return true;
   return objeto(destaque) && Number.isInteger(destaque['serie']) && Number.isInteger(destaque['indice'])

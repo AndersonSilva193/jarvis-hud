@@ -63,6 +63,18 @@ svg {
   color: hud.$ok;
 }
 
+.serie--3 {
+  color: hud.$serie-violeta;
+}
+
+.serie--4 {
+  color: hud.$serie-magenta;
+}
+
+.serie--5 {
+  color: hud.$serie-ouro;
+}
+
 .linha {
   fill: none;
   stroke: currentColor;
@@ -95,6 +107,48 @@ svg {
     fill-opacity: 0.85;
     filter: drop-shadow(0 0 7px hud.$alerta);
   }
+}
+
+// O caminho da fatia fecha por fora e por dentro em sentidos opostos: o `evenodd` é o que abre o
+// furo do anel no caso da fatia única, em que os dois contornos vêm no mesmo `d`.
+.fatia {
+  fill: currentColor;
+  fill-opacity: 0.68;
+  fill-rule: evenodd;
+  stroke: currentColor;
+  stroke-width: 1;
+  cursor: pointer;
+  transform-box: view-box;
+  transform-origin: center;
+  transform: scale(0.9);
+  opacity: 0;
+  animation: surgir 0.4s ease-out var(--atraso, 0ms) forwards;
+
+  &.acesa {
+    fill-opacity: 0.9;
+  }
+
+  &.destacada {
+    color: hud.$alerta;
+    fill-opacity: 0.85;
+    filter: drop-shadow(0 0 7px hud.$alerta);
+  }
+}
+
+// O total vive no furo do anel: é o número que a rosca existe para dizer.
+.total-valor {
+  fill: hud.$texto;
+  font-size: 26px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+.total-rotulo {
+  fill: hud.$texto-fraco;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-anchor: middle;
+  text-transform: uppercase;
 }
 
 .ponto {
@@ -213,6 +267,13 @@ svg {
   }
 }
 
+@keyframes surgir {
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 // O `styles.scss` global desliga `animation` com `!important` aqui, então sem este bloco o estado
 // inicial ficaria congelado: a linha invisível e as barras achatadas.
 @media (prefers-reduced-motion: reduce) {
@@ -222,5 +283,10 @@ svg {
 
   .barra {
     transform: none;
+  }
+
+  .fatia {
+    transform: none;
+    opacity: 1;
   }
 }

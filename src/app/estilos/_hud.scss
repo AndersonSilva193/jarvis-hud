@@ -17,6 +17,12 @@ $alerta: #ffb545;
 $erro: #ff6b7d;
 $ok: #4dffa8;
 
+// Cores de série do gráfico, depois do ciano, do azul-energia e do $ok. São seis no total porque
+// a rosca vai até seis fatias. Nenhuma encosta no $alerta, que é a cor reservada do destaque.
+$serie-violeta: #a97bff;
+$serie-magenta: #ff79c6;
+$serie-ouro: #e0d96b;
+
 $mono: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
 
 // O canto cortado é o que dá a cara de painel de HUD em vez de card de site.

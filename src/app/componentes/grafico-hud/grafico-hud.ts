@@ -1,10 +1,10 @@
 import { Component, computed, input, signal } from '@angular/core';
 
 import type { Grafico } from '../../nucleo/tela.modelos';
-import { AREA, desenhar, numero, type PontoGrafico } from './grafico-hud.modelo';
+import { AREA, comUnidade, desenhar, numero, type PontoGrafico, ROSCA } from './grafico-hud.modelo';
 
-/** Quantas cores de série existem antes de repetir: ciano, azul-energia, ok. */
-const CORES = 3;
+/** Quantas cores de série existem antes de repetir. São seis porque a rosca vai até seis fatias. */
+const CORES = 6;
 
 /**
  * O gráfico do card de pesquisa, em SVG próprio.
@@ -29,16 +29,18 @@ const CORES = 3;
         [attr.aria-label]="titulo()"
         (pointerleave)="ativo.set(null)"
       >
-        <g class="grade" aria-hidden="true">
-          @for (marca of d.escala.marcas; track marca.valor) {
-            <line [attr.x1]="d.eixo.esquerda" [attr.x2]="d.eixo.direita" [attr.y1]="marca.y" [attr.y2]="marca.y" />
-            <text class="marca-y" [attr.x]="d.eixo.esquerda - 10" [attr.y]="marca.y + 3.5">{{ marca.rotulo }}</text>
-          }
-          <line class="eixo" [attr.x1]="d.eixo.esquerda" [attr.x2]="d.eixo.direita" [attr.y1]="d.eixo.base" [attr.y2]="d.eixo.base" />
-          @for (rotulo of d.rotulosX; track rotulo.indice) {
-            <text class="marca-x" [attr.x]="rotulo.x" [attr.y]="d.eixo.base + 18">{{ rotulo.texto }}</text>
-          }
-        </g>
+        @if (!d.rosca) {
+          <g class="grade" aria-hidden="true">
+            @for (marca of d.escala.marcas; track marca.valor) {
+              <line [attr.x1]="d.eixo.esquerda" [attr.x2]="d.eixo.direita" [attr.y1]="marca.y" [attr.y2]="marca.y" />
+              <text class="marca-y" [attr.x]="d.eixo.esquerda - 10" [attr.y]="marca.y + 3.5">{{ marca.rotulo }}</text>
+            }
+            <line class="eixo" [attr.x1]="d.eixo.esquerda" [attr.x2]="d.eixo.direita" [attr.y1]="d.eixo.base" [attr.y2]="d.eixo.base" />
+            @for (rotulo of d.rotulosX; track rotulo.indice) {
+              <text class="marca-x" [attr.x]="rotulo.x" [attr.y]="d.eixo.base + 18">{{ rotulo.texto }}</text>
+            }
+          </g>
+        }
 
         @for (caminho of d.caminhos; track caminho.serie) {
           <path
@@ -64,6 +66,22 @@ const CORES = 3;
           />
         }
 
+        @for (fatia of d.fatias; track fatia.indice; let f = $index) {
+          <path
+            [class]="'fatia ' + cor(f) + (fatia.destacado ? ' destacada' : '') + (aceso(fatia) ? ' acesa' : '')"
+            [attr.d]="fatia.d"
+            [style.--atraso]="f * 70 + 'ms'"
+            aria-hidden="true"
+            (pointerenter)="mostrar(fatia)"
+            (pointerdown)="mostrar(fatia)"
+          />
+        }
+
+        @if (d.total; as total) {
+          <text class="total-valor" [attr.x]="anel.centro.x" [attr.y]="anel.centro.y - 2" aria-hidden="true">{{ total }}</text>
+          <text class="total-rotulo" [attr.x]="anel.centro.x" [attr.y]="anel.centro.y + 18" aria-hidden="true">total</text>
+        }
+
         @for (ponto of d.pontos; track ponto.serie + ':' + ponto.indice) {
           <circle
             [class]="'ponto ' + cor(ponto.serie) + (ponto.destacado ? ' destacado' : '') + (aceso(ponto) ? ' aceso' : '')"
@@ -86,10 +104,10 @@ const CORES = 3;
         @for (valor of d.valoresEscritos; track valor.serie + ':' + valor.indice) {
           <text
             [class]="'valor ' + cor(valor.serie) + (valor.destacado ? ' destacado' : '')"
-            [attr.x]="valor.x + (d.tipo === 'barras' ? 0 : 9)"
-            [attr.y]="valor.y - (d.tipo === 'barras' ? 7 : 0)"
-            [attr.dy]="d.tipo === 'barras' ? 0 : 4"
-            [attr.text-anchor]="d.tipo === 'barras' ? 'middle' : 'start'"
+            [attr.x]="valor.x + (d.colunas ? 0 : 9)"
+            [attr.y]="valor.y - (d.colunas ? 7 : 0)"
+            [attr.dy]="d.colunas ? 0 : 4"
+            [attr.text-anchor]="d.colunas ? 'middle' : 'start'"
             aria-hidden="true"
           >{{ valor.texto }}</text>
         }
@@ -120,6 +138,9 @@ const CORES = 3;
           @for (serie of g.series; track $index) {
             <th scope="col">{{ serie.nome }}{{ g.unidade ? ' (' + g.unidade + ')' : '' }}</th>
           }
+          @if (d.tipo === 'barras_empilhadas') {
+            <th scope="col">Total{{ g.unidade ? ' (' + g.unidade + ')' : '' }}</th>
+          }
         </tr>
       </thead>
       <tbody>
@@ -129,9 +150,20 @@ const CORES = 3;
             @for (serie of g.series; track $index) {
               <td>{{ texto(serie.valores[i]) }}</td>
             }
+            @if (d.tipo === 'barras_empilhadas') {
+              <td>{{ texto(d.totais[i]) }}</td>
+            }
           </tr>
         }
       </tbody>
+      @if (d.rosca) {
+        <tfoot>
+          <tr>
+            <th scope="row">Total</th>
+            <td>{{ texto(soma()) }}</td>
+          </tr>
+        </tfoot>
+      }
     </table>
   `,
   styleUrl: './grafico-hud.scss',
@@ -142,8 +174,12 @@ export class GraficoHudComponent {
   readonly titulo = input.required<string>();
 
   protected readonly area = AREA;
+  protected readonly anel = ROSCA;
   protected readonly desenho = computed(() => desenhar(this.grafico()));
   protected readonly ativo = signal<{ serie: number; indice: number } | null>(null);
+
+  /** A soma de tudo: o pé da tabela da rosca, par textual do número no centro do anel. */
+  protected readonly soma = computed(() => this.desenho().totais.reduce((a, b) => a + b, 0));
 
   protected readonly dica = computed(() => {
     const ativo = this.ativo();
@@ -152,10 +188,10 @@ export class GraficoHudComponent {
     const marca = this.desenho().marcas.find(m => m.serie === ativo.serie && m.indice === ativo.indice);
     if (!marca) return null;
     return {
-      rotulo: g.eixoX[marca.indice] ?? '',
-      // Com uma série só o nome dela não acrescenta nada ao que o título já disse.
-      serie: g.series.length > 1 ? (g.series[marca.serie]?.nome ?? '') : '',
-      valor: g.unidade ? `${numero(marca.valor)} ${g.unidade}` : numero(marca.valor),
+      // A fatia agregada da rosca não é um índice do eixo X, então traz o rótulo consigo.
+      rotulo: marca.rotulo ?? g.eixoX[marca.indice] ?? '',
+      serie: this.segundaLinha(marca),
+      valor: comUnidade(marca.valor, g.unidade),
       // Presa à borda para a caixa não vazar do card nos pontos das pontas.
       esquerda: Math.min(92, Math.max(8, (marca.x / AREA.largura) * 100)),
       topo: (marca.y / AREA.altura) * 100,
@@ -177,5 +213,20 @@ export class GraficoHudComponent {
 
   protected texto(valor: number | undefined): string {
     return valor === undefined ? '—' : numero(valor);
+  }
+
+  /** O nome da série; na rosca, a participação da fatia no total, que é o que falta ali. */
+  private segundaLinha(marca: PontoGrafico): string {
+    const g = this.grafico();
+    const fatia = this.desenho().fatias.find(f => f.indice === marca.indice);
+    if (fatia) {
+      const partes: string[] = [];
+      // Com a unidade já em %, a participação seria o mesmo número escrito duas vezes.
+      if (g.unidade !== '%') partes.push(`${numero(Math.round(fatia.fracao * 1000) / 10)}% do total`);
+      if (fatia.agregadas > 1) partes.push(`${fatia.agregadas} categorias`);
+      return partes.join(' · ');
+    }
+    // Com uma série só o nome dela não acrescenta nada ao que o título já disse.
+    return g.series.length > 1 ? (g.series[marca.serie]?.nome ?? '') : '';
   }
 }

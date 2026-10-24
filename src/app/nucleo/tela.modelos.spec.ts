@@ -51,6 +51,27 @@ describe('a pesquisa com layout de gráfico', () => {
     expect(lerCardTela(com(grafico))).not.toBeNull();
   });
 
+  it('aceita barras empilhadas e rosca', () => {
+    const empilhadas = {
+      ...CARD.dados.grafico,
+      tipo: 'barras_empilhadas',
+      destaque: null,
+      series: [
+        { nome: 'Solar', valores: [12, 18, 9, 0] },
+        { nome: 'Eólica', valores: [8, 6, 11, 14] },
+      ],
+    };
+    expect(lerCardTela(com(empilhadas))).not.toBeNull();
+
+    const rosca = {
+      ...CARD.dados.grafico,
+      tipo: 'rosca',
+      destaque: null,
+      series: [{ nome: 'Participação', valores: [40, 31, 18, 11] }],
+    };
+    expect(lerCardTela(com(rosca))).not.toBeNull();
+  });
+
   it.each([
     ['sem o bloco do gráfico', undefined],
     ['com tipo desconhecido', { ...CARD.dados.grafico, tipo: 'pizza' }],
@@ -61,6 +82,11 @@ describe('a pesquisa com layout de gráfico', () => {
     ['com valor infinito', { ...CARD.dados.grafico, series: [{ nome: 'Máxima', valores: [31, 29, 26, Infinity] }] }],
     ['com destaque fora da faixa', { ...CARD.dados.grafico, destaque: { serie: 0, indice: 9 } }],
     ['com unidade que não é texto', { ...CARD.dados.grafico, unidade: 7 }],
+    // A rosca é uma fatia por rótulo: com duas séries não se sabe qual delas o anel mostra.
+    ['com rosca de duas séries', { ...CARD.dados.grafico, tipo: 'rosca', destaque: null, series: [{ nome: 'A', valores: [1, 2, 3, 4] }, { nome: 'B', valores: [4, 3, 2, 1] }] }],
+    ['com rosca de soma zero', { ...CARD.dados.grafico, tipo: 'rosca', destaque: null, series: [{ nome: 'A', valores: [0, 0, 0, 0] }] }],
+    ['com rosca de valor negativo', { ...CARD.dados.grafico, tipo: 'rosca', destaque: null, series: [{ nome: 'A', valores: [5, -1, 3, 2] }] }],
+    ['com empilhadas de valor negativo', { ...CARD.dados.grafico, tipo: 'barras_empilhadas', destaque: null, series: [{ nome: 'A', valores: [5, -1, 3, 2] }] }],
   ])('rejeita o card %s', (_caso, grafico) => {
     expect(lerCardTela(com(grafico))).toBeNull();
   });

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Grafico } from '../../nucleo/tela.modelos';
-import { desenhar, escalaY, indicesComRotulo, passoDosRotulos, passoRedondo } from './grafico-hud.modelo';
+import {
+  desenhar,
+  escalaY,
+  indicesComRotulo,
+  passoDosRotulos,
+  passoRedondo,
+  ROSCA,
+} from './grafico-hud.modelo';
 
 const CLIMA: Grafico = {
   tipo: 'linha',
@@ -9,6 +16,28 @@ const CLIMA: Grafico = {
   series: [{ nome: 'Máxima', valores: [31, 29, 26, 23] }],
   unidade: '°C',
   destaque: { serie: 0, indice: 3 },
+  origem: 'pesquisa',
+};
+
+/** Totais por coluna: 20, 24, 20 e 14 — todos maiores que o maior valor solto, 18. */
+const EMPILHADO: Grafico = {
+  tipo: 'barras_empilhadas',
+  eixoX: ['seg', 'ter', 'qua', 'qui'],
+  series: [
+    { nome: 'Solar', valores: [12, 18, 9, 0] },
+    { nome: 'Eólica', valores: [8, 6, 11, 14] },
+  ],
+  unidade: 'GW',
+  destaque: null,
+  origem: 'pesquisa',
+};
+
+const ANEL: Grafico = {
+  tipo: 'rosca',
+  eixoX: ['Android', 'iOS', 'Outros SO'],
+  series: [{ nome: 'Participação', valores: [71, 27, 2] }],
+  unidade: '%',
+  destaque: null,
   origem: 'pesquisa',
 };
 
@@ -136,9 +165,131 @@ describe('o desenho do gráfico', () => {
   });
 
   it('todo ponto fica dentro da área do viewBox', () => {
-    for (const d of [desenhar(CLIMA), desenhar(grafico({ tipo: 'barras' }))]) {
+    const tipos = [desenhar(CLIMA), desenhar(grafico({ tipo: 'barras' })), desenhar(EMPILHADO), desenhar(ANEL)];
+    for (const d of tipos) {
+      expect(d.marcas.length).toBeGreaterThan(0);
       expect(d.marcas.every(m => m.x >= d.eixo.esquerda - 1 && m.x <= d.eixo.direita + 1)).toBe(true);
       expect(d.marcas.every(m => Number.isFinite(m.y) && m.y >= 0 && m.y <= d.eixo.base + 1)).toBe(true);
     }
+  });
+});
+
+describe('o desenho das barras empilhadas', () => {
+  it('a escala cobre o total da coluna, não o maior valor solto', () => {
+    const d = desenhar(EMPILHADO);
+    expect(d.totais).toEqual([20, 24, 20, 14]);
+    expect(d.escala.min).toBe(0);
+    // Sobre os valores soltos a escala pararia em 20 e a coluna de 24 estouraria o eixo.
+    expect(d.escala.max).toBeGreaterThanOrEqual(24);
+  });
+
+  it('os segmentos de uma coluna se encostam, do zero para cima, na mesma largura', () => {
+    const d = desenhar(EMPILHADO);
+    const coluna = d.barras.filter(b => b.indice === 0).sort((a, b) => b.topo - a.topo);
+    expect(coluna).toHaveLength(2);
+    // O de baixo nasce na linha do zero e o de cima continua exatamente onde ele termina.
+    expect(coluna[0]!.topo + coluna[0]!.altura).toBeCloseTo(d.yDoZero, 5);
+    expect(coluna[1]!.topo + coluna[1]!.altura).toBeCloseTo(coluna[0]!.topo, 5);
+    expect(coluna[0]!.esquerda).toBeCloseTo(coluna[1]!.esquerda, 5);
+    expect(new Set(d.barras.map(b => b.largura.toFixed(4))).size).toBe(1);
+    // Mais valor, mais altura: é a soma da coluna que o eixo mede.
+    expect(coluna[0]!.altura).toBeGreaterThan(coluna[1]!.altura);
+  });
+
+  it('segmento de valor zero não entra no desenho', () => {
+    const d = desenhar(EMPILHADO);
+    expect(d.barras).toHaveLength(7);
+    const ultima = d.barras.filter(b => b.indice === 3);
+    expect(ultima).toHaveLength(1);
+    expect(ultima[0]!.serie).toBe(1);
+    expect(ultima[0]!.topo + ultima[0]!.altura).toBeCloseTo(d.yDoZero, 5);
+  });
+
+  it('escreve só o valor do destaque, no topo do próprio segmento', () => {
+    const d = desenhar({ ...EMPILHADO, destaque: { serie: 1, indice: 2 } });
+    expect(d.valoresEscritos).toHaveLength(1);
+    expect(d.valoresEscritos[0]!.texto).toBe('11 GW');
+    const segmento = d.barras.find(b => b.serie === 1 && b.indice === 2)!;
+    expect(d.valoresEscritos[0]!.y).toBeCloseTo(segmento.topo, 5);
+  });
+
+  it('não desenha linha nem ponto, e a dica se ancora nos segmentos', () => {
+    const d = desenhar(EMPILHADO);
+    expect(d.caminhos).toEqual([]);
+    expect(d.pontos).toEqual([]);
+    expect(d.colunas).toBe(true);
+    expect(d.marcas).toBe(d.barras);
+  });
+});
+
+describe('o desenho da rosca', () => {
+  it('é sempre um anel: o caminho volta ao raio interno e nunca passa pelo centro', () => {
+    const d = desenhar(ANEL);
+    expect(d.fatias).toHaveLength(3);
+    expect(ROSCA.raioInterno).toBeGreaterThan(0);
+    for (const fatia of d.fatias) {
+      expect(fatia.d).toContain(`A${ROSCA.raioInterno} ${ROSCA.raioInterno}`);
+      expect(fatia.d).toContain(`A${ROSCA.raio} ${ROSCA.raio}`);
+      expect(fatia.d).not.toContain(`${ROSCA.centro.x.toFixed(2)} ${ROSCA.centro.y.toFixed(2)}`);
+      expect(fatia.d).not.toContain('NaN');
+    }
+  });
+
+  it('as fatias saem da maior para a menor e as frações fecham o total', () => {
+    const d = desenhar(ANEL);
+    expect(d.fatias.map(f => f.rotulo)).toEqual(['Android', 'iOS', 'Outros SO']);
+    expect(d.fatias.map(f => f.valor)).toEqual([71, 27, 2]);
+    expect(d.fatias.reduce((soma, f) => soma + f.fracao, 0)).toBeCloseTo(1, 10);
+    expect(d.total).toBe('100 %');
+    expect(d.rosca).toBe(true);
+    // Sem eixo não há grade nem rótulo de X para desenhar.
+    expect(d.rotulosX).toEqual([]);
+    expect(d.valoresEscritos).toEqual([]);
+  });
+
+  it('acima de seis categorias resume as menores numa fatia "Outros", sempre a última', () => {
+    const d = desenhar({
+      ...ANEL,
+      eixoX: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'],
+      series: [{ nome: 'Fatia', valores: [40, 20, 10, 8, 6, 5, 4, 3, 2] }],
+    });
+    expect(d.fatias).toHaveLength(6);
+    expect(d.fatias.slice(0, 5).map(f => f.valor)).toEqual([40, 20, 10, 8, 6]);
+    const outros = d.fatias[5]!;
+    expect(outros.rotulo).toBe('Outros');
+    expect(outros.indice).toBe(-1);
+    // Nada se perde: a cauda inteira vira uma fatia só, senão os ângulos não fechariam o total.
+    expect(outros.valor).toBe(14);
+    expect(outros.agregadas).toBe(4);
+    expect(d.fatias.slice(0, 5).every(f => f.agregadas === 1)).toBe(true);
+    expect(d.total).toBe('98 %');
+  });
+
+  it('com uma categoria só desenha o anel inteiro, sem arco de comprimento zero', () => {
+    const d = desenhar({ ...ANEL, eixoX: ['Tudo'], series: [{ nome: 'Fatia', valores: [250] }] });
+    expect(d.fatias).toHaveLength(1);
+    expect(d.fatias[0]!.fracao).toBe(1);
+    // Duas metades em cada raio: um `A` de 360° começaria onde termina e não desenharia nada.
+    expect(d.fatias[0]!.d.match(/A/g)).toHaveLength(4);
+    expect(d.fatias[0]!.d).not.toContain('NaN');
+    expect(d.total).toBe('250 %');
+  });
+
+  it('categoria de valor zero não vira fatia, mas a legenda nomeia cada cor do anel', () => {
+    const d = desenhar({
+      ...ANEL,
+      eixoX: ['Android', 'iOS', 'Vazio'],
+      series: [{ nome: 'Participação', valores: [60, 40, 0] }],
+    });
+    expect(d.fatias.map(f => f.rotulo)).toEqual(['Android', 'iOS']);
+    // Com uma série só a legenda das séries sairia vazia, e aí nada nomearia as cores.
+    expect(d.legenda).toEqual([{ serie: 0, nome: 'Android' }, { serie: 1, nome: 'iOS' }]);
+  });
+
+  it('o destaque acende a fatia daquela categoria, mesmo fora da ordem do payload', () => {
+    const d = desenhar({ ...ANEL, destaque: { serie: 0, indice: 1 } });
+    const destacadas = d.fatias.filter(f => f.destacado);
+    expect(destacadas).toHaveLength(1);
+    expect(destacadas[0]!.rotulo).toBe('iOS');
   });
 });
