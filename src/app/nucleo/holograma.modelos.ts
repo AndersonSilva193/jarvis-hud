@@ -29,7 +29,12 @@ export interface MetaHolograma {
   nome: string;
   categoria: string;
   descricao: string;
+  /** O id da geração, que o `Continuar` devolve ao servidor; ausente nos exemplos. */
+  id?: string;
 }
+
+/** O formato do id que o servidor sorteia (`HologramaService.idValido`). */
+const ID_GERACAO = /^h[0-9a-z]{8}$/;
 
 /** Uma peça pronta para desenhar, como sai da `MontagemDeHolograma` (`docs/HOLOGRAMA.md` §7). */
 export interface PecaHolograma {
@@ -53,6 +58,11 @@ export interface PecaHolograma {
 export interface FimHolograma {
   pecas: number;
   avisos: number;
+  /** `incompleto`: o servidor fechou antes da linha de fim do modelo (teto, prazo, falha). */
+  status: 'completo' | 'incompleto';
+  /** Por que ficou incompleto; frase fixa do servidor. */
+  motivo?: string;
+  id?: string;
   /** Quem gerou: só nas gerações reais (o exemplo fixo não informa). */
   provedor?: 'anthropic' | 'local';
   modelo?: string;
@@ -107,7 +117,10 @@ function texto(v: unknown, maximo: number): string {
 export function lerMetaHolograma(v: unknown): MetaHolograma | null {
   if (!objeto(v)) return null;
   const nome = texto(v['nome'], 80);
-  return nome ? { nome, categoria: texto(v['categoria'], 40), descricao: texto(v['descricao'], 200) } : null;
+  if (!nome) return null;
+  const meta: MetaHolograma = { nome, categoria: texto(v['categoria'], 40), descricao: texto(v['descricao'], 200) };
+  if (typeof v['id'] === 'string' && ID_GERACAO.test(v['id'])) meta.id = v['id'];
+  return meta;
 }
 
 /**
@@ -150,7 +163,17 @@ export function lerPecaHolograma(v: unknown): PecaHolograma | null {
 
 export function lerFimHolograma(v: unknown): FimHolograma | null {
   if (!objeto(v) || !Number.isInteger(v['pecas']) || !Number.isInteger(v['avisos'])) return null;
-  const fim: FimHolograma = { pecas: v['pecas'] as number, avisos: v['avisos'] as number };
+  // Servidor velho não manda `status`: o fim dele era sempre o do objeto inteiro.
+  const fim: FimHolograma = {
+    pecas: v['pecas'] as number,
+    avisos: v['avisos'] as number,
+    status: v['status'] === 'incompleto' ? 'incompleto' : 'completo',
+  };
+  if (fim.status === 'incompleto') {
+    const motivo = texto(v['motivo'], 120);
+    if (motivo) fim.motivo = motivo;
+  }
+  if (typeof v['id'] === 'string' && ID_GERACAO.test(v['id'])) fim.id = v['id'];
   // O resumo é opcional e cada campo se confere sozinho: servidor velho não manda nenhum.
   if (v['provedor'] === 'anthropic' || v['provedor'] === 'local') fim.provedor = v['provedor'];
   if (typeof v['modelo'] === 'string') fim.modelo = v['modelo'].slice(0, 80);
@@ -162,6 +185,12 @@ export function lerFimHolograma(v: unknown): FimHolograma | null {
 
 function numeroNaoNegativo(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0;
+}
+
+/** "Incompleto: o modelo bateu no teto de tokens" — o motivo do servidor em minúscula e sem ponto. */
+export function textoIncompleto(motivo: string | undefined): string {
+  const limpo = (motivo ?? '').trim().replace(/\.$/, '');
+  return limpo ? `Incompleto: ${limpo.charAt(0).toLowerCase()}${limpo.slice(1)}` : 'Incompleto';
 }
 
 /** O `aviso` diz que o gerador trocou (Haiku ↔ local)? É o servidor que marca, não o texto. */

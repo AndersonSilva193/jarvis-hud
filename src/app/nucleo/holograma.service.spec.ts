@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ErroDoStreamHolograma, HologramaStreamService, type OuvintesDoHolograma } from './holograma-stream.service';
+import { ConexaoMudaHolograma, ErroDoStreamHolograma, HologramaStreamService, type OuvintesDoHolograma } from './holograma-stream.service';
 import { HologramaService } from './holograma.service';
 import type { PecaHolograma } from './holograma.modelos';
 
@@ -16,7 +16,7 @@ function streamControlado() {
   let sinal!: AbortSignal;
   let terminar!: (terminou: boolean) => void;
   let falhar!: (erro: unknown) => void;
-  const gerar = vi.fn((_objeto: string, _detalhe: string, _provedor: string, o: OuvintesDoHolograma, s: AbortSignal) => {
+  const abrir = (o: OuvintesDoHolograma, s: AbortSignal) => {
     ouvintes = o;
     sinal = s;
     return new Promise<boolean>((resolver, rejeitar) => {
@@ -24,9 +24,12 @@ function streamControlado() {
       falhar = rejeitar;
       s.addEventListener('abort', () => rejeitar(new DOMException('abortado', 'AbortError')));
     });
-  });
+  };
+  const gerar = vi.fn((_objeto: string, _detalhe: string, _provedor: string, o: OuvintesDoHolograma, s: AbortSignal) => abrir(o, s));
+  const continuar = vi.fn((_id: string, _recebidas: number, o: OuvintesDoHolograma, s: AbortSignal) => abrir(o, s));
   return {
     gerar,
+    continuar,
     get ouvintes() { return ouvintes; },
     get sinal() { return sinal; },
     terminar: (t: boolean) => terminar(t),
@@ -40,7 +43,7 @@ describe('HologramaService.gerar', () => {
   beforeEach(() => {
     stream = streamControlado();
     TestBed.configureTestingModule({
-      providers: [{ provide: HologramaStreamService, useValue: { gerar: stream.gerar, exemplo: vi.fn() } }],
+      providers: [{ provide: HologramaStreamService, useValue: { gerar: stream.gerar, continuar: stream.continuar, exemplo: vi.fn() } }],
     });
   });
 
@@ -59,7 +62,7 @@ describe('HologramaService.gerar', () => {
     expect(holograma.escaneando()).toBe(false);
     expect(holograma.construindo()).toBe(true);
 
-    stream.ouvintes.fim({ pecas: 1, avisos: 0 });
+    stream.ouvintes.fim({ pecas: 1, avisos: 0, status: 'completo' });
     stream.terminar(true);
     await pedido;
     expect(holograma.fase()).toBe('pronto');
@@ -79,7 +82,7 @@ describe('HologramaService.gerar', () => {
     expect(localStorage.getItem('jarvis-hud.holograma.gerador.v1')).toBe('local');
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [{ provide: HologramaStreamService, useValue: { gerar: stream.gerar, exemplo: vi.fn() } }],
+      providers: [{ provide: HologramaStreamService, useValue: { gerar: stream.gerar, continuar: stream.continuar, exemplo: vi.fn() } }],
     });
     expect(TestBed.inject(HologramaService).gerador()).toBe('local');
     localStorage.removeItem('jarvis-hud.holograma.gerador.v1');
@@ -91,7 +94,7 @@ describe('HologramaService.gerar', () => {
     stream.ouvintes.aviso('O Haiku falhou; troquei para o gerador local.', true);
     stream.ouvintes.peca(PECA);
     expect(holograma.selo()).toBe('');
-    stream.ouvintes.fim({ pecas: 1, avisos: 1, provedor: 'anthropic', modelo: 'claude-haiku-5-5', custoUsd: 0.002 });
+    stream.ouvintes.fim({ pecas: 1, avisos: 1, status: 'completo', provedor: 'anthropic', modelo: 'claude-haiku-5-5', custoUsd: 0.002 });
     stream.terminar(true);
     await pedido;
 
@@ -105,7 +108,7 @@ describe('HologramaService.gerar', () => {
     const pedido = holograma.gerar('turbina', 'normal');
     stream.ouvintes.peca(PECA);
     stream.ouvintes.erro('O modelo não respondeu a tempo.');
-    stream.ouvintes.fim({ pecas: 1, avisos: 0 });
+    stream.ouvintes.fim({ pecas: 1, avisos: 0, status: 'completo' });
     stream.terminar(true);
     await pedido;
 
@@ -122,6 +125,73 @@ describe('HologramaService.gerar', () => {
     await pedido;
 
     expect(holograma.fase()).toBe('erro');
+    expect(holograma.pecas()).toHaveLength(1);
+  });
+
+  it('fim incompleto mostra o motivo e o Continuar retoma sem limpar a cena', async () => {
+    const holograma = TestBed.inject(HologramaService);
+    const pedido = holograma.gerar('Torre Eiffel', 'detalhado');
+    stream.ouvintes.meta({ nome: 'Torre Eiffel', categoria: 'arquitetura', descricao: '', id: 'habc12345' });
+    stream.ouvintes.peca(PECA);
+    stream.ouvintes.fim({ pecas: 1, avisos: 0, status: 'incompleto', motivo: 'o modelo bateu no teto de tokens', id: 'habc12345' });
+    stream.terminar(true);
+    await pedido;
+
+    expect(holograma.fase()).toBe('incompleto');
+    expect(holograma.erro()).toBe('Incompleto: o modelo bateu no teto de tokens');
+    expect(holograma.podeContinuar()).toBe(true);
+    const geracao = holograma.geracao();
+
+    const retomada = holograma.continuar();
+    expect(stream.continuar).toHaveBeenCalledWith('habc12345', 1, expect.anything(), expect.anything());
+    expect(holograma.construindo()).toBe(true);
+    stream.ouvintes.peca({ ...PECA, id: 'topo' });
+    stream.ouvintes.fim({ pecas: 2, avisos: 0, status: 'completo', id: 'habc12345' });
+    stream.terminar(true);
+    await retomada;
+
+    expect(holograma.fase()).toBe('pronto');
+    expect(holograma.pecas().map((p) => p.id)).toEqual(['cubo', 'topo']);
+    expect(holograma.geracao()).toBe(geracao);
+  });
+
+  it('a conexão que cai com peça e id na tela vira incompleto, não erro', async () => {
+    const holograma = TestBed.inject(HologramaService);
+    const pedido = holograma.gerar('motor V8', 'detalhado');
+    stream.ouvintes.meta({ nome: 'Motor V8', categoria: '', descricao: '', id: 'habc12345' });
+    stream.ouvintes.peca(PECA);
+    stream.terminar(false);
+    await pedido;
+
+    expect(holograma.fase()).toBe('incompleto');
+    expect(holograma.erro()).toBe('Incompleto: a conexão caiu no meio');
+    expect(holograma.podeContinuar()).toBe(true);
+  });
+
+  it('a conexão muda na volta do segundo plano também oferece continuar', async () => {
+    const holograma = TestBed.inject(HologramaService);
+    const pedido = holograma.gerar('motor V8', 'detalhado');
+    stream.ouvintes.meta({ nome: 'Motor V8', categoria: '', descricao: '', id: 'habc12345' });
+    stream.ouvintes.peca(PECA);
+    stream.falhar(new ConexaoMudaHolograma());
+    await pedido;
+
+    expect(holograma.podeContinuar()).toBe(true);
+  });
+
+  it('continuar o que o servidor não guarda mais explica e não apaga', async () => {
+    const holograma = TestBed.inject(HologramaService);
+    const pedido = holograma.gerar('motor V8', 'detalhado');
+    stream.ouvintes.meta({ nome: 'Motor V8', categoria: '', descricao: '', id: 'habc12345' });
+    stream.ouvintes.peca(PECA);
+    stream.terminar(false);
+    await pedido;
+
+    const retomada = holograma.continuar();
+    stream.falhar(new ErroDoStreamHolograma(404));
+    await retomada;
+    expect(holograma.fase()).toBe('erro');
+    expect(holograma.erro()).toBe('O servidor não guarda mais esse objeto; gere de novo.');
     expect(holograma.pecas()).toHaveLength(1);
   });
 

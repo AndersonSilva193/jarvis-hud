@@ -1,11 +1,12 @@
 import { Service, computed, inject, signal } from '@angular/core';
 
-import { ErroDoStreamHolograma, HologramaStreamService, type OuvintesDoHolograma } from './holograma-stream.service';
+import { ConexaoMudaHolograma, ErroDoStreamHolograma, HologramaStreamService, type OuvintesDoHolograma } from './holograma-stream.service';
 import {
   GERADOR_PADRAO_HOLOGRAMA,
   MAX_OBJETO_HOLOGRAMA,
   lerGeradorHolograma,
   seloDoHolograma,
+  textoIncompleto,
   type DetalheHolograma,
   type FimHolograma,
   type GeradorHolograma,
@@ -14,10 +15,13 @@ import {
   type PecaHolograma,
 } from './holograma.modelos';
 
-export type FaseHolograma = 'vazio' | 'construindo' | 'pronto' | 'erro' | 'cancelado';
+/** `incompleto`: parou antes do fim com peça na tela, e o servidor ainda pode continuar. */
+export type FaseHolograma = 'vazio' | 'construindo' | 'pronto' | 'incompleto' | 'erro' | 'cancelado';
 
 /** De onde vêm as peças: muda só a explicação de um erro HTTP. */
-type Origem = 'exemplo' | 'gerar';
+type Origem = 'exemplo' | 'gerar' | 'continuar';
+
+const CONEXAO_CAIU = 'a conexão caiu no meio';
 
 /**
  * O modo Holograma da HUD: se a camada está aberta, o objeto atual e as peças que já chegaram.
@@ -45,6 +49,10 @@ export class HologramaService {
   readonly resumo = signal<FimHolograma | null>(null);
   /** O último aviso de que o gerador trocou (Haiku ↔ local), para a tela explicar. */
   readonly trocaDeGerador = signal('');
+  /** O id da geração (vem na `meta`): é o que o `Continuar` devolve ao servidor. */
+  readonly idGeracao = signal('');
+  /** Parou pela metade e o servidor ainda guarda a geração: a tela mostra "Continuar". */
+  readonly podeContinuar = computed(() => this.fase() === 'incompleto' && this.idGeracao() !== '');
   /** O selo discreto do fim da montagem, só com peça na tela. */
   readonly selo = computed(() => {
     const resumo = this.resumo();
@@ -85,6 +93,17 @@ export class HologramaService {
     return this.executar('gerar', (ouvintes, sinal) => this.stream.gerar(limpo, detalhe, gerador, ouvintes, sinal));
   }
 
+  /**
+   * Retoma o objeto que parou pela metade: o servidor reenvia as peças que não chegaram e segue com
+   * o modelo. A cena não é limpa — as peças novas entram em cima das que já estão lá.
+   */
+  continuar(): Promise<void> {
+    if (!this.podeContinuar()) return Promise.resolve();
+    const id = this.idGeracao();
+    const recebidas = this.pecas().length;
+    return this.executar('continuar', (ouvintes, sinal) => this.stream.continuar(id, recebidas, ouvintes, sinal));
+  }
+
   /** Troca o gerador dos próximos pedidos e guarda a escolha no navegador. */
   escolherGerador(gerador: GeradorHolograma): void {
     this.gerador.set(gerador);
@@ -113,12 +132,21 @@ export class HologramaService {
     const controle = new AbortController();
     this.controle = controle;
     this.aberto.set(true);
-    this.limpar('construindo');
+    if (origem === 'continuar') {
+      this.erro.set('');
+      this.resumo.set(null);
+      this.fase.set('construindo');
+    } else {
+      this.limpar('construindo');
+    }
     let erroDoServidor = '';
     try {
       const terminou = await transmitir(
         {
-          meta: (meta) => this.meta.set(meta),
+          meta: (meta) => {
+            this.meta.set(meta);
+            if (meta.id) this.idGeracao.set(meta.id);
+          },
           peca: (peca) => this.pecas.update((lista) => [...lista, peca]),
           aviso: (texto, troca) => {
             if (troca) this.trocaDeGerador.set(texto);
@@ -131,11 +159,21 @@ export class HologramaService {
         controle.signal,
       );
       if (controle.signal.aborted) return;
-      if (erroDoServidor) this.falhar(erroDoServidor);
+      const fim = this.resumo();
+      if (fim?.status === 'incompleto') this.parar(fim.motivo ?? erroDoServidor);
+      else if (erroDoServidor) this.falhar(erroDoServidor);
       else if (terminou) this.fase.set('pronto');
-      else this.falhar('A transmissão caiu antes do fim do objeto.');
+      else this.parar(CONEXAO_CAIU);
     } catch (erro) {
-      if (!controle.signal.aborted) this.falhar(explicar(erro, origem));
+      if (controle.signal.aborted) return;
+      // Rede que caiu (ou ficou muda) com peça na tela: o servidor guardou, dá para continuar.
+      if (erro instanceof ConexaoMudaHolograma || !(erro instanceof ErroDoStreamHolograma)) {
+        if (origem !== 'exemplo' && this.pecas().length) {
+          this.parar(CONEXAO_CAIU);
+          return;
+        }
+      }
+      this.falhar(explicar(erro, origem));
     } finally {
       if (this.controle === controle) this.controle = null;
     }
@@ -154,8 +192,22 @@ export class HologramaService {
     this.textosDeAviso.set([]);
     this.resumo.set(null);
     this.trocaDeGerador.set('');
+    this.idGeracao.set('');
     this.erro.set('');
     this.fase.set(fase);
+  }
+
+  /**
+   * Parou antes do fim. Com peça na tela e id da geração, é `incompleto` — o servidor guarda o que
+   * saiu e o "Continuar" retoma dali. Sem peça não há o que continuar, e é um erro comum.
+   */
+  private parar(motivo: string): void {
+    if (this.pecas().length && this.idGeracao()) {
+      this.erro.set(textoIncompleto(motivo));
+      this.fase.set('incompleto');
+    } else {
+      this.falhar(motivo ? textoIncompleto(motivo) : 'A transmissão caiu antes do fim do objeto.');
+    }
   }
 
   /** Mantém as peças: um corte no meio ainda deixa na tela o que chegou. */
@@ -178,7 +230,10 @@ function lembrarGerador(): GeradorHolograma {
 function explicar(erro: unknown, origem: Origem): string {
   if (erro instanceof ErroDoStreamHolograma) {
     if (erro.status === 401 || erro.status === 403) return 'Token recusado pela API.';
-    if (erro.status === 404) return origem === 'exemplo' ? 'Esse exemplo não existe na API.' : 'Esta API ainda não gera hologramas.';
+    if (erro.status === 404) {
+      if (origem === 'continuar') return 'O servidor não guarda mais esse objeto; gere de novo.';
+      return origem === 'exemplo' ? 'Esse exemplo não existe na API.' : 'Esta API ainda não gera hologramas.';
+    }
     if (erro.status === 400) return 'A API recusou o pedido: confira o nome do objeto.';
     return `A API respondeu ${erro.status}.`;
   }

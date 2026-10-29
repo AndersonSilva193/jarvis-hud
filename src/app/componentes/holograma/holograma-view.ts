@@ -29,9 +29,12 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
       <p class="rotulo">Holograma</p>
       <h2 id="holograma-nome" class="nome">{{ holograma.meta()?.nome ?? 'Nenhum objeto' }}</h2>
       @if (holograma.meta()?.descricao; as descricao) { <p class="descricao">{{ descricao }}</p> }
-      <p class="estado" [class.estado--erro]="holograma.fase() === 'erro'" role="status" aria-live="polite" [attr.title]="dicaDosAvisos()">
+      <p class="estado" [class.estado--erro]="holograma.fase() === 'erro' || holograma.fase() === 'incompleto'" role="status" aria-live="polite" [attr.title]="dicaDosAvisos()">
         @if (holograma.construindo()) { <span class="pulso" aria-hidden="true"></span> }{{ estado() }}
       </p>
+      @if (holograma.podeContinuar()) {
+        <button class="botao" type="button" style="margin-top: 0.5rem" (click)="holograma.continuar()">Continuar</button>
+      }
       @if (holograma.trocaDeGerador(); as troca) { <p class="descricao" role="status">{{ troca }}</p> }
       @if (holograma.selo(); as selo) { <p class="rotulo" title="Gerador, peças e custo estimado desta geração">{{ selo }}</p> }
     </section>
@@ -123,6 +126,7 @@ export class HologramaViewComponent {
         const avisos = this.holograma.avisos();
         return avisos ? `${total} · ${avisos} ${avisos === 1 ? 'aviso' : 'avisos'}` : total;
       }
+      case 'incompleto':
       case 'erro':
         // As peças que chegaram ficam na tela; o estado diz quantas.
         return this.holograma.pecas().length ? `${this.holograma.erro()} · ${total}` : this.holograma.erro();

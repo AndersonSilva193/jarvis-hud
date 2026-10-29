@@ -4,6 +4,7 @@ import {
   avisoEhTroca,
   lerErroHolograma,
   lerFimHolograma,
+  textoIncompleto,
   lerGeradorHolograma,
   lerMetaHolograma,
   lerPecaHolograma,
@@ -59,24 +60,38 @@ describe('meta e fim', () => {
       nome: 'DNA', categoria: 'biologia', descricao: 'Dupla hélice.',
     });
     expect(lerMetaHolograma({ nome: '  ' })).toBeNull();
-    expect(lerFimHolograma({ pecas: 87, avisos: 0 })).toEqual({ pecas: 87, avisos: 0 });
+    expect(lerFimHolograma({ pecas: 87, avisos: 0 })).toEqual({ pecas: 87, avisos: 0, status: 'completo' });
     expect(lerFimHolograma({ pecas: '87', avisos: 0 })).toBeNull();
   });
 
   it('o fim leva o resumo do gasto, campo a campo', () => {
     expect(
       lerFimHolograma({ pecas: 86, avisos: 0, provedor: 'anthropic', modelo: 'claude-haiku-5-5', tokensEntrada: 900, tokensSaida: 5200, custoUsd: 0.0027 }),
-    ).toEqual({ pecas: 86, avisos: 0, provedor: 'anthropic', modelo: 'claude-haiku-5-5', tokensEntrada: 900, tokensSaida: 5200, custoUsd: 0.0027 });
+    ).toEqual({ pecas: 86, avisos: 0, status: 'completo', provedor: 'anthropic', modelo: 'claude-haiku-5-5', tokensEntrada: 900, tokensSaida: 5200, custoUsd: 0.0027 });
     // Valor torto cai fora sem derrubar o fim.
-    expect(lerFimHolograma({ pecas: 1, avisos: 0, provedor: 'x', custoUsd: -1, tokensSaida: 'muitos' })).toEqual({ pecas: 1, avisos: 0 });
+    expect(lerFimHolograma({ pecas: 1, avisos: 0, provedor: 'x', custoUsd: -1, tokensSaida: 'muitos' })).toEqual({ pecas: 1, avisos: 0, status: 'completo' });
+  });
+
+  it('o fim incompleto traz o motivo e o id; a meta traz o id da geração', () => {
+    expect(lerFimHolograma({ pecas: 72, avisos: 0, status: 'incompleto', motivo: 'o modelo bateu no teto de tokens', id: 'habc12345' })).toEqual({
+      pecas: 72, avisos: 0, status: 'incompleto', motivo: 'o modelo bateu no teto de tokens', id: 'habc12345',
+    });
+    expect(lerFimHolograma({ pecas: 1, avisos: 0, status: 'talvez', id: '../x' })).toEqual({ pecas: 1, avisos: 0, status: 'completo' });
+    expect(lerMetaHolograma({ nome: 'Torre', id: 'habc12345' })?.id).toBe('habc12345');
+    expect(lerMetaHolograma({ nome: 'Torre', id: 'h<script>' })?.id).toBeUndefined();
+  });
+
+  it('o texto do incompleto sai em minúscula e sem ponto', () => {
+    expect(textoIncompleto('O modelo não respondeu a tempo.')).toBe('Incompleto: o modelo não respondeu a tempo');
+    expect(textoIncompleto(undefined)).toBe('Incompleto');
   });
 
   it('o selo mostra gerador, peças e custo', () => {
-    expect(seloDoHolograma({ pecas: 86, avisos: 0, provedor: 'anthropic', modelo: 'claude-haiku-5-5', custoUsd: 0.0021 })).toBe('Haiku · 86 peças · US$0,002');
-    expect(seloDoHolograma({ pecas: 1, avisos: 0, provedor: 'local' })).toBe('Local · 1 peça');
-    expect(seloDoHolograma({ pecas: 5, avisos: 0, provedor: 'anthropic', modelo: 'claude-haiku-5-5', custoUsd: 0.0001 })).toBe('Haiku · 5 peças · <US$0,001');
+    expect(seloDoHolograma({ pecas: 86, avisos: 0, status: 'completo', provedor: 'anthropic', modelo: 'claude-haiku-5-5', custoUsd: 0.0021 })).toBe('Haiku · 86 peças · US$0,002');
+    expect(seloDoHolograma({ pecas: 1, avisos: 0, status: 'completo', provedor: 'local' })).toBe('Local · 1 peça');
+    expect(seloDoHolograma({ pecas: 5, avisos: 0, status: 'completo', provedor: 'anthropic', modelo: 'claude-haiku-5-5', custoUsd: 0.0001 })).toBe('Haiku · 5 peças · <US$0,001');
     // Stream cortado: sem tokens, o selo não inventa custo.
-    expect(seloDoHolograma({ pecas: 250, avisos: 3, provedor: 'anthropic', modelo: 'claude-haiku-5-5' })).toBe('Haiku · 250 peças');
+    expect(seloDoHolograma({ pecas: 250, avisos: 3, status: 'completo', provedor: 'anthropic', modelo: 'claude-haiku-5-5' })).toBe('Haiku · 250 peças');
   });
 
   it('o aviso de troca é marcado pelo servidor, não pelo texto', () => {

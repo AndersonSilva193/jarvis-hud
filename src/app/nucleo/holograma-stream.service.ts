@@ -35,6 +35,23 @@ export class ErroDoStreamHolograma extends Error {
 }
 
 /**
+ * A conexão ficou muda além do aceitável: o celular pôs a aba em segundo plano, a rede trocou, o
+ * proxy largou. O que chegou fica, e a tela oferece "Continuar".
+ */
+export class ConexaoMudaHolograma extends Error {
+  constructor() {
+    super('O stream do holograma ficou mudo');
+  }
+}
+
+/**
+ * Quanto o stream pode ficar sem nenhum byte. O servidor manda `:gerando` a cada 3 s enquanto o
+ * modelo pensa, então silêncio disso é conexão morta — e não modelo lento.
+ */
+export const SILENCIO_MAXIMO_MS = 15_000;
+const CONFERENCIA_MS = 2_000;
+
+/**
  * Lê o SSE de um holograma, peça por peça.
  *
  * Com `fetch` + `ReadableStream`, e não `EventSource`: a rota exige `Authorization: Bearer`, e o
@@ -61,29 +78,70 @@ export class HologramaStreamService {
     return this.transmitir(`/api/holograma/gerar?${busca.toString()}`, ouvintes, sinal);
   }
 
-  /** Resolve com `true` quando o `fim` chegou; `false` quando o corpo acabou antes dele. */
-  async transmitir(caminho: string, ouvintes: OuvintesDoHolograma, sinal: AbortSignal): Promise<boolean> {
-    const resposta = await fetch(this.config.rota(caminho), {
-      headers: { Authorization: `Bearer ${this.config.token()}`, Accept: 'text/event-stream' },
-      cache: 'no-store',
-      signal: sinal,
-    });
-    if (!resposta.ok || !resposta.body) throw new ErroDoStreamHolograma(resposta.status);
+  /**
+   * Retoma a geração `id`: o servidor reenvia as peças a partir da `recebidas`-ésima e, se o objeto
+   * não estava completo, segue com o modelo — no mesmo formato de eventos.
+   */
+  continuar(id: string, recebidas: number, ouvintes: OuvintesDoHolograma, sinal: AbortSignal): Promise<boolean> {
+    const busca = new URLSearchParams({ id, recebidas: String(recebidas) });
+    return this.transmitir(`/api/holograma/continuar?${busca.toString()}`, ouvintes, sinal);
+  }
 
-    const leitor = resposta.body.getReader();
-    const decodificador = new TextDecoder();
-    const sse = new LeitorSse();
-    let terminou = false;
-    try {
-      for (;;) {
-        const { done, value } = await leitor.read();
-        const eventos = done ? sse.terminar() : sse.alimentar(decodificador.decode(value, { stream: true }));
-        for (const evento of eventos) terminou = despachar(evento, ouvintes) || terminou;
-        if (done || terminou) return terminou;
+  /**
+   * Resolve com `true` quando o `fim` chegou; `false` quando o corpo acabou antes dele. Lança
+   * `ConexaoMudaHolograma` quando nenhum byte chega por `SILENCIO_MAXIMO_MS` — inclusive na volta
+   * do segundo plano, quando o celular congelou a aba e a conexão morreu sem avisar.
+   */
+  async transmitir(caminho: string, ouvintes: OuvintesDoHolograma, sinal: AbortSignal): Promise<boolean> {
+    const corte = new AbortController();
+    const repassar = () => corte.abort();
+    sinal.addEventListener('abort', repassar);
+    let ultimoByte = Date.now();
+    let mudo = false;
+    const conferir = () => {
+      if (Date.now() - ultimoByte > SILENCIO_MAXIMO_MS) {
+        mudo = true;
+        corte.abort();
       }
+    };
+    const vigia = setInterval(conferir, CONFERENCIA_MS);
+    // O intervalo para junto com a aba em segundo plano; na volta, a conferência é imediata.
+    const aoVoltar = () => {
+      if (document.visibilityState === 'visible') conferir();
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
+    try {
+      const resposta = await fetch(this.config.rota(caminho), {
+        headers: { Authorization: `Bearer ${this.config.token()}`, Accept: 'text/event-stream' },
+        cache: 'no-store',
+        signal: corte.signal,
+      });
+      if (!resposta.ok || !resposta.body) throw new ErroDoStreamHolograma(resposta.status);
+      ultimoByte = Date.now();
+
+      const leitor = resposta.body.getReader();
+      const decodificador = new TextDecoder();
+      const sse = new LeitorSse();
+      let terminou = false;
+      try {
+        for (;;) {
+          const { done, value } = await leitor.read();
+          ultimoByte = Date.now();
+          const eventos = done ? sse.terminar() : sse.alimentar(decodificador.decode(value, { stream: true }));
+          for (const evento of eventos) terminou = despachar(evento, ouvintes) || terminou;
+          if (done || terminou) return terminou;
+        }
+      } finally {
+        // Depois do `fim` o servidor fecha; cancelar aqui só solta a conexão um instante antes.
+        void leitor.cancel().catch(() => undefined);
+      }
+    } catch (erro) {
+      if (mudo && !sinal.aborted) throw new ConexaoMudaHolograma();
+      throw erro;
     } finally {
-      // Depois do `fim` o servidor fecha; cancelar aqui só solta a conexão um instante antes.
-      void leitor.cancel().catch(() => undefined);
+      clearInterval(vigia);
+      document.removeEventListener('visibilitychange', aoVoltar);
+      sinal.removeEventListener('abort', repassar);
     }
   }
 }
