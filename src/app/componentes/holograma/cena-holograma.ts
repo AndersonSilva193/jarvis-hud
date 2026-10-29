@@ -1,9 +1,11 @@
 import {
+  ACESFilmicToneMapping,
   AdditiveBlending,
   Box3,
   BufferGeometry,
   Color,
   DoubleSide,
+  FrontSide,
   FogExp2,
   Group,
   Line,
@@ -51,6 +53,14 @@ const DISTANCIA_DA_EXPLOSAO = 2.5;
 const OCIOSO_ATE_GIRAR_MS = 4_000;
 /** A opacidade da malha quando a peça não pediu outra (`o` ausente chega como 1). */
 const OPACIDADE_PADRAO = 0.35;
+/**
+ * Quanto da opacidade da peça vira luz no preenchimento. O blending é aditivo: num motor com
+ * dezenas de peças uma atrás da outra, 0.35 cheio somava acima de 1 e o objeto virava um borrão
+ * branco. O contorno é que carrega a forma; a malha só tinge.
+ */
+const PESO_DO_PREENCHIMENTO = 0.3;
+/** Só o que passa disso brilha: as linhas acendem, o preenchimento somado não. */
+const LIMIAR_DO_BLOOM = 0.45;
 const Y_DO_PISO = -2.4;
 // O `$fundo` da HUD: com a borda esfumada pela máscara do componente, a cena some no resto da tela.
 const FUNDO = 0x030a18;
@@ -127,6 +137,9 @@ export class CenaHolograma {
     this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_MAXIMO));
     this.renderer.setClearColor(FUNDO, 1);
+    // Onde muitas peças se sobrepõem a soma aditiva passa de 1: o tone mapping (aplicado no
+    // OutputPass) satura essa soma na cor da peça em vez de estourar em branco.
+    this.renderer.toneMapping = ACESFilmicToneMapping;
     const tela = this.renderer.domElement;
     tela.style.display = 'block';
     tela.style.width = '100%';
@@ -154,7 +167,7 @@ export class CenaHolograma {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.cena, this.camera));
-    this.bloom = new UnrealBloomPass(new Vector2(1, 1), 0.85, 0.45, 0.05);
+    this.bloom = new UnrealBloomPass(new Vector2(1, 1), 0.6, 0.35, LIMIAR_DO_BLOOM);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
@@ -177,12 +190,15 @@ export class CenaHolograma {
       MathUtils.degToRad(dados.rotacao[2]),
     );
     const cor = new Color(dados.cor);
-    const alvoMalha = dados.opacidade < 1 ? dados.opacidade : OPACIDADE_PADRAO;
+    const opacidade = dados.opacidade < 1 ? dados.opacidade : OPACIDADE_PADRAO;
+    const alvoMalha = opacidade * PESO_DO_PREENCHIMENTO;
     let malha: PecaNaCena['malha'] = null;
     let contorno: PecaNaCena['contorno'] = null;
     if (geometria.malha) {
       const material = new MeshBasicMaterial({
-        color: cor, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
+        color: cor, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false,
+        // Face de trás também somaria luz: só o anel, que é chato, precisa dos dois lados.
+        side: dados.forma === 'ring' ? DoubleSide : FrontSide,
       });
       malha = new Mesh(geometria.malha, material);
       raiz.add(malha);
@@ -200,7 +216,7 @@ export class CenaHolograma {
       direcao: dados.explosao ? new Vector3(...dados.explosao).normalize() : new Vector3(),
       direcaoPropria: dados.explosao !== null,
       nascimento: this.opcoes.movimentoReduzido ? -Infinity : performance.now(),
-      alvoContorno: Math.min(1, alvoMalha * 1.6 + 0.35),
+      alvoContorno: Math.min(1, opacidade + 0.4),
       destaque: 1,
     };
     raiz.position.copy(base);
@@ -209,7 +225,7 @@ export class CenaHolograma {
     this.pecas.push(peca);
 
     // O feixe do projetor (o: 0.08) cobre o objeto inteiro: não pode roubar o mouse das peças.
-    const alvo = malha && alvoMalha >= 0.1 ? malha : contorno && !malha ? contorno : null;
+    const alvo = malha && opacidade >= 0.1 ? malha : contorno && !malha ? contorno : null;
     if (alvo) {
       this.alvosDoRaio.push(alvo);
       this.porObjeto.set(alvo, peca);
@@ -355,7 +371,7 @@ export class CenaHolograma {
     p.raiz.scale.setScalar(Math.max(1e-3, entrada));
     p.raiz.position.copy(p.base).addScaledVector(p.direcao, this.fatorExplosao * DISTANCIA_DA_EXPLOSAO);
     if (p.malha) {
-      p.malha.material.opacity = Math.min(1, p.alvoMalha * entrada * p.destaque + flash * 0.45);
+      p.malha.material.opacity = Math.min(1, p.alvoMalha * entrada * p.destaque + flash * 0.2);
       p.malha.material.color.copy(p.cor).lerp(BRANCO, flash * 0.7);
     }
     if (p.contorno) {

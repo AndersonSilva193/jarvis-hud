@@ -24,7 +24,10 @@
 .controles{left:50%;bottom:1rem;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.6rem;width:max-content;max-width:calc(100% - 2rem)}
 .explosao{display:flex;align-items:center;gap:.7rem;font:500 .62rem hud.$mono;letter-spacing:.16em;text-transform:uppercase;color:#cdeaff}
 .explosao input{width:clamp(7rem,16vw,12rem);accent-color:hud.$ciano}
+.explosao output{min-width:3.2em;text-align:right;color:hud.$ciano-forte}
 .botao{@include hud.botao(6px);padding:.5rem .75rem}
+// A ação principal da barra: o botão que explode e monta fica aceso para ser achado de relance.
+.botao--explodir{border-color:hud.$ciano;color:hud.$ciano-forte;box-shadow:0 0 14px rgba(45,125,255,.35)}
 // O botão tem canto cortado (clip-path): contorno por fora seria recortado, então ele vai por dentro.
 .botao:focus-visible{outline:2px solid #fff;outline-offset:-4px}
 .explosao input:focus-visible{outline:2px solid #fff;outline-offset:3px}

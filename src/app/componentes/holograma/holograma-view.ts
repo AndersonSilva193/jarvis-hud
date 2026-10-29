@@ -36,9 +36,13 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
       <p class="painel destaque"><strong>{{ peca.nome }}</strong><span>Grupo · {{ peca.grupo }}</span></p>
     }
     <section class="painel controles" aria-label="Controles do holograma">
+      <button class="botao botao--explodir" type="button" [attr.aria-pressed]="explosao() > 0" (click)="alternarExplosao()">
+        {{ explosao() > 0 ? 'Montar' : 'Explodir' }}
+      </button>
       <label class="explosao">
         <span>Vista explodida</span>
         <input type="range" min="0" max="100" step="1" [value]="explosao()" [attr.aria-valuetext]="explosao() + '%'" (input)="aoExplodir($event)" />
+        <output aria-hidden="true">{{ explosao() }}%</output>
       </label>
       <button class="botao" type="button" (click)="centralizar()">Centralizar</button>
       <button class="botao" type="button" (click)="resetar()">Resetar</button>
@@ -99,6 +103,10 @@ export class HologramaViewComponent {
       for (; this.desenhadas < pecas.length; this.desenhadas++) cena.adicionar(pecas[this.desenhadas]!);
     });
     effect(() => this.cena()?.explodir(this.explosao() / 100));
+    // Objeto montado: a câmera enquadra o que chegou, seja um átomo pequeno ou um motor grande.
+    effect(() => {
+      if (this.holograma.fase() === 'pronto') this.cena()?.centralizar();
+    });
     inject(DestroyRef).onDestroy(() => {
       this.vivo = false;
       this.cena()?.destruir();
@@ -107,6 +115,10 @@ export class HologramaViewComponent {
 
   protected aoExplodir(evento: Event): void {
     if (evento.target instanceof HTMLInputElement) this.explosao.set(Number(evento.target.value));
+  }
+
+  protected alternarExplosao(): void {
+    this.explosao.set(this.explosao() > 0 ? 0 : 100);
   }
 
   protected centralizar(): void {

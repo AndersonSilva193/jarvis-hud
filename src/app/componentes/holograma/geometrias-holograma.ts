@@ -27,6 +27,11 @@ export interface GeometriaDaPeca {
  * cada triângulo; com 20° sobram as bordas e as linhas ao longo de tubos e anéis.
  */
 const LIMIAR_CURVO = 20;
+/**
+ * Lados da seção de toros, tubos e hélices. Cada lado vira uma linha de contorno ao longo do tubo,
+ * e num tubo fino elas caem quase uma em cima da outra: com 12, a soma aditiva estourava em branco.
+ */
+const LADOS_DO_TUBO = 6;
 
 /** A hélice de `docs/HOLOGRAMA.md` §7: `Ry(360·voltas·t) · (raio, 0, 0)`, de `-alt/2` a `+alt/2`. */
 class CurvaHelice extends Curve<Vector3> {
@@ -88,7 +93,7 @@ function criar({ forma, tamanho: s, pontos }: PecaHolograma): GeometriaDaPeca {
     case 'cone':
       return comArestas(new ConeGeometry(s[0], s[1], 32), LIMIAR_CURVO);
     case 'tor':
-      return comArestas(new TorusGeometry(s[0], s[1], 12, 72), LIMIAR_CURVO);
+      return comArestas(new TorusGeometry(s[0], s[1], LADOS_DO_TUBO, 72), LIMIAR_CURVO);
     case 'ring':
       return comArestas(new RingGeometry(s[0], s[1], 72), 1);
     case 'cap':
@@ -96,12 +101,12 @@ function criar({ forma, tamanho: s, pontos }: PecaHolograma): GeometriaDaPeca {
     case 'tube': {
       const caminho = new CatmullRomCurve3((pontos ?? []).map((p) => new Vector3(...p)));
       const segmentos = Math.max(16, (pontos?.length ?? 2) * 12);
-      return comArestas(new TubeGeometry(caminho, segmentos, s[0], 8), LIMIAR_CURVO);
+      return comArestas(new TubeGeometry(caminho, segmentos, s[0], LADOS_DO_TUBO), LIMIAR_CURVO);
     }
     case 'helix': {
       const [raio, altura, voltas, espessura] = s as [number, number, number, number];
       const segmentos = Math.min(600, Math.max(48, Math.ceil(voltas * 64)));
-      return comArestas(new TubeGeometry(new CurvaHelice(raio, altura, voltas), segmentos, espessura, 8), LIMIAR_CURVO);
+      return comArestas(new TubeGeometry(new CurvaHelice(raio, altura, voltas), segmentos, espessura, LADOS_DO_TUBO), LIMIAR_CURVO);
     }
     case 'line':
       return { malha: null, contorno: new BufferGeometry().setFromPoints((pontos ?? []).map((p) => new Vector3(...p))) };
