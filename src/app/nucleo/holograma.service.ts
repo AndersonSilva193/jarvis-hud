@@ -2,8 +2,13 @@ import { Service, computed, inject, signal } from '@angular/core';
 
 import { ErroDoStreamHolograma, HologramaStreamService, type OuvintesDoHolograma } from './holograma-stream.service';
 import {
+  GERADOR_PADRAO_HOLOGRAMA,
   MAX_OBJETO_HOLOGRAMA,
+  lerGeradorHolograma,
+  seloDoHolograma,
   type DetalheHolograma,
+  type FimHolograma,
+  type GeradorHolograma,
   type MetaHolograma,
   type NomeExemplo,
   type PecaHolograma,
@@ -32,6 +37,17 @@ export class HologramaService {
   readonly fase = signal<FaseHolograma>('vazio');
   readonly erro = signal('');
   readonly avisos = signal(0);
+  /** O gerador do próximo pedido; lembrado entre sessões e enviado em cada pedido. */
+  readonly gerador = signal<GeradorHolograma>(lembrarGerador());
+  /** O que o servidor disse que gastou ao fechar a geração; vazio enquanto constrói. */
+  readonly resumo = signal<FimHolograma | null>(null);
+  /** O último aviso de que o gerador trocou (Haiku ↔ local), para a tela explicar. */
+  readonly trocaDeGerador = signal('');
+  /** O selo discreto do fim da montagem, só com peça na tela. */
+  readonly selo = computed(() => {
+    const resumo = this.resumo();
+    return resumo && resumo.provedor && this.pecas().length ? seloDoHolograma(resumo) : '';
+  });
 
   readonly construindo = computed(() => this.fase() === 'construindo');
   /** Pedido feito e nenhuma peça ainda: é quando a base da cena "escaneia". */
@@ -63,7 +79,18 @@ export class HologramaService {
   gerar(objeto: string, detalhe: DetalheHolograma): Promise<void> {
     const limpo = objeto.trim().slice(0, MAX_OBJETO_HOLOGRAMA);
     if (!limpo) return Promise.resolve();
-    return this.executar('gerar', (ouvintes, sinal) => this.stream.gerar(limpo, detalhe, ouvintes, sinal));
+    const gerador = this.gerador();
+    return this.executar('gerar', (ouvintes, sinal) => this.stream.gerar(limpo, detalhe, gerador, ouvintes, sinal));
+  }
+
+  /** Troca o gerador dos próximos pedidos e guarda a escolha no navegador. */
+  escolherGerador(gerador: GeradorHolograma): void {
+    this.gerador.set(gerador);
+    try {
+      localStorage.setItem(CHAVE_GERADOR, gerador);
+    } catch {
+      /* Sem persistência: vale até recarregar. */
+    }
   }
 
   /**
@@ -91,9 +118,12 @@ export class HologramaService {
         {
           meta: (meta) => this.meta.set(meta),
           peca: (peca) => this.pecas.update((lista) => [...lista, peca]),
-          aviso: () => this.avisos.update((n) => n + 1),
+          aviso: (texto, troca) => {
+            if (troca) this.trocaDeGerador.set(texto);
+            this.avisos.update((n) => n + 1);
+          },
           erro: (texto) => (erroDoServidor = texto),
-          fim: () => undefined,
+          fim: (fim) => this.resumo.set(fim),
         },
         controle.signal,
       );
@@ -118,6 +148,8 @@ export class HologramaService {
     this.meta.set(null);
     this.pecas.set([]);
     this.avisos.set(0);
+    this.resumo.set(null);
+    this.trocaDeGerador.set('');
     this.erro.set('');
     this.fase.set(fase);
   }
@@ -126,6 +158,16 @@ export class HologramaService {
   private falhar(motivo: string): void {
     this.erro.set(motivo);
     this.fase.set('erro');
+  }
+}
+
+const CHAVE_GERADOR = 'jarvis-hud.holograma.gerador.v1';
+
+function lembrarGerador(): GeradorHolograma {
+  try {
+    return lerGeradorHolograma(localStorage.getItem(CHAVE_GERADOR)) ?? GERADOR_PADRAO_HOLOGRAMA;
+  } catch {
+    return GERADOR_PADRAO_HOLOGRAMA;
   }
 }
 

@@ -3,6 +3,7 @@ import { Service, inject } from '@angular/core';
 import { ConfigStore } from './config.store';
 import { LeitorSse, type EventoSse } from './leitor-sse';
 import {
+  avisoEhTroca,
   lerAvisoHolograma,
   lerErroHolograma,
   lerFimHolograma,
@@ -10,6 +11,7 @@ import {
   lerPecaHolograma,
   type DetalheHolograma,
   type FimHolograma,
+  type GeradorHolograma,
   type MetaHolograma,
   type NomeExemplo,
   type PecaHolograma,
@@ -18,7 +20,8 @@ import {
 export interface OuvintesDoHolograma {
   meta: (meta: MetaHolograma) => void;
   peca: (peca: PecaHolograma) => void;
-  aviso: (texto: string) => void;
+  /** `troca`: o aviso é de que o gerador mudou, e não um conserto da montagem. */
+  aviso: (texto: string, troca: boolean) => void;
   /** A geração parou antes da hora; o `fim` ainda vem depois. */
   erro: (texto: string) => void;
   fim: (fim: FimHolograma) => void;
@@ -47,8 +50,14 @@ export class HologramaStreamService {
   }
 
   /** Pede ao modelo que gere o objeto; as peças chegam enquanto ele escreve. */
-  gerar(objeto: string, detalhe: DetalheHolograma, ouvintes: OuvintesDoHolograma, sinal: AbortSignal): Promise<boolean> {
-    const busca = new URLSearchParams({ objeto, detalhe });
+  gerar(
+    objeto: string,
+    detalhe: DetalheHolograma,
+    provedor: GeradorHolograma,
+    ouvintes: OuvintesDoHolograma,
+    sinal: AbortSignal,
+  ): Promise<boolean> {
+    const busca = new URLSearchParams({ objeto, detalhe, provedor });
     return this.transmitir(`/api/holograma/gerar?${busca.toString()}`, ouvintes, sinal);
   }
 
@@ -99,7 +108,7 @@ function despachar(evento: EventoSse, ouvintes: OuvintesDoHolograma): boolean {
     }
     case 'aviso': {
       const aviso = lerAvisoHolograma(corpo);
-      if (aviso) ouvintes.aviso(aviso);
+      if (aviso) ouvintes.aviso(aviso, avisoEhTroca(corpo));
       return false;
     }
     case 'erro': {

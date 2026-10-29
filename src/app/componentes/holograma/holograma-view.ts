@@ -4,7 +4,9 @@ import { HologramaService } from '../../nucleo/holograma.service';
 import {
   DETALHES_HOLOGRAMA,
   EXEMPLOS_HOLOGRAMA,
+  GERADORES_HOLOGRAMA,
   MAX_OBJETO_HOLOGRAMA,
+  lerGeradorHolograma,
   type DetalheHolograma,
 } from '../../nucleo/holograma.modelos';
 // Só tipos: o valor vem do `import()` dinâmico, e o Three.js fica fora do chunk da HUD.
@@ -30,6 +32,8 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
       <p class="estado" [class.estado--erro]="holograma.fase() === 'erro'" role="status" aria-live="polite">
         @if (holograma.construindo()) { <span class="pulso" aria-hidden="true"></span> }{{ estado() }}
       </p>
+      @if (holograma.trocaDeGerador(); as troca) { <p class="descricao" role="status">{{ troca }}</p> }
+      @if (holograma.selo(); as selo) { <p class="rotulo" title="Gerador, peças e custo estimado desta geração">{{ selo }}</p> }
     </section>
     <div class="lateral">
       <section class="painel gerar" aria-label="Gerar holograma">
@@ -61,6 +65,14 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
             >
               {{ holograma.construindo() ? 'Cancelar' : 'Gerar' }}
             </button>
+          </div>
+          <div class="descricao">
+            <label class="rotulo" for="holograma-gerador">Gerador:</label>
+            <select id="holograma-gerador" class="entrada seletor" (change)="aoEscolherGerador($event)">
+              @for (opcao of geradores; track opcao.valor) {
+                <option [value]="opcao.valor" [selected]="opcao.valor === holograma.gerador()">{{ opcao.rotulo }}</option>
+              }
+            </select>
           </div>
         </form>
       </section>
@@ -94,6 +106,7 @@ export class HologramaViewComponent {
   protected readonly holograma = inject(HologramaService);
   protected readonly exemplos = EXEMPLOS_HOLOGRAMA;
   protected readonly detalhes = DETALHES_HOLOGRAMA;
+  protected readonly geradores = GERADORES_HOLOGRAMA;
   protected readonly maxObjeto = MAX_OBJETO_HOLOGRAMA;
   protected readonly objeto = signal('');
   protected readonly detalhe = signal<DetalheHolograma>('normal');
@@ -173,6 +186,11 @@ export class HologramaViewComponent {
     const valor = evento.target instanceof HTMLSelectElement ? evento.target.value : '';
     const escolhido = this.detalhes.find((d) => d.valor === valor);
     if (escolhido) this.detalhe.set(escolhido.valor);
+  }
+
+  protected aoEscolherGerador(evento: Event): void {
+    const escolhido = lerGeradorHolograma(evento.target instanceof HTMLSelectElement ? evento.target.value : '');
+    if (escolhido) this.holograma.escolherGerador(escolhido);
   }
 
   protected aoGerar(evento: Event): void {

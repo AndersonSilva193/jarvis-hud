@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { lerErroHolograma, lerFimHolograma, lerMetaHolograma, lerPecaHolograma } from './holograma.modelos';
+import {
+  avisoEhTroca,
+  lerErroHolograma,
+  lerFimHolograma,
+  lerGeradorHolograma,
+  lerMetaHolograma,
+  lerPecaHolograma,
+  seloDoHolograma,
+} from './holograma.modelos';
 
 /** Uma peça como o `HologramaController` manda no evento `peca`. */
 const PECA = {
@@ -53,6 +61,33 @@ describe('meta e fim', () => {
     expect(lerMetaHolograma({ nome: '  ' })).toBeNull();
     expect(lerFimHolograma({ pecas: 87, avisos: 0 })).toEqual({ pecas: 87, avisos: 0 });
     expect(lerFimHolograma({ pecas: '87', avisos: 0 })).toBeNull();
+  });
+
+  it('o fim leva o resumo do gasto, campo a campo', () => {
+    expect(
+      lerFimHolograma({ pecas: 86, avisos: 0, provedor: 'anthropic', modelo: 'claude-haiku-5-5', tokensEntrada: 900, tokensSaida: 5200, custoUsd: 0.0027 }),
+    ).toEqual({ pecas: 86, avisos: 0, provedor: 'anthropic', modelo: 'claude-haiku-5-5', tokensEntrada: 900, tokensSaida: 5200, custoUsd: 0.0027 });
+    // Valor torto cai fora sem derrubar o fim.
+    expect(lerFimHolograma({ pecas: 1, avisos: 0, provedor: 'x', custoUsd: -1, tokensSaida: 'muitos' })).toEqual({ pecas: 1, avisos: 0 });
+  });
+
+  it('o selo mostra gerador, peças e custo', () => {
+    expect(seloDoHolograma({ pecas: 86, avisos: 0, provedor: 'anthropic', modelo: 'claude-haiku-5-5', custoUsd: 0.0021 })).toBe('Haiku · 86 peças · US$0,002');
+    expect(seloDoHolograma({ pecas: 1, avisos: 0, provedor: 'local' })).toBe('Local · 1 peça');
+    expect(seloDoHolograma({ pecas: 5, avisos: 0, provedor: 'anthropic', modelo: 'claude-haiku-5-5', custoUsd: 0.0001 })).toBe('Haiku · 5 peças · <US$0,001');
+    // Stream cortado: sem tokens, o selo não inventa custo.
+    expect(seloDoHolograma({ pecas: 250, avisos: 3, provedor: 'anthropic', modelo: 'claude-haiku-5-5' })).toBe('Haiku · 250 peças');
+  });
+
+  it('o aviso de troca é marcado pelo servidor, não pelo texto', () => {
+    expect(avisoEhTroca({ texto: 'troquei', troca: true })).toBe(true);
+    expect(avisoEhTroca({ texto: 'O Haiku falhou; troquei para o gerador local.' })).toBe(false);
+  });
+
+  it('o gerador pedido é só haiku ou local', () => {
+    expect(lerGeradorHolograma('local')).toBe('local');
+    expect(lerGeradorHolograma('gpt')).toBeNull();
+    expect(lerGeradorHolograma(null)).toBeNull();
   });
 
   it('o erro precisa de texto', () => {

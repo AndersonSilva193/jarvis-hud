@@ -53,6 +53,38 @@ export interface PecaHolograma {
 export interface FimHolograma {
   pecas: number;
   avisos: number;
+  /** Quem gerou: só nas gerações reais (o exemplo fixo não informa). */
+  provedor?: 'anthropic' | 'local';
+  modelo?: string;
+  /** Ausentes quando a API não informou o uso (stream cortado) ou o gerador foi o local. */
+  tokensEntrada?: number;
+  tokensSaida?: number;
+  custoUsd?: number;
+}
+
+/** Os geradores de `GET /api/holograma/gerar?provedor=`: o servidor recusa qualquer outro. */
+export const GERADORES_HOLOGRAMA = [
+  { valor: 'haiku', rotulo: 'Haiku' },
+  { valor: 'local', rotulo: 'Local' },
+] as const;
+export type GeradorHolograma = (typeof GERADORES_HOLOGRAMA)[number]['valor'];
+export const GERADOR_PADRAO_HOLOGRAMA: GeradorHolograma = 'haiku';
+
+export function lerGeradorHolograma(v: unknown): GeradorHolograma | null {
+  return GERADORES_HOLOGRAMA.find((g) => g.valor === v)?.valor ?? null;
+}
+
+/** O selo discreto do fim da montagem: "Haiku · 86 peças · US$0,002". Sem custo, sem o último trecho. */
+export function seloDoHolograma(fim: FimHolograma): string {
+  const gerador = fim.provedor === 'local' ? 'Local' : fim.modelo?.toLowerCase().includes('haiku') ? 'Haiku' : 'Claude';
+  const partes = [gerador, `${fim.pecas} ${fim.pecas === 1 ? 'peça' : 'peças'}`];
+  if (fim.custoUsd !== undefined) partes.push(formatarDolar(fim.custoUsd));
+  return partes.join(' · ');
+}
+
+function formatarDolar(valor: number): string {
+  if (valor > 0 && valor < 0.0005) return '<US$0,001';
+  return `US$${valor.toFixed(3).replace('.', ',')}`;
 }
 
 /** Quantos números cada forma pede em `tamanho` — a aridade do prompt. */
@@ -118,7 +150,23 @@ export function lerPecaHolograma(v: unknown): PecaHolograma | null {
 
 export function lerFimHolograma(v: unknown): FimHolograma | null {
   if (!objeto(v) || !Number.isInteger(v['pecas']) || !Number.isInteger(v['avisos'])) return null;
-  return { pecas: v['pecas'] as number, avisos: v['avisos'] as number };
+  const fim: FimHolograma = { pecas: v['pecas'] as number, avisos: v['avisos'] as number };
+  // O resumo é opcional e cada campo se confere sozinho: servidor velho não manda nenhum.
+  if (v['provedor'] === 'anthropic' || v['provedor'] === 'local') fim.provedor = v['provedor'];
+  if (typeof v['modelo'] === 'string') fim.modelo = v['modelo'].slice(0, 80);
+  if (numeroNaoNegativo(v['tokensEntrada'])) fim.tokensEntrada = v['tokensEntrada'];
+  if (numeroNaoNegativo(v['tokensSaida'])) fim.tokensSaida = v['tokensSaida'];
+  if (numeroNaoNegativo(v['custoUsd'])) fim.custoUsd = v['custoUsd'];
+  return fim;
+}
+
+function numeroNaoNegativo(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0;
+}
+
+/** O `aviso` diz que o gerador trocou (Haiku ↔ local)? É o servidor que marca, não o texto. */
+export function avisoEhTroca(v: unknown): boolean {
+  return objeto(v) && v['troca'] === true;
 }
 
 export function lerAvisoHolograma(v: unknown): string | null {

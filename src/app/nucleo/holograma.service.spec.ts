@@ -16,7 +16,7 @@ function streamControlado() {
   let sinal!: AbortSignal;
   let terminar!: (terminou: boolean) => void;
   let falhar!: (erro: unknown) => void;
-  const gerar = vi.fn((_objeto: string, _detalhe: string, o: OuvintesDoHolograma, s: AbortSignal) => {
+  const gerar = vi.fn((_objeto: string, _detalhe: string, _provedor: string, o: OuvintesDoHolograma, s: AbortSignal) => {
     ouvintes = o;
     sinal = s;
     return new Promise<boolean>((resolver, rejeitar) => {
@@ -50,7 +50,7 @@ describe('HologramaService.gerar', () => {
     const holograma = TestBed.inject(HologramaService);
     const pedido = holograma.gerar('  motor V8  ', 'detalhado');
 
-    expect(stream.gerar).toHaveBeenCalledWith('motor V8', 'detalhado', expect.anything(), expect.anything());
+    expect(stream.gerar).toHaveBeenCalledWith('motor V8', 'detalhado', 'haiku', expect.anything(), expect.anything());
     expect(holograma.aberto()).toBe(true);
     expect(holograma.escaneando()).toBe(true);
 
@@ -63,6 +63,40 @@ describe('HologramaService.gerar', () => {
     stream.terminar(true);
     await pedido;
     expect(holograma.fase()).toBe('pronto');
+  });
+
+  it('envia o gerador escolhido em cada pedido e o lembra no navegador', async () => {
+    localStorage.removeItem('jarvis-hud.holograma.gerador.v1');
+    const holograma = TestBed.inject(HologramaService);
+    expect(holograma.gerador()).toBe('haiku');
+
+    holograma.escolherGerador('local');
+    const pedido = holograma.gerar('turbina', 'normal');
+    expect(stream.gerar).toHaveBeenCalledWith('turbina', 'normal', 'local', expect.anything(), expect.anything());
+    stream.terminar(true);
+    await pedido;
+
+    expect(localStorage.getItem('jarvis-hud.holograma.gerador.v1')).toBe('local');
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [{ provide: HologramaStreamService, useValue: { gerar: stream.gerar, exemplo: vi.fn() } }],
+    });
+    expect(TestBed.inject(HologramaService).gerador()).toBe('local');
+    localStorage.removeItem('jarvis-hud.holograma.gerador.v1');
+  });
+
+  it('mostra o selo do gasto no fim e o aviso de troca de gerador', async () => {
+    const holograma = TestBed.inject(HologramaService);
+    const pedido = holograma.gerar('cubo', 'normal');
+    stream.ouvintes.aviso('O Haiku falhou; troquei para o gerador local.', true);
+    stream.ouvintes.peca(PECA);
+    expect(holograma.selo()).toBe('');
+    stream.ouvintes.fim({ pecas: 1, avisos: 1, provedor: 'anthropic', modelo: 'claude-haiku-5-5', custoUsd: 0.002 });
+    stream.terminar(true);
+    await pedido;
+
+    expect(holograma.trocaDeGerador()).toBe('O Haiku falhou; troquei para o gerador local.');
+    expect(holograma.selo()).toBe('Haiku · 1 peça · US$0,002');
   });
 
   it('o erro do servidor mantém as peças que chegaram', async () => {
