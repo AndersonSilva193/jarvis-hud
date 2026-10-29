@@ -1,0 +1,37 @@
+@use '../../estilos/hud' as hud;
+
+// A camada ocupa o conteúdo inteiro, por baixo do palco: janelas abertas continuam por cima.
+:host{position:absolute;inset:0;z-index:4;display:block;overflow:hidden;color:hud.$texto;animation:acender .5s ease-out}
+.cena{position:absolute;inset:0;cursor:grab;mask-image:radial-gradient(ellipse 72% 70% at 50% 50%,#000 62%,transparent 100%)}
+.cena:active{cursor:grabbing}
+
+.painel{@include hud.moldura(12px);position:absolute;margin:0;padding:.85rem 1rem}
+.rotulo{margin:0 0 .45rem;@include hud.rotulo(.58rem)}
+.titulo{top:1rem;left:1rem;max-width:min(24rem,calc(100% - 2rem))}
+.nome{margin:0;font:600 1.05rem hud.$mono;letter-spacing:.12em;text-transform:uppercase;color:hud.$ciano-forte;@include hud.brilho-texto(hud.$ciano,.4)}
+.descricao{margin:.45rem 0 0;font-size:.78rem;line-height:1.45;color:#b9d3ea}
+.estado{display:flex;align-items:center;gap:.5rem;margin:.6rem 0 0;font:500 .66rem hud.$mono;letter-spacing:.16em;text-transform:uppercase;color:#9cefff}
+.estado--erro{color:hud.$erro}
+.pulso{width:6px;height:6px;border-radius:50%;background:hud.$ciano;box-shadow:0 0 10px hud.$azul-energia;animation:pulso 1s ease-in-out infinite}
+
+.exemplos{top:1rem;right:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;max-width:calc(100% - 2rem)}
+.exemplos .rotulo{width:100%}
+
+.destaque{left:1rem;bottom:5.2rem;display:flex;flex-direction:column;gap:.3rem;pointer-events:none}
+.destaque strong{font:600 .8rem hud.$mono;letter-spacing:.08em;color:hud.$ciano-forte}
+.destaque span{font:500 .6rem hud.$mono;letter-spacing:.18em;text-transform:uppercase;color:#a6bed8}
+
+.controles{left:50%;bottom:1rem;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.6rem;width:max-content;max-width:calc(100% - 2rem)}
+.explosao{display:flex;align-items:center;gap:.7rem;font:500 .62rem hud.$mono;letter-spacing:.16em;text-transform:uppercase;color:#cdeaff}
+.explosao input{width:clamp(7rem,16vw,12rem);accent-color:hud.$ciano}
+.botao{@include hud.botao(6px);padding:.5rem .75rem}
+// O botão tem canto cortado (clip-path): contorno por fora seria recortado, então ele vai por dentro.
+.botao:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+.explosao input:focus-visible{outline:2px solid #fff;outline-offset:3px}
+
+.falha{position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);margin:0;color:hud.$erro;font:500 .75rem hud.$mono;letter-spacing:.1em}
+
+@keyframes acender{from{opacity:0}}
+@keyframes pulso{50%{opacity:.25}}
+@media(prefers-reduced-motion:reduce){:host,.pulso{animation:none}}
+@media(max-width:700px){.titulo{max-width:calc(100% - 2rem)}.exemplos{top:auto;bottom:8.5rem;left:1rem;right:auto}.destaque{bottom:12.5rem}.descricao{display:none}}

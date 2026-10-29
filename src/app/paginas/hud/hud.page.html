@@ -38,8 +38,11 @@
     <div class="tracos" aria-hidden="true"></div>
   </div>
   <main class="conteudo" aria-label="Janelas do Jarvis">
-    <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [class.orbe--formando]="orbeFormando()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
-    <app-sondas class="sondas" [class.sondas--livre]="orbeLivre()" [recuada]="!orbeLivre()" [estado]="estadoOrbe()" [escutaDisponivel]="escuta.disponivel" [escutaLigada]="escuta.ligada()" [ditando]="escuta.ditando()" [progresso]="conversa.progresso()" [rotuloVoz]="cota.rotulo()" />
+    <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [class.orbe--recuado]="holograma.aberto()" [class.orbe--formando]="orbeFormando()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
+    <app-sondas class="sondas" [class.sondas--livre]="orbeLivre()" [class.sondas--recuado]="holograma.aberto()" [recuada]="!orbeLivre()" [estado]="estadoOrbe()" [escutaDisponivel]="escuta.disponivel" [escutaLigada]="escuta.ligada()" [ditando]="escuta.ditando()" [progresso]="conversa.progresso()" [rotuloVoz]="cota.rotulo()" />
+    @if (holograma.aberto()) {
+      <app-holograma-view />
+    }
     <div class="palco" #areaJanelas>
       @for (janela of janelas.janelas(); track janela.id) {
         <app-janela [janela]="janela" [miniPlayer]="janela.estado === 'minimizada' && midia.bandeja() === janela.id">
@@ -104,6 +107,7 @@
       @if (player.fase() === 'tocando' || voz.falando()) { <button class="botao" type="button" (click)="player.parar()">Parar fala</button> }
       @if (player.fase() === 'tocando') { <button class="botao" type="button" (click)="player.pular()">Próximo</button> }
       @if (conversa.naTela()) { <button class="botao" type="button" [disabled]="conversa.ocupada()" (click)="consultarBriefing()">Ver briefing</button> }
+      <button class="botao" type="button" [attr.aria-pressed]="holograma.aberto()" (click)="holograma.alternar()">Holograma</button>
       <button class="botao bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo() || conversa.ocupada()">{{ pedindo() ? 'Preparando…' : 'Briefing' }}</button>
     </div>
   </footer>

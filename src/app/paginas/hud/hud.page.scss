@@ -35,6 +35,8 @@
 // Sem drop-shadow aqui: o brilho já vem do canvas, e um filtro sobre o campo (largura da tela) custaria a cada quadro.
 .orbe--livre,.sondas--livre{--escala:1.06}
 .orbe--livre{opacity:1}
+// Com o holograma aberto o orbe sai de cena: dois brilhos no mesmo centro brigariam.
+.orbe--recuado,.sondas--recuado{--escala:.5;opacity:0}
 // "O orbe se formando" da abertura: nasce pequeno, apagado e borrado, e cresce até o normal.
 // É só CSS de propósito — um estado novo no canvas obrigaria a mexer nas três uniões paralelas
 // (EstadoOrbe, EstadoDesenho, EstadoDasSondas) por um efeito que a transição aqui já entrega.

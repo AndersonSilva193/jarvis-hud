@@ -10,6 +10,7 @@ import { HistoricoConversaComponent } from '../../componentes/conversa/historico
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 
+import { HologramaViewComponent } from '../../componentes/holograma/holograma-view';
 import { InicializacaoComponent } from '../../componentes/inicializacao/inicializacao';
 import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
 import { SondasComponent } from '../../componentes/sondas/sondas';
@@ -18,6 +19,7 @@ import { normalizar, EscutaService, contem } from '../../nucleo/escuta.service';
 import { EscutaDeRespostaService } from '../../nucleo/escuta-de-resposta.service';
 import { normalizarCodigo } from '../../nucleo/normalizar-codigo';
 import { JarvisApiService, type TarefaComputer } from '../../nucleo/jarvis-api.service';
+import { HologramaService } from '../../nucleo/holograma.service';
 import { InicializacaoService } from '../../nucleo/inicializacao.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
 import { VozService } from '../../nucleo/voz.service';
@@ -51,6 +53,7 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
     OrbeComponent,
     SondasComponent,
     InicializacaoComponent,
+    HologramaViewComponent,
     RouterLink,
   ],
   templateUrl: './hud.page.html',
@@ -74,6 +77,7 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly escuta = inject(EscutaService);
   protected readonly escutaDeResposta = inject(EscutaDeRespostaService);
   protected readonly inicio = inject(InicializacaoService);
+  protected readonly holograma = inject(HologramaService);
   private readonly api = inject(JarvisApiService);
 
   protected readonly pedindo = signal(false);
@@ -127,7 +131,7 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly briefingNoPalco = computed(() => (this.conversa.naTela() ? [] : this.palco()));
   /** Sem nada no palco o orbe cresce e assume o centro — é o Jarvis em repouso, sem card por cima. */
   protected readonly orbeLivre = computed(
-    () => this.janelas.visiveis().length === 0,
+    () => this.janelas.visiveis().length === 0 && !this.holograma.aberto(),
   );
   /** Durante a abertura o orbe "se forma": escala, opacidade e desfoque, só com CSS. */
   protected readonly orbeFormando = computed(() => this.inicio.fase() === 'animando');
@@ -273,6 +277,7 @@ export class HudPage implements OnInit, OnDestroy {
     this.escutaDeResposta.cancelar();
     this.conversa.aoReceber = null;
     this.inicio.cancelar(false);
+    this.holograma.fechar();
     this.tela.encerrar();
     this.cota.parar();
     this.conversa.fechar();
@@ -440,6 +445,7 @@ export class HudPage implements OnInit, OnDestroy {
       if (this.tela.historicoAberto()) { this.tela.historicoAberto.set(false); evento.preventDefault(); return; }
       const foco = this.janelas.foco();
       if (foco) { this.janelas.fechar(foco); evento.preventDefault(); return; }
+      if (this.holograma.aberto()) { this.holograma.fechar(); evento.preventDefault(); return; }
       this.escuta.cancelarDitado();
       this.voz.parar();
       // Fechar a consulta antes de parar: o palco volta a ficar vazio e o orbe retoma o centro.
