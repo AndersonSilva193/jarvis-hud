@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { lerFimHolograma, lerMetaHolograma, lerPecaHolograma } from './holograma.modelos';
+import { lerErroHolograma, lerFimHolograma, lerMetaHolograma, lerPecaHolograma } from './holograma.modelos';
 
 /** Uma peça como o `HologramaController` manda no evento `peca`. */
 const PECA = {
@@ -53,5 +53,11 @@ describe('meta e fim', () => {
     expect(lerMetaHolograma({ nome: '  ' })).toBeNull();
     expect(lerFimHolograma({ pecas: 87, avisos: 0 })).toEqual({ pecas: 87, avisos: 0 });
     expect(lerFimHolograma({ pecas: '87', avisos: 0 })).toBeNull();
+  });
+
+  it('o erro precisa de texto', () => {
+    expect(lerErroHolograma({ texto: 'O modelo não respondeu a tempo.' })).toBe('O modelo não respondeu a tempo.');
+    expect(lerErroHolograma({ texto: '   ' })).toBeNull();
+    expect(lerErroHolograma({ mensagem: 'x' })).toBeNull();
   });
 });

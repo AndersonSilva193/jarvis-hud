@@ -37,7 +37,7 @@
     }
     <div class="tracos" aria-hidden="true"></div>
   </div>
-  <main class="conteudo" aria-label="Janelas do Jarvis">
+  <main class="conteudo" [class.conteudo--holograma]="holograma.aberto()" aria-label="Janelas do Jarvis">
     <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [class.orbe--recuado]="holograma.aberto()" [class.orbe--formando]="orbeFormando()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
     <app-sondas class="sondas" [class.sondas--livre]="orbeLivre()" [class.sondas--recuado]="holograma.aberto()" [recuada]="!orbeLivre()" [estado]="estadoOrbe()" [escutaDisponivel]="escuta.disponivel" [escutaLigada]="escuta.ligada()" [ditando]="escuta.ditando()" [progresso]="conversa.progresso()" [rotuloVoz]="cota.rotulo()" />
     @if (holograma.aberto()) {

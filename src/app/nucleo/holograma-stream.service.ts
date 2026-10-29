@@ -4,9 +4,11 @@ import { ConfigStore } from './config.store';
 import { LeitorSse, type EventoSse } from './leitor-sse';
 import {
   lerAvisoHolograma,
+  lerErroHolograma,
   lerFimHolograma,
   lerMetaHolograma,
   lerPecaHolograma,
+  type DetalheHolograma,
   type FimHolograma,
   type MetaHolograma,
   type NomeExemplo,
@@ -17,6 +19,8 @@ export interface OuvintesDoHolograma {
   meta: (meta: MetaHolograma) => void;
   peca: (peca: PecaHolograma) => void;
   aviso: (texto: string) => void;
+  /** A geração parou antes da hora; o `fim` ainda vem depois. */
+  erro: (texto: string) => void;
   fim: (fim: FimHolograma) => void;
 }
 
@@ -40,6 +44,12 @@ export class HologramaStreamService {
 
   exemplo(nome: NomeExemplo, ouvintes: OuvintesDoHolograma, sinal: AbortSignal): Promise<boolean> {
     return this.transmitir(`/api/holograma/exemplo/${encodeURIComponent(nome)}`, ouvintes, sinal);
+  }
+
+  /** Pede ao modelo que gere o objeto; as peças chegam enquanto ele escreve. */
+  gerar(objeto: string, detalhe: DetalheHolograma, ouvintes: OuvintesDoHolograma, sinal: AbortSignal): Promise<boolean> {
+    const busca = new URLSearchParams({ objeto, detalhe });
+    return this.transmitir(`/api/holograma/gerar?${busca.toString()}`, ouvintes, sinal);
   }
 
   /** Resolve com `true` quando o `fim` chegou; `false` quando o corpo acabou antes dele. */
@@ -90,6 +100,11 @@ function despachar(evento: EventoSse, ouvintes: OuvintesDoHolograma): boolean {
     case 'aviso': {
       const aviso = lerAvisoHolograma(corpo);
       if (aviso) ouvintes.aviso(aviso);
+      return false;
+    }
+    case 'erro': {
+      const erro = lerErroHolograma(corpo);
+      if (erro) ouvintes.erro(erro);
       return false;
     }
     case 'fim': {

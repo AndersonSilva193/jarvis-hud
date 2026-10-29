@@ -3,6 +3,7 @@ import {
   AdditiveBlending,
   Box3,
   BufferGeometry,
+  CircleGeometry,
   Color,
   DoubleSide,
   FrontSide,
@@ -68,6 +69,11 @@ const CAMERA_INICIAL = new Vector3(6.5, 3.2, 8.5);
 const ALVO_INICIAL = new Vector3(0, -0.3, 0);
 const BRANCO = new Color(0xffffff);
 
+/** A varredura de "escaneando": um anel que sobe da base e apaga, de novo e de novo. */
+const VARREDURA_RAIO = 2.1;
+const VARREDURA_ALTURA = 3.2;
+const VARREDURA_PERIODO_S = 1.6;
+
 /** Os anéis da base: arcos de um anel girando é o que deixa a rotação visível. */
 const ANEIS = [
   { raio: 2.3, largura: 0.05, arcos: 3, velocidade: 0.22, cor: 0x5ff2ff },
@@ -129,6 +135,11 @@ export class CenaHolograma {
   private ponteiroMudou = false;
   private destacada: PecaNaCena | null = null;
   private voo: { posicao: Vector3; alvo: Vector3 } | null = null;
+  private varredura!: { grupo: Group; anel: Mesh; materialAnel: MeshBasicMaterial; materialDisco: MeshBasicMaterial };
+  private escaneando = false;
+  /** 0 a 1: a varredura acende e apaga suave, em vez de sumir no quadro da primeira peça. */
+  private intensidadeDaVarredura = 0;
+  private faseDaVarredura = 0;
 
   constructor(
     private readonly host: HTMLElement,
@@ -152,6 +163,7 @@ export class CenaHolograma {
     this.camera.position.copy(CAMERA_INICIAL);
     this.cena.add(this.objeto);
     this.montarPiso();
+    this.montarVarredura();
 
     this.controles = new OrbitControls(this.camera, tela);
     this.controles.target.copy(ALVO_INICIAL);
@@ -251,6 +263,15 @@ export class CenaHolograma {
     this.destacar(null);
   }
 
+  /**
+   * Liga ou desliga a varredura da base — o "estou escaneando" enquanto o modelo pensa e a primeira
+   * peça não chegou. Com movimento reduzido, o anel fica parado na base.
+   */
+  escanear(ligado: boolean): void {
+    this.escaneando = ligado;
+    if (this.opcoes.movimentoReduzido) this.intensidadeDaVarredura = ligado ? 1 : 0;
+  }
+
   /** 0 = montado, 1 = explodido; o fator anda até o alvo suavemente. */
   explodir(fator: number): void {
     this.alvoExplosao = MathUtils.clamp(fator, 0, 1);
@@ -328,6 +349,44 @@ export class CenaHolograma {
     }
   }
 
+  private montarVarredura(): void {
+    const grupo = new Group();
+    grupo.visible = false;
+    const materialDisco = new MeshBasicMaterial({
+      color: 0x2d7dff, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
+    });
+    const disco = new Mesh(new CircleGeometry(VARREDURA_RAIO, 64), materialDisco);
+    disco.rotation.x = -Math.PI / 2;
+    disco.position.y = Y_DO_PISO + 0.03;
+    const materialAnel = new MeshBasicMaterial({
+      color: 0x5ff2ff, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
+    });
+    const anel = new Mesh(new RingGeometry(VARREDURA_RAIO - 0.12, VARREDURA_RAIO, 96), materialAnel);
+    anel.rotation.x = -Math.PI / 2;
+    anel.position.y = Y_DO_PISO + 0.04;
+    grupo.add(disco, anel);
+    this.fixos.push(disco.geometry, materialDisco, anel.geometry, materialAnel);
+    this.cena.add(grupo);
+    this.varredura = { grupo, anel, materialAnel, materialDisco };
+  }
+
+  private animarVarredura(agora: number, dt: number, reduzido: boolean): void {
+    const v = this.varredura;
+    if (!reduzido) {
+      this.intensidadeDaVarredura += ((this.escaneando ? 1 : 0) - this.intensidadeDaVarredura) * suave(dt, 6);
+      if (!this.escaneando && this.intensidadeDaVarredura < 0.01) this.intensidadeDaVarredura = 0;
+      this.faseDaVarredura = (this.faseDaVarredura + dt / VARREDURA_PERIODO_S) % 1;
+    }
+    v.grupo.visible = this.intensidadeDaVarredura > 0;
+    if (!v.grupo.visible) return;
+    // Sobe da base e encolhe um pouco enquanto apaga: lê como um feixe varrendo o volume do objeto.
+    const t = reduzido ? 0 : this.faseDaVarredura;
+    v.anel.position.y = Y_DO_PISO + 0.04 + t * VARREDURA_ALTURA;
+    v.anel.scale.setScalar(1 - t * 0.35);
+    v.materialAnel.opacity = this.intensidadeDaVarredura * (reduzido ? 0.6 : (1 - t) * 0.85);
+    v.materialDisco.opacity = this.intensidadeDaVarredura * (reduzido ? 0.12 : 0.1 + 0.05 * Math.sin(agora / 160));
+  }
+
   private ajustar(): void {
     const largura = this.host.clientWidth;
     const altura = this.host.clientHeight;
@@ -350,6 +409,7 @@ export class CenaHolograma {
     for (const p of this.pecas) this.animarPeca(p, agora, dt, grupo);
 
     if (!reduzido) for (const anel of this.aneis) anel.rotation.z += (anel.userData['velocidade'] as number) * dt;
+    this.animarVarredura(agora, dt, reduzido);
     this.voarPasso(dt);
     this.controles.autoRotate =
       !reduzido && !this.arrastando && !this.voo && !this.destacada && agora - this.ultimaInteracao > OCIOSO_ATE_GIRAR_MS;

@@ -1,7 +1,12 @@
 import { Component, DestroyRef, ElementRef, NgZone, afterNextRender, computed, effect, inject, signal, viewChild } from '@angular/core';
 
 import { HologramaService } from '../../nucleo/holograma.service';
-import { EXEMPLOS_HOLOGRAMA } from '../../nucleo/holograma.modelos';
+import {
+  DETALHES_HOLOGRAMA,
+  EXEMPLOS_HOLOGRAMA,
+  MAX_OBJETO_HOLOGRAMA,
+  type DetalheHolograma,
+} from '../../nucleo/holograma.modelos';
 // Só tipos: o valor vem do `import()` dinâmico, e o Three.js fica fora do chunk da HUD.
 import type { CenaHolograma, PecaDestacada } from './cena-holograma';
 
@@ -26,12 +31,46 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
         @if (holograma.construindo()) { <span class="pulso" aria-hidden="true"></span> }{{ estado() }}
       </p>
     </section>
-    <section class="painel exemplos" aria-label="Exemplos de holograma">
-      <p class="rotulo">Exemplos</p>
-      @for (exemplo of exemplos; track exemplo.nome) {
-        <button class="botao" type="button" (click)="holograma.carregarExemplo(exemplo.nome)">{{ exemplo.rotulo }}</button>
-      }
-    </section>
+    <div class="lateral">
+      <section class="painel gerar" aria-label="Gerar holograma">
+        <form class="formulario" (submit)="aoGerar($event)">
+          <label class="rotulo" for="holograma-objeto">Gerar objeto</label>
+          <div class="campos">
+            <input
+              id="holograma-objeto"
+              class="entrada"
+              type="text"
+              autocomplete="off"
+              placeholder="motor V8, turbina, DNA…"
+              [attr.maxlength]="maxObjeto"
+              [value]="objeto()"
+              (input)="aoDigitar($event)"
+            />
+            <select class="entrada seletor" aria-label="Nível de detalhe" (change)="aoEscolherDetalhe($event)">
+              @for (opcao of detalhes; track opcao.valor) {
+                <option [value]="opcao.valor" [selected]="opcao.valor === detalhe()">{{ opcao.rotulo }}</option>
+              }
+            </select>
+            <!-- Um botão só, que troca de papel: o foco continua nele quando a geração começa e termina. -->
+            <button
+              class="botao botao--gerar"
+              [class.botao--cancelar]="holograma.construindo()"
+              [attr.type]="holograma.construindo() ? 'button' : 'submit'"
+              [disabled]="!holograma.construindo() && !objeto().trim()"
+              (click)="aoClicarAcao($event)"
+            >
+              {{ holograma.construindo() ? 'Cancelar' : 'Gerar' }}
+            </button>
+          </div>
+        </form>
+      </section>
+      <section class="painel exemplos" aria-label="Exemplos de holograma">
+        <p class="rotulo">Exemplos</p>
+        @for (exemplo of exemplos; track exemplo.nome) {
+          <button class="botao" type="button" (click)="holograma.carregarExemplo(exemplo.nome)">{{ exemplo.rotulo }}</button>
+        }
+      </section>
+    </div>
     @if (destaque(); as peca) {
       <p class="painel destaque"><strong>{{ peca.nome }}</strong><span>Grupo · {{ peca.grupo }}</span></p>
     }
@@ -54,6 +93,10 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
 export class HologramaViewComponent {
   protected readonly holograma = inject(HologramaService);
   protected readonly exemplos = EXEMPLOS_HOLOGRAMA;
+  protected readonly detalhes = DETALHES_HOLOGRAMA;
+  protected readonly maxObjeto = MAX_OBJETO_HOLOGRAMA;
+  protected readonly objeto = signal('');
+  protected readonly detalhe = signal<DetalheHolograma>('normal');
   protected readonly explosao = signal(0);
   protected readonly destaque = signal<PecaDestacada | null>(null);
   protected readonly falha = signal('');
@@ -62,21 +105,25 @@ export class HologramaViewComponent {
     const total = contar(this.holograma.pecas().length);
     switch (this.holograma.fase()) {
       case 'construindo':
-        return `Construindo… ${total}`;
+        return this.holograma.escaneando() ? 'Escaneando…' : `Construindo… ${total}`;
       case 'pronto': {
         const avisos = this.holograma.avisos();
         return avisos ? `${total} · ${avisos} ${avisos === 1 ? 'aviso' : 'avisos'}` : total;
       }
       case 'erro':
-        return this.holograma.erro();
+        // As peças que chegaram ficam na tela; o estado diz quantas.
+        return this.holograma.pecas().length ? `${this.holograma.erro()} · ${total}` : this.holograma.erro();
+      case 'cancelado':
+        return `Cancelado · ${total}`;
       default:
-        return 'Escolha um exemplo para montar.';
+        return 'Digite um objeto ou escolha um exemplo.';
     }
   });
 
   protected readonly descricaoDaCena = computed(() => {
     const meta = this.holograma.meta();
-    return meta ? `Holograma de ${meta.nome}, ${contar(this.holograma.pecas().length)}` : 'Holograma vazio';
+    if (meta) return `Holograma de ${meta.nome}, ${contar(this.holograma.pecas().length)}`;
+    return this.holograma.escaneando() ? 'Holograma escaneando' : 'Holograma vazio';
   });
 
   private readonly zona = inject(NgZone);
@@ -96,21 +143,49 @@ export class HologramaViewComponent {
       if (!cena) return;
       if (geracao !== this.geracaoDesenhada) {
         cena.limpar();
+        // Objeto novo começa montado; na primeira sincronização não, senão o Three.js chegando
+        // depois de um clique em Explodir desfaria o clique.
+        if (this.geracaoDesenhada !== -1) this.explosao.set(0);
         this.geracaoDesenhada = geracao;
         this.desenhadas = 0;
-        this.explosao.set(0);
       }
       for (; this.desenhadas < pecas.length; this.desenhadas++) cena.adicionar(pecas[this.desenhadas]!);
     });
     effect(() => this.cena()?.explodir(this.explosao() / 100));
-    // Objeto montado: a câmera enquadra o que chegou, seja um átomo pequeno ou um motor grande.
+    effect(() => this.cena()?.escanear(this.holograma.escaneando()));
+    // Objeto parado — pronto, cortado ou cancelado: a câmera enquadra o que chegou, seja um átomo
+    // pequeno ou um motor grande.
     effect(() => {
-      if (this.holograma.fase() === 'pronto') this.cena()?.centralizar();
+      const fase = this.holograma.fase();
+      if (fase !== 'construindo' && fase !== 'vazio' && this.holograma.pecas().length) this.cena()?.centralizar();
     });
     inject(DestroyRef).onDestroy(() => {
       this.vivo = false;
       this.cena()?.destruir();
     });
+  }
+
+  protected aoDigitar(evento: Event): void {
+    if (evento.target instanceof HTMLInputElement) this.objeto.set(evento.target.value);
+  }
+
+  protected aoEscolherDetalhe(evento: Event): void {
+    const valor = evento.target instanceof HTMLSelectElement ? evento.target.value : '';
+    const escolhido = this.detalhes.find((d) => d.valor === valor);
+    if (escolhido) this.detalhe.set(escolhido.valor);
+  }
+
+  protected aoGerar(evento: Event): void {
+    evento.preventDefault();
+    if (this.holograma.construindo() || !this.objeto().trim()) return;
+    void this.holograma.gerar(this.objeto(), this.detalhe());
+  }
+
+  /** Durante a geração o botão é "Cancelar"; fora dela ele é o submit do formulário. */
+  protected aoClicarAcao(evento: Event): void {
+    if (!this.holograma.construindo()) return;
+    evento.preventDefault();
+    this.holograma.cancelar();
   }
 
   protected aoExplodir(evento: Event): void {

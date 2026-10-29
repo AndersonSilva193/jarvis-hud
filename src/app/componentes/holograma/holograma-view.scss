@@ -14,7 +14,23 @@
 .estado--erro{color:hud.$erro}
 .pulso{width:6px;height:6px;border-radius:50%;background:hud.$ciano;box-shadow:0 0 10px hud.$azul-energia;animation:pulso 1s ease-in-out infinite}
 
-.exemplos{top:1rem;right:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;max-width:calc(100% - 2rem)}
+// A coluna da direita: o pedido ao modelo em cima, os exemplos prontos embaixo.
+// Metade da largura no máximo: a outra metade é do título, no canto oposto.
+.lateral{position:absolute;top:1rem;right:1rem;display:flex;flex-direction:column;align-items:flex-end;gap:.6rem;width:min(26rem,calc(50% - 1.5rem))}
+.lateral .painel{position:relative}
+.gerar{align-self:stretch}
+.formulario .rotulo{display:block}
+.campos{display:flex;gap:.45rem}
+.entrada{min-width:0;padding:.5rem .6rem;background:rgba(1,7,18,.7);border:1px solid hud.$ciano-fraco;color:hud.$texto;font:500 .78rem hud.$mono}
+.entrada::placeholder{color:rgba(223,244,255,.45)}
+.entrada:focus-visible{outline:2px solid hud.$ciano-forte;outline-offset:2px}
+.campos input{flex:1}
+// Sem isto a lista aberta do Windows mostra texto claro em fundo branco.
+.seletor option{background:hud.$fundo-claro}
+.botao--gerar{min-width:6.5rem;border-color:hud.$ciano;color:hud.$ciano-forte}
+// Cancelar é o mesmo botão em outro papel: a cor muda para ninguém apertar achando que é "Gerar".
+.botao--cancelar{border-color:hud.$erro;color:#ffd0d6}
+.exemplos{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem}
 .exemplos .rotulo{width:100%}
 
 .destaque{left:1rem;bottom:5.2rem;display:flex;flex-direction:column;gap:.3rem;pointer-events:none}
@@ -37,4 +53,32 @@
 @keyframes acender{from{opacity:0}}
 @keyframes pulso{50%{opacity:.25}}
 @media(prefers-reduced-motion:reduce){:host,.pulso{animation:none}}
-@media(max-width:700px){.titulo{max-width:calc(100% - 2rem)}.exemplos{top:auto;bottom:8.5rem;left:1rem;right:auto}.destaque{bottom:12.5rem}.descricao{display:none}}
+// No celular não há área para painéis flutuando sobre a cena: a camada entra no fluxo do conteúdo
+// (que cresce e rola com a HUD) e vira uma coluna — título, pedido, exemplos, cena e controles.
+@media(max-width:700px){
+  :host{position:relative;inset:auto;z-index:4;display:grid;grid-template-rows:auto auto auto minmax(16rem,56svh) auto;gap:.5rem;width:100%;align-self:stretch;justify-self:stretch;overflow:visible}
+  // A coluna da direita se desfaz: os dois painéis viram linhas da grade.
+  .lateral{display:contents}
+  .gerar{grid-row:2}
+  .campos{flex-wrap:wrap}
+  .campos input{flex:1 1 100%}
+  .seletor{flex:1 1 0}
+  // Abaixo de 16px o Safari do iPhone dá zoom na página ao focar o campo.
+  .entrada{font-size:1rem}
+  .painel{position:relative;inset:auto;transform:none;width:auto;max-width:none;padding:.55rem .75rem}
+  .titulo{grid-row:1;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.3rem .8rem}
+  .titulo .rotulo,.descricao{display:none}
+  .nome{font-size:.9rem;letter-spacing:.08em}
+  .estado{margin:0;font-size:.6rem;letter-spacing:.12em}
+  .exemplos{grid-row:3;flex-wrap:nowrap;overflow-x:auto}
+  .exemplos .rotulo{width:auto;margin:0 .3rem 0 0}
+  .exemplos .botao{flex-shrink:0}
+  // Cena e destaque dividem a mesma célula: o nome da peça aparece no canto de baixo da cena.
+  .cena{position:relative;inset:auto;grid-row:4;grid-column:1;mask-image:linear-gradient(transparent,#000 8%,#000 92%,transparent)}
+  .destaque{grid-row:4;grid-column:1;align-self:end;justify-self:start;margin:0 0 .5rem .5rem}
+  .falha{grid-row:4;grid-column:1;position:relative;inset:auto;transform:none;align-self:center;justify-self:center}
+  .controles{grid-row:5;gap:.45rem}
+  .explosao{flex:1 1 100%;justify-content:center}
+  .explosao input{flex:1;width:auto;min-width:0}
+  .controles .botao{flex:1 1 0;padding:.55rem .4rem}
+}

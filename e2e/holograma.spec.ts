@@ -83,3 +83,49 @@ test('holograma explica o token recusado', async ({ page }) => {
   await page.getByRole('button', { name: 'Átomo' }).click();
   await expect(page.locator('app-holograma-view [role=status]')).toHaveText('Token recusado pela API.');
 });
+
+test('holograma gerado pelo modelo: escaneia, mantém as peças no erro e cancela', async ({ page }) => {
+  const erros: string[] = []; page.on('pageerror', (e) => erros.push(e.message));
+  const pedidos: URL[] = [];
+  let liberar!: () => void;
+  const liberado = new Promise<void>((r) => (liberar = r));
+  await page.route('https://api.hud.test/api/holograma/gerar?**', async (route) => {
+    pedidos.push(new URL(route.request().url()));
+    // O primeiro pedido espera o teste mandar; o segundo nunca responde, e é cancelado.
+    if (pedidos.length > 1) return;
+    await liberado;
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body:
+        evento('meta', { nome: 'Motor V8', categoria: 'mecanica', descricao: 'Motor em corte.' }) +
+        evento('peca', PECAS[0]) + evento('peca', PECAS[4]) +
+        evento('erro', { texto: 'O modelo não respondeu a tempo.' }) +
+        evento('fim', { pecas: 2, avisos: 0 }),
+    });
+  });
+
+  await page.getByRole('button', { name: 'Holograma', exact: true }).click();
+  const estado = page.locator('app-holograma-view [role=status]');
+  await expect(page.getByRole('button', { name: 'Gerar' })).toBeDisabled();
+  await page.getByLabel('Gerar objeto').fill('motor V8');
+  await page.getByLabel('Nível de detalhe').selectOption('detalhado');
+  await page.getByRole('button', { name: 'Gerar' }).click();
+
+  await expect(estado).toHaveText('Escaneando…');
+  await expect(page.getByRole('button', { name: 'Cancelar' })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  expect(pedidos[0]?.searchParams.get('objeto')).toBe('motor V8');
+  expect(pedidos[0]?.searchParams.get('detalhe')).toBe('detalhado');
+
+  liberar();
+  await expect(estado).toHaveText('O modelo não respondeu a tempo. · 2 peças');
+  await expect(page.getByRole('img', { name: 'Holograma de Motor V8, 2 peças' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Gerar' }).click();
+  await expect(estado).toHaveText('Escaneando…');
+  await page.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(estado).toHaveText('Cancelado · 0 peças');
+  await expect(page.getByRole('button', { name: 'Gerar' })).toBeFocused();
+  expect(erros).toEqual([]);
+});

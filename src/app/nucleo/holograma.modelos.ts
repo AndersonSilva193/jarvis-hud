@@ -4,7 +4,18 @@ import { objeto } from './tela.modelos';
 export const FORMAS_HOLOGRAMA = ['box', 'sph', 'cyl', 'cone', 'tor', 'ring', 'cap', 'tube', 'line', 'helix'] as const;
 export type FormaHolograma = (typeof FORMAS_HOLOGRAMA)[number];
 
-/** Os exemplos de `GET /api/holograma/exemplo/{nome}`: botões temporários até a geração real. */
+/** Os níveis de `GET /api/holograma/gerar?detalhe=`: o servidor recusa qualquer outro. */
+export const DETALHES_HOLOGRAMA = [
+  { valor: 'rapido', rotulo: 'Rápido' },
+  { valor: 'normal', rotulo: 'Normal' },
+  { valor: 'detalhado', rotulo: 'Detalhado' },
+] as const;
+export type DetalheHolograma = (typeof DETALHES_HOLOGRAMA)[number]['valor'];
+
+/** O mesmo teto do `PromptDeHolograma.MAX_OBJETO`: acima disso o servidor responde 400. */
+export const MAX_OBJETO_HOLOGRAMA = 120;
+
+/** Os exemplos de `GET /api/holograma/exemplo/{nome}`: objetos prontos, sem gastar modelo. */
 export const EXEMPLOS_HOLOGRAMA = [
   { nome: 'motor_v8', rotulo: 'Motor V8' },
   { nome: 'dna', rotulo: 'DNA' },
@@ -112,4 +123,10 @@ export function lerFimHolograma(v: unknown): FimHolograma | null {
 
 export function lerAvisoHolograma(v: unknown): string | null {
   return objeto(v) && typeof v['texto'] === 'string' ? v['texto'].slice(0, 200) : null;
+}
+
+/** O `erro` da geração: o texto é fixo no servidor, e chega sempre antes do `fim`. */
+export function lerErroHolograma(v: unknown): string | null {
+  const texto = lerAvisoHolograma(v)?.trim();
+  return texto ? texto : null;
 }

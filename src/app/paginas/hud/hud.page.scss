@@ -70,3 +70,5 @@
 
 // As sondas ficam fora do quadrado do orbe: abaixo desta largura elas cairiam em cima dele.
 @media(max-width:1100px){.sondas{display:none}}
+// No celular o holograma entra no fluxo com altura própria: o conteúdo cresce e a HUD rola, em vez de espremer a cena por cima da conversa.
+@media(max-width:700px){.conteudo--holograma{flex:1 0 auto}}
