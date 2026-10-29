@@ -95,6 +95,7 @@ describe('HologramaService.gerar', () => {
     stream.terminar(true);
     await pedido;
 
+    expect(holograma.textosDeAviso()).toEqual(['O Haiku falhou; troquei para o gerador local.']);
     expect(holograma.trocaDeGerador()).toBe('O Haiku falhou; troquei para o gerador local.');
     expect(holograma.selo()).toBe('Haiku · 1 peça · US$0,002');
   });

@@ -29,7 +29,7 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
       <p class="rotulo">Holograma</p>
       <h2 id="holograma-nome" class="nome">{{ holograma.meta()?.nome ?? 'Nenhum objeto' }}</h2>
       @if (holograma.meta()?.descricao; as descricao) { <p class="descricao">{{ descricao }}</p> }
-      <p class="estado" [class.estado--erro]="holograma.fase() === 'erro'" role="status" aria-live="polite">
+      <p class="estado" [class.estado--erro]="holograma.fase() === 'erro'" role="status" aria-live="polite" [attr.title]="dicaDosAvisos()">
         @if (holograma.construindo()) { <span class="pulso" aria-hidden="true"></span> }{{ estado() }}
       </p>
       @if (holograma.trocaDeGerador(); as troca) { <p class="descricao" role="status">{{ troca }}</p> }
@@ -132,6 +132,9 @@ export class HologramaViewComponent {
         return 'Digite um objeto ou escolha um exemplo.';
     }
   });
+
+  /** O texto dos avisos ao passar o mouse no contador; sem aviso, sem dica. */
+  protected readonly dicaDosAvisos = computed(() => this.holograma.textosDeAviso().join('\n') || null);
 
   protected readonly descricaoDaCena = computed(() => {
     const meta = this.holograma.meta();

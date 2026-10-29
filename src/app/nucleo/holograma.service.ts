@@ -37,6 +37,8 @@ export class HologramaService {
   readonly fase = signal<FaseHolograma>('vazio');
   readonly erro = signal('');
   readonly avisos = signal(0);
+  /** O texto de cada aviso recebido, para a dica do contador; o número é só quantos foram. */
+  readonly textosDeAviso = signal<readonly string[]>([]);
   /** O gerador do próximo pedido; lembrado entre sessões e enviado em cada pedido. */
   readonly gerador = signal<GeradorHolograma>(lembrarGerador());
   /** O que o servidor disse que gastou ao fechar a geração; vazio enquanto constrói. */
@@ -121,6 +123,7 @@ export class HologramaService {
           aviso: (texto, troca) => {
             if (troca) this.trocaDeGerador.set(texto);
             this.avisos.update((n) => n + 1);
+            this.textosDeAviso.update((lista) => (lista.length < 20 ? [...lista, texto] : lista));
           },
           erro: (texto) => (erroDoServidor = texto),
           fim: (fim) => this.resumo.set(fim),
@@ -148,6 +151,7 @@ export class HologramaService {
     this.meta.set(null);
     this.pecas.set([]);
     this.avisos.set(0);
+    this.textosDeAviso.set([]);
     this.resumo.set(null);
     this.trocaDeGerador.set('');
     this.erro.set('');
