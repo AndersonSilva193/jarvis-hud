@@ -3,12 +3,13 @@ import { Component, DestroyRef, ElementRef, NgZone, afterNextRender, computed, e
 import { HologramaService } from '../../nucleo/holograma.service';
 import {
   DETALHES_HOLOGRAMA,
-  EXEMPLOS_HOLOGRAMA,
   GERADORES_HOLOGRAMA,
   MAX_OBJETO_HOLOGRAMA,
   lerGeradorHolograma,
   type DetalheHolograma,
+  type ItemGaleria,
 } from '../../nucleo/holograma.modelos';
+import { GaleriaHologramaComponent } from './galeria-holograma';
 // Só tipos: o valor vem do `import()` dinâmico, e o Three.js fica fora do chunk da HUD.
 import type { CenaHolograma, PecaDestacada } from './cena-holograma';
 
@@ -21,6 +22,7 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
  */
 @Component({
   selector: 'app-holograma-view',
+  imports: [GaleriaHologramaComponent],
   host: { class: 'holograma' },
   template: `
     <div class="cena" #alvo role="img" [attr.aria-label]="descricaoDaCena()"></div>
@@ -79,12 +81,7 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
           </div>
         </form>
       </section>
-      <section class="painel exemplos" aria-label="Exemplos de holograma">
-        <p class="rotulo">Exemplos</p>
-        @for (exemplo of exemplos; track exemplo.nome) {
-          <button class="botao" type="button" (click)="holograma.carregarExemplo(exemplo.nome)">{{ exemplo.rotulo }}</button>
-        }
-      </section>
+      <app-galeria-holograma class="painel galeria" (regerar)="gerarDeNovo($event)" />
     </div>
     @if (destaque(); as peca) {
       <p class="painel destaque"><strong>{{ peca.nome }}</strong><span>Grupo · {{ peca.grupo }}</span></p>
@@ -107,7 +104,6 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
 })
 export class HologramaViewComponent {
   protected readonly holograma = inject(HologramaService);
-  protected readonly exemplos = EXEMPLOS_HOLOGRAMA;
   protected readonly detalhes = DETALHES_HOLOGRAMA;
   protected readonly geradores = GERADORES_HOLOGRAMA;
   protected readonly maxObjeto = MAX_OBJETO_HOLOGRAMA;
@@ -133,7 +129,7 @@ export class HologramaViewComponent {
       case 'cancelado':
         return `Cancelado · ${total}`;
       default:
-        return 'Digite um objeto ou escolha um exemplo.';
+        return 'Digite um objeto ou abra um da galeria.';
     }
   });
 
@@ -150,6 +146,8 @@ export class HologramaViewComponent {
   private readonly alvo = viewChild.required<ElementRef<HTMLElement>>('alvo');
   private readonly cena = signal<CenaHolograma | null>(null);
   private geracaoDesenhada = -1;
+  /** A geração cuja miniatura já foi pedida: uma captura por objeto montado. */
+  private geracaoCapturada = -1;
   private desenhadas = 0;
   private vivo = true;
 
@@ -179,10 +177,34 @@ export class HologramaViewComponent {
       const fase = this.holograma.fase();
       if (fase !== 'construindo' && fase !== 'vazio' && this.holograma.pecas().length) this.cena()?.centralizar();
     });
+    // Objeto da galeria sem miniatura terminou de montar: espera a última peça acender e a câmera
+    // chegar, e manda a captura. Trocar de objeto antes disso desarma.
+    effect((aoLimpar) => {
+      const fim = this.holograma.resumo();
+      const geracao = this.holograma.geracao();
+      if (this.holograma.fase() !== 'pronto' || !fim?.salvo || fim.miniatura || !fim.id) return;
+      if (this.geracaoCapturada === geracao) return;
+      this.geracaoCapturada = geracao;
+      const id = fim.id;
+      const espera = setTimeout(() => {
+        if (this.holograma.geracao() !== geracao) return;
+        const imagem = this.cena()?.miniatura(LADO_DA_MINIATURA);
+        if (imagem) void this.holograma.enviarMiniatura(id, imagem);
+      }, ESPERA_DA_MINIATURA_MS);
+      aoLimpar(() => clearTimeout(espera));
+    });
     inject(DestroyRef).onDestroy(() => {
       this.vivo = false;
       this.cena()?.destruir();
     });
+  }
+
+  /** O "Gerar de novo" da galeria: o campo passa a mostrar o pedido que está sendo refeito. */
+  protected gerarDeNovo(item: ItemGaleria): void {
+    if (this.holograma.construindo()) return;
+    this.objeto.set(item.objeto);
+    this.detalhe.set(item.detalhe);
+    void this.holograma.gerarDeNovo(item);
   }
 
   protected aoDigitar(evento: Event): void {
@@ -248,6 +270,11 @@ export class HologramaViewComponent {
     }
   }
 }
+
+/** O tamanho que o servidor espera da miniatura. */
+const LADO_DA_MINIATURA = 256;
+/** A entrada da última peça e o voo da câmera ao centralizar cabem nisso. */
+const ESPERA_DA_MINIATURA_MS = 1_500;
 
 function contar(n: number): string {
   return `${n} ${n === 1 ? 'peça' : 'peças'}`;

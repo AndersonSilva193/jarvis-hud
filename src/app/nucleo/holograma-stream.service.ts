@@ -13,7 +13,6 @@ import {
   type FimHolograma,
   type GeradorHolograma,
   type MetaHolograma,
-  type NomeExemplo,
   type PecaHolograma,
 } from './holograma.modelos';
 
@@ -62,19 +61,25 @@ const CONFERENCIA_MS = 2_000;
 export class HologramaStreamService {
   private readonly config = inject(ConfigStore);
 
-  exemplo(nome: NomeExemplo, ouvintes: OuvintesDoHolograma, sinal: AbortSignal): Promise<boolean> {
-    return this.transmitir(`/api/holograma/exemplo/${encodeURIComponent(nome)}`, ouvintes, sinal);
+  /** Reabre um objeto da galeria, peça por peça, como se tivesse vindo do cache. */
+  abrir(id: string, ouvintes: OuvintesDoHolograma, sinal: AbortSignal): Promise<boolean> {
+    return this.transmitir(`/api/holograma/${encodeURIComponent(id)}/stream`, ouvintes, sinal);
   }
 
-  /** Pede ao modelo que gere o objeto; as peças chegam enquanto ele escreve. */
+  /**
+   * Pede o objeto; as peças chegam enquanto o modelo escreve — ou, se o servidor já o tem na
+   * galeria, numa reprodução rápida. `novo` pula a galeria e substitui o que estava lá.
+   */
   gerar(
     objeto: string,
     detalhe: DetalheHolograma,
     provedor: GeradorHolograma,
     ouvintes: OuvintesDoHolograma,
     sinal: AbortSignal,
+    novo = false,
   ): Promise<boolean> {
     const busca = new URLSearchParams({ objeto, detalhe, provedor });
+    if (novo) busca.set('novo', 'true');
     return this.transmitir(`/api/holograma/gerar?${busca.toString()}`, ouvintes, sinal);
   }
 

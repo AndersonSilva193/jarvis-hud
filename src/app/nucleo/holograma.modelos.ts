@@ -15,26 +15,21 @@ export type DetalheHolograma = (typeof DETALHES_HOLOGRAMA)[number]['valor'];
 /** O mesmo teto do `PromptDeHolograma.MAX_OBJETO`: acima disso o servidor responde 400. */
 export const MAX_OBJETO_HOLOGRAMA = 120;
 
-/** Os exemplos de `GET /api/holograma/exemplo/{nome}`: objetos prontos, sem gastar modelo. */
-export const EXEMPLOS_HOLOGRAMA = [
-  { nome: 'motor_v8', rotulo: 'Motor V8' },
-  { nome: 'dna', rotulo: 'DNA' },
-  { nome: 'atomo', rotulo: 'Átomo' },
-] as const;
-export type NomeExemplo = (typeof EXEMPLOS_HOLOGRAMA)[number]['nome'];
-
 export type Vetor3 = readonly [number, number, number];
 
 export interface MetaHolograma {
   nome: string;
   categoria: string;
   descricao: string;
-  /** O id da geração, que o `Continuar` devolve ao servidor; ausente nos exemplos. */
+  /** O id da geração ou do item da galeria: é o que o `Continuar` e a miniatura devolvem ao servidor. */
   id?: string;
 }
 
-/** O formato do id que o servidor sorteia (`HologramaService.idValido`). */
-const ID_GERACAO = /^h[0-9a-z]{8}$/;
+/**
+ * Os ids que o servidor usa: o da geração (`h` + 8, `HologramaService.idValido`) e o dos exemplos
+ * fixos da galeria (`exemplo_dna`) — o mesmo `GaleriaDeHologramas.idValido`.
+ */
+const ID_GERACAO = /^[a-z0-9_]{1,40}$/;
 
 /** Uma peça pronta para desenhar, como sai da `MontagemDeHolograma` (`docs/HOLOGRAMA.md` §7). */
 export interface PecaHolograma {
@@ -70,6 +65,51 @@ export interface FimHolograma {
   tokensEntrada?: number;
   tokensSaida?: number;
   custoUsd?: number;
+  /** `cache`: veio da galeria, sem gastar modelo. */
+  origem?: 'modelo' | 'cache';
+  /** O objeto está na galeria; `miniatura` diz se ela já tem a imagem, e falsa pede a captura. */
+  salvo?: boolean;
+  miniatura?: boolean;
+}
+
+/** Uma linha de `GET /api/holograma/galeria`. */
+export interface ItemGaleria {
+  id: string;
+  nome: string;
+  pecas: number;
+  /** ISO-8601; vazio nos exemplos fixos. */
+  data: string;
+  provedor: string;
+  detalhe: DetalheHolograma;
+  /** O pedido como foi feito: é o que o "Gerar de novo" repete. */
+  objeto: string;
+  /** Exemplo escrito à mão: não se apaga. */
+  fixo: boolean;
+  miniatura: boolean;
+}
+
+export function lerItemGaleria(v: unknown): ItemGaleria | null {
+  if (!objeto(v) || typeof v['id'] !== 'string' || !ID_GERACAO.test(v['id'])) return null;
+  const nome = texto(v['nome'], 80);
+  if (!nome || !Number.isInteger(v['pecas'])) return null;
+  const detalhe = DETALHES_HOLOGRAMA.find((d) => d.valor === v['detalhe'])?.valor ?? 'normal';
+  return {
+    id: v['id'],
+    nome,
+    pecas: v['pecas'] as number,
+    data: texto(v['data'], 40),
+    provedor: texto(v['provedor'], 20),
+    detalhe,
+    objeto: texto(v['objeto'], MAX_OBJETO_HOLOGRAMA) || nome.slice(0, MAX_OBJETO_HOLOGRAMA),
+    fixo: v['fixo'] === true,
+    miniatura: v['miniatura'] === true,
+  };
+}
+
+/** "Haiku · 86 peças" — a linha de baixo de um item da galeria. */
+export function legendaDoItem(item: ItemGaleria): string {
+  const gerador = item.fixo ? 'Exemplo' : item.provedor === 'local' ? 'Local' : 'Haiku';
+  return `${gerador} · ${item.pecas} ${item.pecas === 1 ? 'peça' : 'peças'}`;
 }
 
 /** Os geradores de `GET /api/holograma/gerar?provedor=`: o servidor recusa qualquer outro. */
@@ -180,6 +220,11 @@ export function lerFimHolograma(v: unknown): FimHolograma | null {
   if (numeroNaoNegativo(v['tokensEntrada'])) fim.tokensEntrada = v['tokensEntrada'];
   if (numeroNaoNegativo(v['tokensSaida'])) fim.tokensSaida = v['tokensSaida'];
   if (numeroNaoNegativo(v['custoUsd'])) fim.custoUsd = v['custoUsd'];
+  if (v['origem'] === 'modelo' || v['origem'] === 'cache') fim.origem = v['origem'];
+  if (v['salvo'] === true) {
+    fim.salvo = true;
+    fim.miniatura = v['miniatura'] === true;
+  }
   return fim;
 }
 

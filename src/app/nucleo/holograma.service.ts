@@ -1,5 +1,6 @@
 import { Service, computed, inject, signal } from '@angular/core';
 
+import { HologramaGaleriaService } from './holograma-galeria.service';
 import { ConexaoMudaHolograma, ErroDoStreamHolograma, HologramaStreamService, type OuvintesDoHolograma } from './holograma-stream.service';
 import {
   GERADOR_PADRAO_HOLOGRAMA,
@@ -10,8 +11,8 @@ import {
   type DetalheHolograma,
   type FimHolograma,
   type GeradorHolograma,
+  type ItemGaleria,
   type MetaHolograma,
-  type NomeExemplo,
   type PecaHolograma,
 } from './holograma.modelos';
 
@@ -19,7 +20,7 @@ import {
 export type FaseHolograma = 'vazio' | 'construindo' | 'pronto' | 'incompleto' | 'erro' | 'cancelado';
 
 /** De onde vêm as peças: muda só a explicação de um erro HTTP. */
-type Origem = 'exemplo' | 'gerar' | 'continuar';
+type Origem = 'galeria' | 'gerar' | 'continuar';
 
 const CONEXAO_CAIU = 'a conexão caiu no meio';
 
@@ -33,6 +34,7 @@ const CONEXAO_CAIU = 'a conexão caiu no meio';
 @Service()
 export class HologramaService {
   private readonly stream = inject(HologramaStreamService);
+  private readonly api = inject(HologramaGaleriaService);
 
   readonly aberto = signal(false);
   readonly geracao = signal(0);
@@ -63,6 +65,13 @@ export class HologramaService {
   /** Pedido feito e nenhuma peça ainda: é quando a base da cena "escaneia". */
   readonly escaneando = computed(() => this.construindo() && this.pecas().length === 0);
 
+  /** Os objetos guardados no servidor: os exemplos fixos e os gerados completos. */
+  readonly galeria = signal<readonly ItemGaleria[]>([]);
+  /** id → endereço da miniatura (`blob:` lido da API ou o `data:` que acabou de ser capturado). */
+  readonly miniaturas = signal<Readonly<Record<string, string>>>({});
+  /** A galeria não respondeu: a lista mostra isso em vez de parecer vazia. */
+  readonly falhaDaGaleria = signal('');
+
   private controle: AbortController | null = null;
 
   abrir(): void {
@@ -81,16 +90,96 @@ export class HologramaService {
     this.limpar('vazio');
   }
 
-  carregarExemplo(nome: NomeExemplo): Promise<void> {
-    return this.executar('exemplo', (ouvintes, sinal) => this.stream.exemplo(nome, ouvintes, sinal));
+  /** Reabre um objeto da galeria: o servidor reproduz as peças sem gastar modelo. */
+  abrirDaGaleria(item: ItemGaleria): Promise<void> {
+    return this.executar('galeria', (ouvintes, sinal) => this.stream.abrir(item.id, ouvintes, sinal));
   }
 
-  /** Pede ao modelo um objeto; as peças entram na cena conforme ele escreve. */
-  gerar(objeto: string, detalhe: DetalheHolograma): Promise<void> {
+  /**
+   * Pede um objeto; as peças entram na cena conforme o modelo escreve — ou numa reprodução rápida,
+   * se o servidor já o tem na galeria. `novo` força o modelo e substitui o que estava guardado.
+   */
+  gerar(objeto: string, detalhe: DetalheHolograma, novo = false): Promise<void> {
     const limpo = objeto.trim().slice(0, MAX_OBJETO_HOLOGRAMA);
     if (!limpo) return Promise.resolve();
     const gerador = this.gerador();
-    return this.executar('gerar', (ouvintes, sinal) => this.stream.gerar(limpo, detalhe, gerador, ouvintes, sinal));
+    return this.executar('gerar', (ouvintes, sinal) => this.stream.gerar(limpo, detalhe, gerador, ouvintes, sinal, novo));
+  }
+
+  /** O "Gerar de novo" de um item: o mesmo pedido, com o modelo e o gerador escolhido agora. */
+  gerarDeNovo(item: ItemGaleria): Promise<void> {
+    return this.gerar(item.objeto, item.detalhe, true);
+  }
+
+  /** Lê a lista e as miniaturas que ainda não estão na memória. Falha fica em `falhaDaGaleria`. */
+  async carregarGaleria(): Promise<void> {
+    let itens: ItemGaleria[];
+    try {
+      itens = await this.api.listar();
+    } catch {
+      this.falhaDaGaleria.set('Não consegui ler a galeria.');
+      return;
+    }
+    this.falhaDaGaleria.set('');
+    this.galeria.set(itens);
+    const vivos = new Set(itens.map((item) => item.id));
+    this.miniaturas.update((atuais) => {
+      const mantidas: Record<string, string> = {};
+      for (const [id, url] of Object.entries(atuais)) {
+        if (vivos.has(id)) mantidas[id] = url;
+        else liberar(url);
+      }
+      return mantidas;
+    });
+    await Promise.all(
+      itens.filter((item) => item.miniatura && !this.miniaturas()[item.id]).map((item) => this.lerMiniatura(item.id)),
+    );
+  }
+
+  /** Apaga um objeto gerado; os exemplos fixos não têm botão para isso. */
+  async apagarDaGaleria(item: ItemGaleria): Promise<void> {
+    try {
+      await this.api.apagar(item.id);
+    } catch (erro) {
+      // 404: outro lugar já apagou; a lista só estava velha.
+      if (!(erro instanceof ErroDoStreamHolograma && erro.status === 404)) {
+        this.falhaDaGaleria.set('Não consegui apagar esse objeto.');
+        return;
+      }
+    }
+    this.galeria.update((lista) => lista.filter((i) => i.id !== item.id));
+    this.miniaturas.update((atuais) => {
+      const { [item.id]: removida, ...resto } = atuais;
+      if (removida) liberar(removida);
+      return resto;
+    });
+  }
+
+  /**
+   * Guarda a miniatura capturada da cena. A imagem vai para a tela na hora (é o `data:` que já está
+   * aqui); falhar o envio só deixa o item sem miniatura no servidor.
+   */
+  async enviarMiniatura(id: string, imagem: string): Promise<void> {
+    try {
+      await this.api.enviarMiniatura(id, imagem);
+    } catch {
+      return;
+    }
+    this.miniaturas.update((atuais) => {
+      const anterior = atuais[id];
+      if (anterior) liberar(anterior);
+      return { ...atuais, [id]: imagem };
+    });
+    this.galeria.update((lista) => lista.map((i) => (i.id === id ? { ...i, miniatura: true } : i)));
+  }
+
+  private async lerMiniatura(id: string): Promise<void> {
+    try {
+      const blob = await this.api.miniatura(id);
+      if (blob) this.miniaturas.update((atuais) => ({ ...atuais, [id]: URL.createObjectURL(blob) }));
+    } catch {
+      /* Sem miniatura: o item mostra o símbolo no lugar. */
+    }
   }
 
   /**
@@ -162,13 +251,16 @@ export class HologramaService {
       const fim = this.resumo();
       if (fim?.status === 'incompleto') this.parar(fim.motivo ?? erroDoServidor);
       else if (erroDoServidor) this.falhar(erroDoServidor);
-      else if (terminou) this.fase.set('pronto');
-      else this.parar(CONEXAO_CAIU);
+      else if (terminou) {
+        this.fase.set('pronto');
+        // Objeto novo na galeria (ou um que substituiu outro): a lista tem de mostrar.
+        if (fim?.salvo && fim.origem === 'modelo') void this.carregarGaleria();
+      } else this.parar(CONEXAO_CAIU);
     } catch (erro) {
       if (controle.signal.aborted) return;
       // Rede que caiu (ou ficou muda) com peça na tela: o servidor guardou, dá para continuar.
       if (erro instanceof ConexaoMudaHolograma || !(erro instanceof ErroDoStreamHolograma)) {
-        if (origem !== 'exemplo' && this.pecas().length) {
+        if (origem !== 'galeria' && this.pecas().length) {
           this.parar(CONEXAO_CAIU);
           return;
         }
@@ -232,10 +324,14 @@ function explicar(erro: unknown, origem: Origem): string {
     if (erro.status === 401 || erro.status === 403) return 'Token recusado pela API.';
     if (erro.status === 404) {
       if (origem === 'continuar') return 'O servidor não guarda mais esse objeto; gere de novo.';
-      return origem === 'exemplo' ? 'Esse exemplo não existe na API.' : 'Esta API ainda não gera hologramas.';
+      return origem === 'galeria' ? 'Esse objeto não está mais na galeria.' : 'Esta API ainda não gera hologramas.';
     }
     if (erro.status === 400) return 'A API recusou o pedido: confira o nome do objeto.';
     return `A API respondeu ${erro.status}.`;
   }
   return 'Não consegui falar com a API.';
+}
+
+function liberar(url: string): void {
+  if (url.startsWith('blob:')) URL.revokeObjectURL(url);
 }

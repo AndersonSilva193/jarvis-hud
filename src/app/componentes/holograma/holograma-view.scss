@@ -14,7 +14,7 @@
 .estado--erro{color:hud.$erro}
 .pulso{width:6px;height:6px;border-radius:50%;background:hud.$ciano;box-shadow:0 0 10px hud.$azul-energia;animation:pulso 1s ease-in-out infinite}
 
-// A coluna da direita: o pedido ao modelo em cima, os exemplos prontos embaixo.
+// A coluna da direita: o pedido ao modelo em cima, a galeria embaixo.
 // Metade da largura no máximo: a outra metade é do título, no canto oposto.
 .lateral{position:absolute;top:1rem;right:1rem;display:flex;flex-direction:column;align-items:flex-end;gap:.6rem;width:min(26rem,calc(50% - 1.5rem))}
 .lateral .painel{position:relative}
@@ -30,8 +30,7 @@
 .botao--gerar{min-width:6.5rem;border-color:hud.$ciano;color:hud.$ciano-forte}
 // Cancelar é o mesmo botão em outro papel: a cor muda para ninguém apertar achando que é "Gerar".
 .botao--cancelar{border-color:hud.$erro;color:#ffd0d6}
-.exemplos{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem}
-.exemplos .rotulo{width:100%}
+.galeria{align-self:stretch}
 
 .destaque{left:1rem;bottom:5.2rem;display:flex;flex-direction:column;gap:.3rem;pointer-events:none}
 .destaque strong{font:600 .8rem hud.$mono;letter-spacing:.08em;color:hud.$ciano-forte}
@@ -70,9 +69,7 @@
   .titulo .rotulo,.descricao{display:none}
   .nome{font-size:.9rem;letter-spacing:.08em}
   .estado{margin:0;font-size:.6rem;letter-spacing:.12em}
-  .exemplos{grid-row:3;flex-wrap:nowrap;overflow-x:auto}
-  .exemplos .rotulo{width:auto;margin:0 .3rem 0 0}
-  .exemplos .botao{flex-shrink:0}
+  .galeria{grid-row:3}
   // Cena e destaque dividem a mesma célula: o nome da peça aparece no canto de baixo da cena.
   .cena{position:relative;inset:auto;grid-row:4;grid-column:1;mask-image:linear-gradient(transparent,#000 8%,#000 92%,transparent)}
   .destaque{grid-row:4;grid-column:1;align-self:end;justify-self:start;margin:0 0 .5rem .5rem}

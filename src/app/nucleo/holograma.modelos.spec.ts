@@ -6,6 +6,7 @@ import {
   lerFimHolograma,
   textoIncompleto,
   lerGeradorHolograma,
+  lerItemGaleria,
   lerMetaHolograma,
   lerPecaHolograma,
   seloDoHolograma,
@@ -109,5 +110,21 @@ describe('meta e fim', () => {
     expect(lerErroHolograma({ texto: 'O modelo não respondeu a tempo.' })).toBe('O modelo não respondeu a tempo.');
     expect(lerErroHolograma({ texto: '   ' })).toBeNull();
     expect(lerErroHolograma({ mensagem: 'x' })).toBeNull();
+  });
+});
+
+describe('galeria', () => {
+  it('lê a origem e o estado de galeria do fim', () => {
+    const fim = lerFimHolograma({ pecas: 9, avisos: 0, status: 'completo', id: 'exemplo_dna', origem: 'cache', salvo: true, miniatura: false });
+    expect(fim).toEqual({ pecas: 9, avisos: 0, status: 'completo', id: 'exemplo_dna', origem: 'cache', salvo: true, miniatura: false });
+    expect(lerFimHolograma({ pecas: 1, avisos: 0, origem: 'outra', miniatura: true })).toEqual({ pecas: 1, avisos: 0, status: 'completo' });
+  });
+
+  it('confere cada item da lista e recusa id que viraria caminho', () => {
+    expect(
+      lerItemGaleria({ id: 'habcdefgh', nome: 'Motor V8', pecas: 40, data: 'x', provedor: 'local', detalhe: 'maximo', objeto: 'motor', fixo: false, miniatura: true }),
+    ).toEqual({ id: 'habcdefgh', nome: 'Motor V8', pecas: 40, data: 'x', provedor: 'local', detalhe: 'normal', objeto: 'motor', fixo: false, miniatura: true });
+    expect(lerItemGaleria({ id: '../etc', nome: 'x', pecas: 1 })).toBeNull();
+    expect(lerItemGaleria({ id: 'exemplo_dna', nome: '', pecas: 1 })).toBeNull();
   });
 });

@@ -2,8 +2,14 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConexaoMudaHolograma, ErroDoStreamHolograma, HologramaStreamService, type OuvintesDoHolograma } from './holograma-stream.service';
+import { HologramaGaleriaService } from './holograma-galeria.service';
 import { HologramaService } from './holograma.service';
-import type { PecaHolograma } from './holograma.modelos';
+import type { ItemGaleria, PecaHolograma } from './holograma.modelos';
+
+const ITEM: ItemGaleria = {
+  id: 'habcdefgh', nome: 'Motor V8', pecas: 40, data: '2026-10-29T12:00:00Z', provedor: 'anthropic',
+  detalhe: 'detalhado', objeto: 'o motor V8', fixo: false, miniatura: false,
+};
 
 const PECA: PecaHolograma = {
   id: 'cubo', nome: 'Cubo', grupo: 'corpo', forma: 'box', posicao: [0, 0, 0], rotacao: [0, 0, 0],
@@ -25,11 +31,13 @@ function streamControlado() {
       s.addEventListener('abort', () => rejeitar(new DOMException('abortado', 'AbortError')));
     });
   };
-  const gerar = vi.fn((_objeto: string, _detalhe: string, _provedor: string, o: OuvintesDoHolograma, s: AbortSignal) => abrir(o, s));
+  const gerar = vi.fn((_objeto: string, _detalhe: string, _provedor: string, o: OuvintesDoHolograma, s: AbortSignal, _novo?: boolean) => abrir(o, s));
+  const abrirDaGaleria = vi.fn((_id: string, o: OuvintesDoHolograma, s: AbortSignal) => abrir(o, s));
   const continuar = vi.fn((_id: string, _recebidas: number, o: OuvintesDoHolograma, s: AbortSignal) => abrir(o, s));
   return {
     gerar,
     continuar,
+    abrirDaGaleria,
     get ouvintes() { return ouvintes; },
     get sinal() { return sinal; },
     terminar: (t: boolean) => terminar(t),
@@ -39,11 +47,21 @@ function streamControlado() {
 
 describe('HologramaService.gerar', () => {
   let stream: ReturnType<typeof streamControlado>;
+  let galeria: { listar: ReturnType<typeof vi.fn>; apagar: ReturnType<typeof vi.fn>; miniatura: ReturnType<typeof vi.fn>; enviarMiniatura: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     stream = streamControlado();
+    galeria = {
+      listar: vi.fn(async () => [ITEM]),
+      apagar: vi.fn(async () => undefined),
+      miniatura: vi.fn(async () => null),
+      enviarMiniatura: vi.fn(async () => undefined),
+    };
     TestBed.configureTestingModule({
-      providers: [{ provide: HologramaStreamService, useValue: { gerar: stream.gerar, continuar: stream.continuar, exemplo: vi.fn() } }],
+      providers: [
+        { provide: HologramaStreamService, useValue: { gerar: stream.gerar, continuar: stream.continuar, abrir: stream.abrirDaGaleria } },
+        { provide: HologramaGaleriaService, useValue: galeria },
+      ],
     });
   });
 
@@ -53,7 +71,7 @@ describe('HologramaService.gerar', () => {
     const holograma = TestBed.inject(HologramaService);
     const pedido = holograma.gerar('  motor V8  ', 'detalhado');
 
-    expect(stream.gerar).toHaveBeenCalledWith('motor V8', 'detalhado', 'haiku', expect.anything(), expect.anything());
+    expect(stream.gerar).toHaveBeenCalledWith('motor V8', 'detalhado', 'haiku', expect.anything(), expect.anything(), false);
     expect(holograma.aberto()).toBe(true);
     expect(holograma.escaneando()).toBe(true);
 
@@ -75,14 +93,17 @@ describe('HologramaService.gerar', () => {
 
     holograma.escolherGerador('local');
     const pedido = holograma.gerar('turbina', 'normal');
-    expect(stream.gerar).toHaveBeenCalledWith('turbina', 'normal', 'local', expect.anything(), expect.anything());
+    expect(stream.gerar).toHaveBeenCalledWith('turbina', 'normal', 'local', expect.anything(), expect.anything(), false);
     stream.terminar(true);
     await pedido;
 
     expect(localStorage.getItem('jarvis-hud.holograma.gerador.v1')).toBe('local');
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [{ provide: HologramaStreamService, useValue: { gerar: stream.gerar, continuar: stream.continuar, exemplo: vi.fn() } }],
+      providers: [
+        { provide: HologramaStreamService, useValue: { gerar: stream.gerar, continuar: stream.continuar, abrir: stream.abrirDaGaleria } },
+        { provide: HologramaGaleriaService, useValue: galeria },
+      ],
     });
     expect(TestBed.inject(HologramaService).gerador()).toBe('local');
     localStorage.removeItem('jarvis-hud.holograma.gerador.v1');
@@ -218,5 +239,43 @@ describe('HologramaService.gerar', () => {
     stream.falhar(new ErroDoStreamHolograma(404));
     await pedido;
     expect(holograma.erro()).toBe('Esta API ainda não gera hologramas.');
+  });
+
+  it('gerar de novo repete o pedido do item com novo=true', async () => {
+    const holograma = TestBed.inject(HologramaService);
+    const pedido = holograma.gerarDeNovo(ITEM);
+    expect(stream.gerar).toHaveBeenCalledWith('o motor V8', 'detalhado', 'haiku', expect.anything(), expect.anything(), true);
+    stream.terminar(true);
+    await pedido;
+  });
+
+  it('abre da galeria pelo id e recarrega a lista quando o modelo salvou um objeto', async () => {
+    const holograma = TestBed.inject(HologramaService);
+    const aberto = holograma.abrirDaGaleria(ITEM);
+    expect(stream.abrirDaGaleria).toHaveBeenCalledWith('habcdefgh', expect.anything(), expect.anything());
+    stream.ouvintes.fim({ pecas: 40, avisos: 0, status: 'completo', origem: 'cache', salvo: true, miniatura: true });
+    stream.terminar(true);
+    await aberto;
+    expect(galeria.listar).not.toHaveBeenCalled();
+
+    const gerado = holograma.gerar('turbina', 'normal');
+    stream.ouvintes.fim({ pecas: 9, avisos: 0, status: 'completo', origem: 'modelo', salvo: true, miniatura: false });
+    stream.terminar(true);
+    await gerado;
+    await vi.waitFor(() => expect(holograma.galeria()).toEqual([ITEM]));
+  });
+
+  it('apagar tira o item da lista, e a miniatura enviada aparece na hora', async () => {
+    const holograma = TestBed.inject(HologramaService);
+    await holograma.carregarGaleria();
+    await holograma.enviarMiniatura('habcdefgh', 'data:image/png;base64,AAAA');
+    expect(galeria.enviarMiniatura).toHaveBeenCalledWith('habcdefgh', 'data:image/png;base64,AAAA');
+    expect(holograma.miniaturas()['habcdefgh']).toBe('data:image/png;base64,AAAA');
+    expect(holograma.galeria()[0]!.miniatura).toBe(true);
+
+    await holograma.apagarDaGaleria(ITEM);
+    expect(galeria.apagar).toHaveBeenCalledWith('habcdefgh');
+    expect(holograma.galeria()).toEqual([]);
+    expect(holograma.miniaturas()).toEqual({});
   });
 });

@@ -1,0 +1,33 @@
+@use '../../estilos/hud' as hud;
+
+:host{display:flex;flex-direction:column;min-height:0}
+.rotulo{margin:0 0 .45rem;@include hud.rotulo(.58rem)}
+.descricao{margin:.2rem 0;font-size:.78rem;line-height:1.45;color:#b9d3ea}
+// A lista rola sozinha: o painel não pode descer por cima da barra de controles.
+.itens{display:flex;flex-direction:column;gap:.35rem;max-height:min(22rem,calc(100svh - 24rem));margin:0;padding:0 .15rem 0 0;list-style:none;overflow-y:auto;scrollbar-width:thin}
+.item{display:flex;align-items:center;gap:.35rem;border:1px solid transparent}
+.item--atual{border-color:hud.$ciano-fraco;background:rgba(95,242,255,.05)}
+.abrir{display:flex;flex:1;align-items:center;gap:.6rem;min-width:0;padding:.25rem;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.abrir:hover .nome{color:hud.$ciano-forte}
+.abrir:disabled{cursor:default;opacity:.6}
+.abrir:focus-visible{outline:2px solid hud.$ciano-forte;outline-offset:-2px}
+.miniatura{flex-shrink:0;width:3.5rem;height:3.5rem;object-fit:cover;border:1px solid hud.$ciano-fraco;background:rgba(1,7,18,.7)}
+.miniatura--vazia{display:grid;place-items:center;color:hud.$ciano;font-size:1.2rem}
+.texto{display:flex;flex-direction:column;gap:.2rem;min-width:0}
+.nome{overflow:hidden;font:600 .74rem hud.$mono;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;color:hud.$texto}
+.legenda{font:500 .58rem hud.$mono;letter-spacing:.14em;text-transform:uppercase;color:#a6bed8}
+.acoes{display:flex;flex-shrink:0;gap:.3rem}
+.botao{@include hud.botao(6px);min-width:2.1rem;padding:.4rem .5rem}
+// O canto é cortado (clip-path): o contorno de foco vai por dentro, como nos outros botões da camada.
+.botao:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+// Armado para apagar: a cor muda para o segundo clique ser de propósito.
+.botao--confirmar{border-color:hud.$erro;color:#ffd0d6}
+
+// No celular a galeria vira uma fileira que rola de lado, com a miniatura em cima do nome.
+@media(max-width:700px){
+  .itens{flex-direction:row;max-height:none;overflow-x:auto;overflow-y:hidden;padding:0 0 .2rem}
+  .item{flex-direction:column;flex-shrink:0;width:6.5rem}
+  .abrir{flex-direction:column;align-items:stretch;width:100%;text-align:center}
+  .miniatura{width:100%;height:auto;aspect-ratio:1}
+  .acoes{justify-content:center}
+}

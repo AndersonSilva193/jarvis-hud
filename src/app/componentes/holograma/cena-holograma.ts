@@ -300,6 +300,29 @@ export class CenaHolograma {
     this.ultimaInteracao = -Infinity;
   }
 
+  /**
+   * Um quadrado de `lado` px do centro da tela, em PNG. O WebGL não preserva o buffer entre quadros,
+   * então a leitura vem logo depois de um `render` aqui mesmo, na mesma tarefa — depois dela o
+   * navegador já pode ter apagado o que foi desenhado. `null` quando o navegador recusa.
+   */
+  miniatura(lado = 256): string | null {
+    try {
+      this.composer.render(0);
+      const origem = this.renderer.domElement;
+      const corte = Math.min(origem.width, origem.height);
+      if (!corte) return null;
+      const destino = document.createElement('canvas');
+      destino.width = lado;
+      destino.height = lado;
+      const contexto = destino.getContext('2d');
+      if (!contexto) return null;
+      contexto.drawImage(origem, (origem.width - corte) / 2, (origem.height - corte) / 2, corte, corte, 0, 0, lado, lado);
+      return destino.toDataURL('image/png');
+    } catch {
+      return null;
+    }
+  }
+
   destruir(): void {
     cancelAnimationFrame(this.quadro);
     this.observador.disconnect();
