@@ -9,9 +9,17 @@ import {
   type DetalheHolograma,
   type ItemGaleria,
 } from '../../nucleo/holograma.modelos';
+import { MotorDeGestos } from '../../gestos/motor-de-gestos';
+import { AjustesDeGestosService } from '../../nucleo/ajustes-de-gestos.service';
+import { PerfilDoAparelhoService } from '../../nucleo/perfil-do-aparelho.service';
+import { RastreioDeMaoService } from '../../nucleo/rastreio-de-mao.service';
+import { BotoesGestosComponent } from './botoes-gestos';
+import { ControleDeToque } from './controle-de-toque';
+import { ControlePorGestos, type Sensibilidade } from './controle-por-gestos';
 import { GaleriaHologramaComponent } from './galeria-holograma';
+import { PreviewGestosComponent } from './preview-gestos';
 // Só tipos: o valor vem do `import()` dinâmico, e o Three.js fica fora do chunk da HUD.
-import type { CenaHolograma, PecaDestacada } from './cena-holograma';
+import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-holograma';
 
 /**
  * A camada do Holograma no palco: a cena 3D por baixo e o painel da HUD por cima.
@@ -22,8 +30,8 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
  */
 @Component({
   selector: 'app-holograma-view',
-  imports: [GaleriaHologramaComponent],
-  host: { class: 'holograma' },
+  imports: [GaleriaHologramaComponent, PreviewGestosComponent, BotoesGestosComponent],
+  host: { class: 'holograma', '[class.holograma--gestos]': 'rastreio.ativo()' },
   template: `
     <div class="cena" #alvo role="img" [attr.aria-label]="descricaoDaCena()"></div>
     @if (falha()) { <p class="falha" role="alert">{{ falha() }}</p> }
@@ -85,7 +93,13 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
     </div>
     @if (destaque(); as peca) {
       <p class="painel destaque"><strong>{{ peca.nome }}</strong><span>Grupo · {{ peca.grupo }}</span></p>
+    } @else if (selecao(); as peca) {
+      <div class="painel destaque destaque--selecao">
+        <strong>{{ peca.nome }}</strong><span>Selecionado · {{ peca.grupo }}</span>
+        <button class="botao" type="button" (click)="limparSelecao()">Limpar seleção</button>
+      </div>
     }
+    @if (rastreio.ativo()) { <app-preview-gestos [gesto]="gesto()" /> }
     <section class="painel controles" aria-label="Controles do holograma">
       <button class="botao botao--explodir" type="button" [attr.aria-pressed]="explosao() > 0" (click)="alternarExplosao()">
         {{ explosao() > 0 ? 'Montar' : 'Explodir' }}
@@ -97,6 +111,7 @@ import type { CenaHolograma, PecaDestacada } from './cena-holograma';
       </label>
       <button class="botao" type="button" (click)="centralizar()">Centralizar</button>
       <button class="botao" type="button" (click)="resetar()">Resetar</button>
+      <app-botoes-gestos />
       <button class="botao" type="button" (click)="holograma.fechar()">Fechar</button>
     </section>
   `,
@@ -111,7 +126,11 @@ export class HologramaViewComponent {
   protected readonly detalhe = signal<DetalheHolograma>('normal');
   protected readonly explosao = signal(0);
   protected readonly destaque = signal<PecaDestacada | null>(null);
+  /** O grupo escolhido por gesto de apontar ou toque duplo; fica até limpar, resetar ou trocar de objeto. */
+  protected readonly selecao = signal<PecaDestacada | null>(null);
   protected readonly falha = signal('');
+  protected readonly rastreio = inject(RastreioDeMaoService);
+  protected readonly gesto = signal('Sem mão');
 
   protected readonly estado = computed(() => {
     const total = contar(this.holograma.pecas().length);
@@ -151,8 +170,41 @@ export class HologramaViewComponent {
   private desenhadas = 0;
   private vivo = true;
 
+  private readonly perfil = inject(PerfilDoAparelhoService);
+  private readonly ajustes = inject(AjustesDeGestosService);
+  private readonly perfilDaCena = computed<PerfilDaCena>(() => {
+    const { pixelRatioMaximo, bloom, segmentos } = this.perfil.parametros();
+    return { pixelRatioMaximo, bloom, segmentos };
+  });
+  private readonly motor = new MotorDeGestos();
+  private controleDeGestos: ControlePorGestos | null = null;
+  private controleDeToque: ControleDeToque | null = null;
+  /**
+   * O fator do toque sem arredondar: dois dedos andando devagar somam frações de 1% a cada
+   * movimento, que o slider (em inteiros) engoliria.
+   */
+  private explosaoFina = 0;
+
   constructor() {
     afterNextRender(() => void this.criarCena());
+    // Cada detecção vai direto ao motor e à cena, fora da detecção de mudanças: só as saídas
+    // (explosão, seleção, nome do gesto) tocam signals, e só quando mudam.
+    const pararDeOuvir = this.rastreio.ouvir((quadro) => this.controleDeGestos?.aplicar(this.motor.processar(quadro)));
+    effect(() => {
+      const { maosMax } = this.perfil.parametros();
+      // Uma mão só (perfil leve): o zoom é a pinça aproximando ou afastando a mão da câmera.
+      this.motor.configurar({ maosMax, zoomPorProfundidade: maosMax === 1 });
+    });
+    effect(() => this.cena()?.aplicarPerfil(this.perfilDaCena()));
+    // Gestos desligados: o que a mão deixou pela metade (cursor, rotação segurada) volta ao normal.
+    effect(() => {
+      const cena = this.cena();
+      if (this.rastreio.ativo() || !cena) return;
+      this.motor.reiniciar();
+      cena.apontar(null);
+      cena.segurarAutoRotacao(false);
+      this.gesto.set('Sem mão');
+    });
     // As peças só crescem dentro de uma geração: a cena recebe só as novas.
     effect(() => {
       const cena = this.cena();
@@ -164,6 +216,7 @@ export class HologramaViewComponent {
         // Objeto novo começa montado; na primeira sincronização não, senão o Three.js chegando
         // depois de um clique em Explodir desfaria o clique.
         if (this.geracaoDesenhada !== -1) this.explosao.set(0);
+        this.selecao.set(null);
         this.geracaoDesenhada = geracao;
         this.desenhadas = 0;
       }
@@ -195,8 +248,17 @@ export class HologramaViewComponent {
     });
     inject(DestroyRef).onDestroy(() => {
       this.vivo = false;
+      pararDeOuvir();
+      // Fechar o holograma desliga a câmera: reabrir não religa sem o dono pedir.
+      this.rastreio.desligar();
+      this.controleDeToque?.destruir();
       this.cena()?.destruir();
     });
+  }
+
+  protected limparSelecao(): void {
+    this.cena()?.limparSelecao();
+    this.selecao.set(null);
   }
 
   /** O "Gerar de novo" da galeria: o campo passa a mostrar o pedido que está sendo refeito. */
@@ -249,7 +311,20 @@ export class HologramaViewComponent {
 
   protected resetar(): void {
     this.explosao.set(0);
+    this.selecao.set(null);
     this.cena()?.resetar();
+  }
+
+  /** Dois dedos deslizando juntos: soma ao fator atual (que o slider também pode ter mudado). */
+  private explodirMais(delta: number): void {
+    const base = Math.abs(this.explosaoFina * 100 - this.explosao()) < 1 ? this.explosaoFina : this.explosao() / 100;
+    this.explosaoFina = Math.min(1, Math.max(0, base + delta));
+    this.explosao.set(Math.round(this.explosaoFina * 100));
+  }
+
+  private sensibilidade(): Sensibilidade {
+    const a = this.ajustes.ajustes();
+    return { giro: a.sensibilidadeGiro, zoom: a.sensibilidadeZoom, inverterX: a.inverterX, inverterY: a.inverterY };
   }
 
   private async criarCena(): Promise<void> {
@@ -257,12 +332,30 @@ export class HologramaViewComponent {
       const { CenaHolograma } = await import('./cena-holograma');
       if (!this.vivo) return;
       const movimentoReduzido = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const host = this.alvo().nativeElement;
       const cena = this.zona.runOutsideAngular(
         () =>
-          new CenaHolograma(this.alvo().nativeElement, {
+          new CenaHolograma(host, {
             movimentoReduzido,
+            perfil: this.perfilDaCena(),
             aoDestacar: (peca) => this.zona.run(() => this.destaque.set(peca)),
           }),
+      );
+      const sensibilidade = () => this.sensibilidade();
+      const selecionou = (peca: PecaDestacada) => this.selecao.set(peca);
+      const resetar = () => this.resetar();
+      this.controleDeGestos = new ControlePorGestos(
+        cena,
+        {
+          explodir: (fator) => this.explosao.set(Math.round(fator * 100)),
+          resetar,
+          selecionou,
+          gesto: (nome) => this.gesto.set(nome),
+        },
+        sensibilidade,
+      );
+      this.controleDeToque = this.zona.runOutsideAngular(
+        () => new ControleDeToque(host, cena, { explodirMais: (delta) => this.explodirMais(delta), resetar, selecionou }, sensibilidade),
       );
       this.cena.set(cena);
     } catch {

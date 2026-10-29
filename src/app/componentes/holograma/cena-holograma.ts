@@ -21,6 +21,7 @@ import {
   RingGeometry,
   Scene,
   Sphere,
+  Spherical,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -40,15 +41,35 @@ export interface PecaDestacada {
   grupo: string;
 }
 
+/** O peso da cena: o perfil leve do celular corta resolução, bloom e segmentos. */
+export interface PerfilDaCena {
+  pixelRatioMaximo: number;
+  bloom: 'completo' | 'reduzido';
+  segmentos: number;
+}
+
 export interface OpcoesDaCena {
   /** Chamado só quando a peça sob o mouse muda — nunca a cada quadro. */
   aoDestacar: (peca: PecaDestacada | null) => void;
   movimentoReduzido: boolean;
+  perfil: PerfilDaCena;
 }
 
-/** Acima disso o bloom custa GPU sem diferença visível num monitor de sala. */
-const PIXEL_RATIO_MAXIMO = 1.5;
+/** Coordenadas normalizadas do canvas: -1..1, `y` para cima. */
+export interface PontoNdc {
+  x: number;
+  y: number;
+}
+
+const BLOOM = {
+  completo: { forca: 0.6, raio: 0.35 },
+  reduzido: { forca: 0.45, raio: 0.25 },
+} as const;
 const ENTRADA_MS = 300;
+/** Quanto a inércia do giro perde por segundo (`e^(-k·dt)`). */
+const ATRITO_DO_GIRO = 3;
+const GIRO_MINIMO = 0.01;
+const RAIO_DO_CURSOR = 0.09;
 const DISTANCIA_DA_EXPLOSAO = 2.5;
 /** Tempo sem mexer no mouse até o objeto voltar a girar sozinho. */
 const OCIOSO_ATE_GIRAR_MS = 4_000;
@@ -114,7 +135,7 @@ export class CenaHolograma {
   private readonly objeto = new Group();
   private readonly aneis: Group[] = [];
   private readonly fixos: { dispose(): void }[] = [];
-  private readonly fabrica = new FabricaDeGeometrias();
+  private readonly fabrica: FabricaDeGeometrias;
   private readonly pecas: PecaNaCena[] = [];
   private readonly porObjeto = new Map<Object3D, PecaNaCena>();
   private readonly alvosDoRaio: Object3D[] = [];
@@ -123,6 +144,10 @@ export class CenaHolograma {
   private readonly raio = new Raycaster();
   private readonly ponteiro = new Vector2();
   private readonly observador: ResizeObserver;
+  private readonly esferica = new Spherical();
+  private readonly deslocamento = new Vector3();
+  private readonly inercia = new Vector2();
+  private cursor3d!: { grupo: Group; ativo: boolean };
 
   private quadro = 0;
   private contagem = 0;
@@ -134,6 +159,10 @@ export class CenaHolograma {
   private ponteiroDentro = false;
   private ponteiroMudou = false;
   private destacada: PecaNaCena | null = null;
+  /** Escolhida por gesto ou toque duplo: fica até outra seleção, um reset ou objeto novo. */
+  private selecionada: PecaNaCena | null = null;
+  /** Uma mão na câmera segura a rotação automática até sumir (o motor avisa depois de 3 s). */
+  private maoNaCamera = false;
   private voo: { posicao: Vector3; alvo: Vector3 } | null = null;
   private varredura!: { grupo: Group; anel: Mesh; materialAnel: MeshBasicMaterial; materialDisco: MeshBasicMaterial };
   private escaneando = false;
@@ -146,7 +175,8 @@ export class CenaHolograma {
     private readonly opcoes: OpcoesDaCena,
   ) {
     this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_MAXIMO));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opcoes.perfil.pixelRatioMaximo));
+    this.fabrica = new FabricaDeGeometrias(opcoes.perfil.segmentos);
     this.renderer.setClearColor(FUNDO, 1);
     // Onde muitas peças se sobrepõem a soma aditiva passa de 1: o tone mapping (aplicado no
     // OutputPass) satura essa soma na cor da peça em vez de estourar em branco.
@@ -164,9 +194,12 @@ export class CenaHolograma {
     this.cena.add(this.objeto);
     this.montarPiso();
     this.montarVarredura();
+    this.montarCursor();
 
     this.controles = new OrbitControls(this.camera, tela);
     this.controles.target.copy(ALVO_INICIAL);
+    // Arrastar com dois dedos explode; com o botão direito, nada: o alvo fica no objeto.
+    this.controles.enablePan = false;
     this.controles.enableDamping = true;
     this.controles.dampingFactor = 0.08;
     this.controles.minDistance = 2.5;
@@ -179,7 +212,8 @@ export class CenaHolograma {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.cena, this.camera));
-    this.bloom = new UnrealBloomPass(new Vector2(1, 1), 0.6, 0.35, LIMIAR_DO_BLOOM);
+    const bloom = BLOOM[opcoes.perfil.bloom];
+    this.bloom = new UnrealBloomPass(new Vector2(1, 1), bloom.forca, bloom.raio, LIMIAR_DO_BLOOM);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
@@ -260,6 +294,7 @@ export class CenaHolograma {
     this.fabrica.descartar();
     this.caixa.makeEmpty();
     this.centro.set(0, 0, 0);
+    this.selecionada = null;
     this.destacar(null);
   }
 
@@ -296,8 +331,93 @@ export class CenaHolograma {
 
   resetar(): void {
     this.explodir(0);
+    this.inercia.set(0, 0);
+    this.selecionada = null;
     this.voar(CAMERA_INICIAL, ALVO_INICIAL);
     this.ultimaInteracao = -Infinity;
+  }
+
+  /**
+   * Gira a câmera em volta do alvo, em radianos, no mesmo sentido do arrasto do OrbitControls:
+   * `dAz` positivo é o ponteiro indo para a direita; `dPol`, indo para baixo.
+   */
+  girar(dAz: number, dPol: number): void {
+    this.voo = null;
+    this.inercia.set(0, 0);
+    this.aplicarGiro(dAz, dPol);
+    this.ultimaInteracao = performance.now();
+  }
+
+  /** Solta o giro com velocidade (rad/s): o objeto continua e para devagar. */
+  lancarGiro(vAz: number, vPol: number): void {
+    if (this.opcoes.movimentoReduzido) return;
+    this.inercia.set(vAz, vPol);
+    this.ultimaInteracao = performance.now();
+  }
+
+  /** `fator` > 1 aproxima a câmera do alvo, dentro dos limites do OrbitControls. */
+  aproximar(fator: number): void {
+    if (!(fator > 0) || !Number.isFinite(fator)) return;
+    this.voo = null;
+    this.deslocamento.copy(this.camera.position).sub(this.controles.target);
+    const distancia = MathUtils.clamp(this.deslocamento.length() / fator, this.controles.minDistance, this.controles.maxDistance);
+    this.deslocamento.setLength(distancia);
+    this.camera.position.copy(this.controles.target).add(this.deslocamento);
+    this.ultimaInteracao = performance.now();
+  }
+
+  /**
+   * O cursor 3D do gesto de apontar: um anel no ponto da peça sob o dedo, ou na profundidade do alvo
+   * se não houver peça, que também faz o destaque do hover. `null` esconde.
+   */
+  apontar(ndc: PontoNdc | null): void {
+    this.cursor3d.ativo = ndc !== null;
+    this.cursor3d.grupo.visible = ndc !== null;
+    if (ndc) {
+      this.ponteiro.set(ndc.x, ndc.y);
+      this.ponteiroMudou = true;
+    } else {
+      this.destacar(null);
+    }
+  }
+
+  /** Seleciona o grupo da peça nesse ponto. Sem peça ali, nada muda e volta `null`. */
+  selecionarEm(ndc: PontoNdc): PecaDestacada | null {
+    const peca = this.pecaEm(ndc.x, ndc.y);
+    if (!peca) return null;
+    this.selecionada = peca;
+    return { nome: peca.dados.nome, grupo: peca.dados.grupo };
+  }
+
+  limparSelecao(): void {
+    this.selecionada = null;
+  }
+
+  /** Mão na câmera: nada de rotação automática até o motor dizer que ela sumiu. */
+  segurarAutoRotacao(segurar: boolean): void {
+    this.maoNaCamera = segurar;
+    // Sem mão por 3 s já é a espera: a rotação volta na hora, sem os 4 s do mouse.
+    if (!segurar) this.ultimaInteracao = -Infinity;
+  }
+
+  /** Toque começou/terminou: o mesmo que o arrasto do mouse faz pelo OrbitControls. */
+  comecarInteracao(): void {
+    this.aoComecarArrasto();
+  }
+
+  terminarInteracao(): void {
+    this.aoTerminarArrasto();
+  }
+
+  /** Resolução e bloom mudam na hora; os segmentos valem a partir do próximo objeto. */
+  aplicarPerfil(perfil: PerfilDaCena): void {
+    this.opcoes.perfil = perfil;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, perfil.pixelRatioMaximo));
+    this.fabrica.segmentos = perfil.segmentos;
+    const bloom = BLOOM[perfil.bloom];
+    this.bloom.strength = bloom.forca;
+    this.bloom.radius = bloom.raio;
+    this.ajustar();
   }
 
   /**
@@ -393,6 +513,42 @@ export class CenaHolograma {
     this.varredura = { grupo, anel, materialAnel, materialDisco };
   }
 
+  /** O anel do gesto de apontar: por cima de tudo, sempre de frente para a câmera. */
+  private montarCursor(): void {
+    const grupo = new Group();
+    grupo.visible = false;
+    grupo.renderOrder = 10;
+    const material = new MeshBasicMaterial({
+      color: 0x5ff2ff, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false, depthTest: false, side: DoubleSide,
+    });
+    const anel = new Mesh(new RingGeometry(RAIO_DO_CURSOR * 0.7, RAIO_DO_CURSOR, 32), material);
+    const ponto = new Mesh(new CircleGeometry(RAIO_DO_CURSOR * 0.25, 16), material);
+    anel.renderOrder = ponto.renderOrder = 10;
+    grupo.add(anel, ponto);
+    this.fixos.push(anel.geometry, ponto.geometry, material);
+    this.cena.add(grupo);
+    this.cursor3d = { grupo, ativo: false };
+  }
+
+  private aplicarGiro(dAz: number, dPol: number): void {
+    this.deslocamento.copy(this.camera.position).sub(this.controles.target);
+    this.esferica.setFromVector3(this.deslocamento);
+    this.esferica.theta -= dAz;
+    this.esferica.phi = MathUtils.clamp(this.esferica.phi - dPol, this.controles.minPolarAngle, this.controles.maxPolarAngle);
+    this.esferica.makeSafe();
+    this.deslocamento.setFromSpherical(this.esferica);
+    this.camera.position.copy(this.controles.target).add(this.deslocamento);
+    this.camera.lookAt(this.controles.target);
+  }
+
+  private girarPorInercia(dt: number): void {
+    if (!this.inercia.x && !this.inercia.y) return;
+    this.aplicarGiro(this.inercia.x * dt, this.inercia.y * dt);
+    this.inercia.multiplyScalar(Math.exp(-ATRITO_DO_GIRO * dt));
+    if (this.inercia.length() < GIRO_MINIMO) this.inercia.set(0, 0);
+    this.ultimaInteracao = performance.now();
+  }
+
   private animarVarredura(agora: number, dt: number, reduzido: boolean): void {
     const v = this.varredura;
     if (!reduzido) {
@@ -416,6 +572,11 @@ export class CenaHolograma {
     if (!largura || !altura) return;
     this.renderer.setSize(largura, altura, false);
     this.composer.setSize(largura, altura);
+    if (this.opcoes.perfil.bloom === 'reduzido') {
+      // O bloom é o passe mais caro: em meia resolução o brilho quase não muda e a GPU do celular agradece.
+      const razao = this.renderer.getPixelRatio();
+      this.bloom.setSize((largura * razao) / 2, (altura * razao) / 2);
+    }
     this.camera.aspect = largura / altura;
     this.camera.updateProjectionMatrix();
   }
@@ -428,19 +589,28 @@ export class CenaHolograma {
 
     this.fatorExplosao += (this.alvoExplosao - this.fatorExplosao) * suave(dt, 7);
     if (Math.abs(this.alvoExplosao - this.fatorExplosao) < 1e-4) this.fatorExplosao = this.alvoExplosao;
-    const grupo = this.destacada?.dados.grupo ?? null;
+    const grupo = (this.destacada ?? this.selecionada)?.dados.grupo ?? null;
     for (const p of this.pecas) this.animarPeca(p, agora, dt, grupo);
 
     if (!reduzido) for (const anel of this.aneis) anel.rotation.z += (anel.userData['velocidade'] as number) * dt;
     this.animarVarredura(agora, dt, reduzido);
     this.voarPasso(dt);
+    this.girarPorInercia(dt);
     this.controles.autoRotate =
-      !reduzido && !this.arrastando && !this.voo && !this.destacada && agora - this.ultimaInteracao > OCIOSO_ATE_GIRAR_MS;
+      !reduzido &&
+      !this.arrastando &&
+      !this.maoNaCamera &&
+      !this.voo &&
+      !this.destacada &&
+      agora - this.ultimaInteracao > OCIOSO_ATE_GIRAR_MS;
     this.controles.update(dt);
 
-    // Raio só quando o mouse mexeu, ou de vez em quando, porque o objeto gira por baixo dele.
-    if (this.ponteiroDentro && !this.arrastando && (this.ponteiroMudou || ++this.contagem % 6 === 0)) this.lancarRaio();
+    // Raio só quando o ponteiro (mouse ou dedo apontando) mexeu, ou de vez em quando, porque o
+    // objeto gira por baixo dele.
+    const apontando = this.ponteiroDentro || this.cursor3d.ativo;
+    if (apontando && !this.arrastando && (this.ponteiroMudou || ++this.contagem % 6 === 0)) this.lancarRaio();
     this.ponteiroMudou = false;
+    if (this.cursor3d.ativo) this.cursor3d.grupo.quaternion.copy(this.camera.quaternion);
     this.composer.render(dt);
   };
 
@@ -482,6 +652,17 @@ export class CenaHolograma {
     this.raio.setFromCamera(this.ponteiro, this.camera);
     const acerto = this.raio.intersectObjects(this.alvosDoRaio, false)[0];
     this.destacar(acerto ? (this.porObjeto.get(acerto.object) ?? null) : null);
+    if (this.cursor3d.ativo) {
+      const profundidade = this.camera.position.distanceTo(this.controles.target);
+      if (acerto) this.cursor3d.grupo.position.copy(acerto.point);
+      else this.raio.ray.at(profundidade, this.cursor3d.grupo.position);
+    }
+  }
+
+  private pecaEm(x: number, y: number): PecaNaCena | null {
+    this.raio.setFromCamera(new Vector2(x, y), this.camera);
+    const acerto = this.raio.intersectObjects(this.alvosDoRaio, false)[0];
+    return acerto ? (this.porObjeto.get(acerto.object) ?? null) : null;
   }
 
   private destacar(peca: PecaNaCena | null): void {
@@ -503,12 +684,13 @@ export class CenaHolograma {
 
   private readonly aoSairPonteiro = (): void => {
     this.ponteiroDentro = false;
-    this.destacar(null);
+    if (!this.cursor3d.ativo) this.destacar(null);
   };
 
   private readonly aoComecarArrasto = (): void => {
     this.arrastando = true;
     this.voo = null;
+    this.inercia.set(0, 0);
   };
 
   private readonly aoTerminarArrasto = (): void => {

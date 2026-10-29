@@ -106,7 +106,7 @@ test('holograma gerado pelo modelo: escaneia, mantém as peças no erro e cancel
   });
 
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
-  const estado = page.locator('app-holograma-view [role=status]');
+  const estado = page.locator('app-holograma-view .estado');
   await expect(page.getByRole('button', { name: 'Gerar' })).toBeDisabled();
   await page.getByLabel('Gerar objeto').fill('motor V8');
   await page.getByLabel('Nível de detalhe').selectOption('detalhado');
@@ -127,5 +127,37 @@ test('holograma gerado pelo modelo: escaneia, mantém as peças no erro e cancel
   await page.getByRole('button', { name: 'Cancelar' }).click();
   await expect(estado).toHaveText('Cancelado · 0 peças');
   await expect(page.getByRole('button', { name: 'Gerar' })).toBeFocused();
+  expect(erros).toEqual([]);
+});
+
+test('gestos sem permissão da câmera avisam e os ajustes abrem e fecham sem fechar o holograma', async ({ page }) => {
+  const erros: string[] = []; page.on('pageerror', (e) => erros.push(e.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia: () => Promise.reject(new DOMException('negado', 'NotAllowedError')) },
+    });
+  });
+  await page.reload(); await expect(page.locator('.orbe--livre')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Holograma', exact: true }).click();
+  const gestos = page.getByRole('button', { name: 'Gestos' });
+  await gestos.click();
+  await expect(page.locator('app-botoes-gestos .aviso')).toHaveText('Permissão da câmera negada.');
+  await expect(gestos).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('app-preview-gestos')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Ajustes' }).click();
+  const dialogo = page.getByRole('dialog', { name: 'Ajustes de gestos' });
+  await expect(dialogo).toBeVisible();
+  await dialogo.getByLabel('Perfil do aparelho').selectOption('leve');
+  await expect(dialogo.getByText('Perfil em uso: Leve (celular)')).toBeVisible();
+  await expect(dialogo.getByRole('button', { name: 'Gravar 5 s' })).toBeDisabled();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('jarvis-hud.gestos.v1') ?? '{}').perfil)).toBe('leve');
+
+  await page.keyboard.press('Escape');
+  await expect(dialogo).toBeHidden();
+  await expect(page.locator('app-holograma-view')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ajustes' })).toBeFocused();
   expect(erros).toEqual([]);
 });

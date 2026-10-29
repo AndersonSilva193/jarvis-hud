@@ -1,0 +1,12 @@
+@use '../../estilos/hud' as hud;
+
+:host{display:contents}
+.botao{@include hud.botao(6px);padding:.5rem .75rem}
+// O botão tem canto cortado (clip-path): contorno por fora seria recortado, então ele vai por dentro.
+.botao:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+// Fica logo acima da barra (que é o bloco posicionado mais próximo), sem ocupar espaço quando não há aviso.
+.aviso{position:absolute;inset:auto 0 calc(100% + .45rem);margin:0;text-align:center;font:500 .62rem hud.$mono;letter-spacing:.1em;color:hud.$alerta;pointer-events:none}
+@media(max-width:700px){
+  .botao{flex:1 1 0;padding:.55rem .4rem}
+  .aviso{position:static;flex:1 1 100%}
+}

@@ -58,11 +58,14 @@ class CurvaHelice extends Curve<Vector3> {
 export class FabricaDeGeometrias {
   private readonly cache = new Map<string, GeometriaDaPeca>();
 
+  /** Multiplica os segmentos das formas curvas: 0.5 no perfil leve do celular. */
+  constructor(public segmentos = 1) {}
+
   obter(peca: PecaHolograma): GeometriaDaPeca {
-    const chave = `${peca.forma}|${peca.tamanho.join(',')}|${peca.pontos?.flat().join(',') ?? ''}`;
+    const chave = `${this.segmentos}|${peca.forma}|${peca.tamanho.join(',')}|${peca.pontos?.flat().join(',') ?? ''}`;
     let geometria = this.cache.get(chave);
     if (!geometria) {
-      geometria = criar(peca);
+      geometria = criar(peca, this.segmentos);
       this.cache.set(chave, geometria);
     }
     return geometria;
@@ -77,7 +80,9 @@ export class FabricaDeGeometrias {
   }
 }
 
-function criar({ forma, tamanho: s, pontos }: PecaHolograma): GeometriaDaPeca {
+function criar({ forma, tamanho: s, pontos }: PecaHolograma, fator: number): GeometriaDaPeca {
+  // Abaixo do piso a forma deixa de ler como curva.
+  const n = (base: number, piso: number) => Math.max(piso, Math.round(base * fator));
   switch (forma) {
     case 'box':
       return comArestas(new BoxGeometry(s[0], s[1], s[2]), 1);
@@ -86,26 +91,26 @@ function criar({ forma, tamanho: s, pontos }: PecaHolograma): GeometriaDaPeca {
       const molde = new SphereGeometry(s[0], 16, 10);
       const contorno = new EdgesGeometry(molde, 1);
       molde.dispose();
-      return { malha: new SphereGeometry(s[0], 32, 20), contorno };
+      return { malha: new SphereGeometry(s[0], n(32, 16), n(20, 10)), contorno };
     }
     case 'cyl':
-      return comArestas(new CylinderGeometry(s[0], s[1], s[2], 32), LIMIAR_CURVO);
+      return comArestas(new CylinderGeometry(s[0], s[1], s[2], n(32, 12)), LIMIAR_CURVO);
     case 'cone':
-      return comArestas(new ConeGeometry(s[0], s[1], 32), LIMIAR_CURVO);
+      return comArestas(new ConeGeometry(s[0], s[1], n(32, 12)), LIMIAR_CURVO);
     case 'tor':
-      return comArestas(new TorusGeometry(s[0], s[1], LADOS_DO_TUBO, 72), LIMIAR_CURVO);
+      return comArestas(new TorusGeometry(s[0], s[1], LADOS_DO_TUBO, n(72, 24)), LIMIAR_CURVO);
     case 'ring':
-      return comArestas(new RingGeometry(s[0], s[1], 72), 1);
+      return comArestas(new RingGeometry(s[0], s[1], n(72, 24)), 1);
     case 'cap':
-      return comArestas(new CapsuleGeometry(s[0], s[1], 6, 24), LIMIAR_CURVO);
+      return comArestas(new CapsuleGeometry(s[0], s[1], n(6, 3), n(24, 12)), LIMIAR_CURVO);
     case 'tube': {
       const caminho = new CatmullRomCurve3((pontos ?? []).map((p) => new Vector3(...p)));
-      const segmentos = Math.max(16, (pontos?.length ?? 2) * 12);
+      const segmentos = n(Math.max(16, (pontos?.length ?? 2) * 12), 8);
       return comArestas(new TubeGeometry(caminho, segmentos, s[0], LADOS_DO_TUBO), LIMIAR_CURVO);
     }
     case 'helix': {
       const [raio, altura, voltas, espessura] = s as [number, number, number, number];
-      const segmentos = Math.min(600, Math.max(48, Math.ceil(voltas * 64)));
+      const segmentos = n(Math.min(600, Math.max(48, Math.ceil(voltas * 64))), 32);
       return comArestas(new TubeGeometry(new CurvaHelice(raio, altura, voltas), segmentos, espessura, LADOS_DO_TUBO), LIMIAR_CURVO);
     }
     case 'line':

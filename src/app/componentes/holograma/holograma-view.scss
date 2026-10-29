@@ -35,6 +35,9 @@
 .destaque{left:1rem;bottom:5.2rem;display:flex;flex-direction:column;gap:.3rem;pointer-events:none}
 .destaque strong{font:600 .8rem hud.$mono;letter-spacing:.08em;color:hud.$ciano-forte}
 .destaque span{font:500 .6rem hud.$mono;letter-spacing:.18em;text-transform:uppercase;color:#a6bed8}
+.destaque--selecao{pointer-events:auto}
+// Com a câmera no canto, o nome da peça passa para o lado dela.
+@media(min-width:701px){:host(.holograma--gestos) .destaque{left:13rem}}
 
 .controles{left:50%;bottom:1rem;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.6rem;width:max-content;max-width:calc(100% - 2rem)}
 .explosao{display:flex;align-items:center;gap:.7rem;font:500 .62rem hud.$mono;letter-spacing:.16em;text-transform:uppercase;color:#cdeaff}

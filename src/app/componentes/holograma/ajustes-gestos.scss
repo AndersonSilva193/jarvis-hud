@@ -1,0 +1,22 @@
+@use '../../estilos/hud' as hud;
+
+.dialogo{@include hud.moldura(14px);width:min(24rem,calc(100vw - 2rem));max-height:calc(100svh - 2rem);overflow:auto;margin:auto;padding:1rem 1.1rem;color:hud.$texto;background:hud.$fundo-claro;border:0}
+.dialogo::backdrop{background:rgba(1,5,14,.7)}
+.titulo{margin:0 0 .9rem;font:600 .9rem hud.$mono;letter-spacing:.14em;text-transform:uppercase;color:hud.$ciano-forte}
+.rotulo{display:block;margin:0 0 .35rem;@include hud.rotulo(.58rem)}
+.campo{display:block;margin:0 0 .8rem}
+.entrada{width:100%;padding:.5rem .6rem;background:rgba(1,7,18,.7);border:1px solid hud.$ciano-fraco;color:hud.$texto;font:500 .78rem hud.$mono}
+.entrada option{background:hud.$fundo-claro}
+.faixa{display:flex;align-items:center;gap:.6rem}
+.faixa input{flex:1;accent-color:hud.$ciano}
+.faixa output{min-width:3em;text-align:right;font:500 .72rem hud.$mono;color:hud.$ciano-forte}
+.marcar{display:flex;align-items:center;gap:.5rem;margin:0 0 .55rem;font-size:.8rem}
+.marcar input{width:1.05rem;height:1.05rem;accent-color:hud.$ciano}
+.gravar{margin:.9rem 0;padding-top:.8rem;border-top:1px solid hud.$ciano-fraco}
+.nota{margin:.4rem 0;font-size:.74rem;line-height:1.45;color:#b9d3ea}
+.acoes{display:flex;justify-content:flex-end;gap:.5rem;margin-top:.8rem}
+.botao{@include hud.botao(6px);padding:.5rem .75rem}
+.botao--fechar{border-color:hud.$ciano;color:hud.$ciano-forte}
+.botao:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+.entrada:focus-visible,.faixa input:focus-visible,.marcar input:focus-visible{outline:2px solid hud.$ciano-forte;outline-offset:2px}
+@media(max-width:700px){.entrada{font-size:1rem}}
