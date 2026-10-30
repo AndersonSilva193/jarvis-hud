@@ -17,6 +17,7 @@ export type EstadoDoCelular = 'desligado' | 'abrindo' | 'aguardando' | 'conectad
 type Ouvinte = (eventos: EventoDoControle[]) => void;
 
 export const AVISO_DE_QUEDA = 'Celular desconectado — de volta ao mouse e à câmera.';
+export const AVISO_SEM_CANAL = 'O servidor não abriu o canal do controle. Tentando de novo…';
 
 /**
  * O lado do PC no `/ws/holograma`: pede o código do QR, recebe os gestos do celular e responde os
@@ -69,6 +70,8 @@ export class CanalDaHudService {
           this.estado.set('caiu');
           this.aviso.set(AVISO_DE_QUEDA);
         }
+        // Nem abriu (bilhete recusado, rota fora do nginx, backend velho): a tela diz, e segue tentando.
+        if (estado === 'reconectando' && this.estado() === 'abrindo') this.aviso.set(AVISO_SEM_CANAL);
         if (estado === 'fechada') this.encerrar(motivo ?? '');
       },
       ...opcoes,

@@ -54,6 +54,7 @@ export function urlDoControle(origem: string, codigo: string, urlApi: string): s
         }
       } @else if (canal.estado() === 'abrindo') {
         <p class="nota" role="status">Preparando o código…</p>
+        @if (canal.aviso()) { <p class="nota nota--erro">{{ canal.aviso() }}</p> }
       } @else if (canal.aviso()) {
         <p class="nota nota--erro">{{ canal.aviso() }}</p>
         <button class="botao botao--forte" type="button" (click)="canal.parear()">Tentar de novo</button>

@@ -85,6 +85,32 @@ test.describe('PC: o celular como controle do holograma', () => {
   });
 });
 
+test('PC: canal que não abre avisa em vez de ficar só em "Preparando"', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('jarvis-hud.api-url', 'https://api.hud.test'); localStorage.setItem('jarvis-hud.token', 'token-de-teste');
+    Object.assign(window, { SpeechRecognition: undefined, webkitSpeechRecognition: undefined });
+    class FonteTeste extends EventTarget {
+      static CLOSED = 2; readyState = 1; onopen: (() => void) | null = null;
+      constructor() { super(); setTimeout(() => this.onopen?.(), 0); }
+      close() {}
+    }
+    Object.assign(window, { EventSource: FonteTeste });
+  });
+  await page.route(`${API}/**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/controle/bilhete')) return route.fulfill({ json: { bilhete: 'b'.repeat(43), validade: 30 } });
+    const corpo = path.endsWith('/historico') ? { sessao: 'teste', revisao: 0, trocas: [], emAndamento: null, ultima: null } : path.endsWith('/galeria') ? [] : null;
+    await route.fulfill({ status: path === '/api/tela/estado' ? 204 : 200, contentType: 'application/json', body: path === '/api/tela/estado' ? '' : JSON.stringify(corpo) });
+  });
+  // Como o 404 do nginx sem o bloco /ws/: o socket nem abre.
+  await page.routeWebSocket(/\/ws\/holograma/, (ws) => ws.close({ code: 1011 }));
+  await page.goto('/'); await expect(page.locator('.orbe--livre')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Holograma', exact: true }).click();
+  await page.getByRole('button', { name: 'Usar celular como controle' }).click();
+  await expect(page.getByRole('dialog').getByText('O servidor não abriu o canal do controle. Tentando de novo…')).toBeVisible();
+});
+
 test.describe('celular: a página /controle', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
