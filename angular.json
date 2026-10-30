@@ -34,7 +34,8 @@
                 "output": "mediapipe/wasm"
               }
             ],
-            "styles": ["src/styles.scss"]
+            "styles": ["src/styles.scss"],
+            "allowedCommonJsDependencies": ["qrcode-generator"]
           },
           "configurations": {
             "production": {

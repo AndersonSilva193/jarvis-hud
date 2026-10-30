@@ -50,9 +50,11 @@ export class PerfilDoAparelhoService {
   private readonly ajustes = inject(AjustesDeGestosService);
 
   readonly detectado = signal<PerfilDoAparelho>(detectar());
+  /** O `/controle` força o leve enquanto está aberto, sem mexer na escolha guardada nos ajustes. */
+  readonly forcado = signal<PerfilDoAparelho | null>(null);
   readonly perfil = computed<PerfilDoAparelho>(() => {
     const escolha = this.ajustes.ajustes().perfil;
-    return escolha === 'auto' ? this.detectado() : escolha;
+    return this.forcado() ?? (escolha === 'auto' ? this.detectado() : escolha);
   });
   readonly parametros = computed(() => PARAMETROS_DO_PERFIL[this.perfil()]);
 }

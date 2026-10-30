@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, NgZone, afterNextRender, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, NgZone, afterNextRender, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 
 import { HologramaService } from '../../nucleo/holograma.service';
 import {
@@ -11,12 +11,15 @@ import {
 } from '../../nucleo/holograma.modelos';
 import { MotorDeGestos } from '../../gestos/motor-de-gestos';
 import { AjustesDeGestosService } from '../../nucleo/ajustes-de-gestos.service';
+import { CanalDaHudService } from '../../nucleo/canal-da-hud.service';
 import { PerfilDoAparelhoService } from '../../nucleo/perfil-do-aparelho.service';
 import { RastreioDeMaoService } from '../../nucleo/rastreio-de-mao.service';
 import { BotoesGestosComponent } from './botoes-gestos';
 import { ControleDeToque } from './controle-de-toque';
 import { ControlePorGestos, type Sensibilidade } from './controle-por-gestos';
+import { ControleRemoto } from './controle-remoto';
 import { GaleriaHologramaComponent } from './galeria-holograma';
+import { ParearCelularComponent } from './parear-celular';
 import { PreviewGestosComponent } from './preview-gestos';
 // Só tipos: o valor vem do `import()` dinâmico, e o Three.js fica fora do chunk da HUD.
 import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-holograma';
@@ -30,7 +33,7 @@ import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-hologram
  */
 @Component({
   selector: 'app-holograma-view',
-  imports: [GaleriaHologramaComponent, PreviewGestosComponent, BotoesGestosComponent],
+  imports: [GaleriaHologramaComponent, PreviewGestosComponent, BotoesGestosComponent, ParearCelularComponent],
   host: { class: 'holograma', '[class.holograma--gestos]': 'rastreio.ativo()' },
   template: `
     <div class="cena" #alvo role="img" [attr.aria-label]="descricaoDaCena()"></div>
@@ -112,6 +115,7 @@ import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-hologram
       <button class="botao" type="button" (click)="centralizar()">Centralizar</button>
       <button class="botao" type="button" (click)="resetar()">Resetar</button>
       <app-botoes-gestos />
+      <app-parear-celular />
       <button class="botao" type="button" (click)="holograma.fechar()">Fechar</button>
     </section>
   `,
@@ -179,6 +183,11 @@ export class HologramaViewComponent {
   private readonly motor = new MotorDeGestos();
   private controleDeGestos: ControlePorGestos | null = null;
   private controleDeToque: ControleDeToque | null = null;
+  private controleRemoto: ControleRemoto | null = null;
+  private readonly canal = inject(CanalDaHudService);
+  /** O celular assumiu com a câmera do PC ligada: na queda, ela volta. */
+  private cameraAntesDoCelular = false;
+  private celularNoComando = false;
   /**
    * O fator do toque sem arredondar: dois dedos andando devagar somam frações de 1% a cada
    * movimento, que o slider (em inteiros) engoliria.
@@ -190,6 +199,25 @@ export class HologramaViewComponent {
     // Cada detecção vai direto ao motor e à cena, fora da detecção de mudanças: só as saídas
     // (explosão, seleção, nome do gesto) tocam signals, e só quando mudam.
     const pararDeOuvir = this.rastreio.ouvir((quadro) => this.controleDeGestos?.aplicar(this.motor.processar(quadro)));
+    // Os gestos do celular entram pelo mesmo controle; só o caminho até aqui é outro.
+    const pararDeOuvirOCelular = this.canal.ouvir((eventos) => this.controleRemoto?.aplicar(eventos));
+    // Celular no comando pausa a câmera do PC (o mouse segue sempre). Saindo — desconectado, queda
+    // dele ou do canal —, o que ficou pela metade se desfaz e a câmera volta se estava ligada.
+    effect(() => {
+      const noComando = this.canal.estado() === 'conectado';
+      if (noComando === this.celularNoComando) return;
+      this.celularNoComando = noComando;
+      untracked(() => {
+        if (noComando) {
+          this.cameraAntesDoCelular = this.rastreio.ativo();
+          if (this.cameraAntesDoCelular) this.rastreio.desligar();
+          return;
+        }
+        this.controleRemoto?.soltar();
+        if (this.cameraAntesDoCelular && !this.rastreio.ativo()) this.rastreio.alternar();
+        this.cameraAntesDoCelular = false;
+      });
+    });
     effect(() => {
       const { maosMax } = this.perfil.parametros();
       // Uma mão só (perfil leve): o zoom é a pinça aproximando ou afastando a mão da câmera.
@@ -249,8 +277,10 @@ export class HologramaViewComponent {
     inject(DestroyRef).onDestroy(() => {
       this.vivo = false;
       pararDeOuvir();
-      // Fechar o holograma desliga a câmera: reabrir não religa sem o dono pedir.
+      pararDeOuvirOCelular();
+      // Fechar o holograma desliga a câmera e solta o celular: reabrir não religa sem o dono pedir.
       this.rastreio.desligar();
+      this.canal.fechar();
       this.controleDeToque?.destruir();
       this.cena()?.destruir();
     });
@@ -354,6 +384,7 @@ export class HologramaViewComponent {
         },
         sensibilidade,
       );
+      this.controleRemoto = new ControleRemoto(cena, this.controleDeGestos, (delta) => this.explodirMais(delta));
       this.controleDeToque = this.zona.runOutsideAngular(
         () => new ControleDeToque(host, cena, { explodirMais: (delta) => this.explodirMais(delta), resetar, selecionou }, sensibilidade),
       );

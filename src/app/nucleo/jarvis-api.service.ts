@@ -217,4 +217,11 @@ export class JarvisApiService {
   enviarEstadoTela(estado: EstadoTela): Promise<void> {
     return firstValueFrom(this.http.post<void>(this.config.rota('/api/tela/estado'), estado, { headers: this.autorizacao() }));
   }
+
+  /** O bilhete de uso único (30 s) que abre o `/ws/holograma`: o token nunca vai na URL do socket. */
+  async bilheteDoCanal(): Promise<string> {
+    const { bilhete } = await firstValueFrom(this.http.post<{ bilhete: string }>(
+      this.config.rota('/api/holograma/controle/bilhete'), null, { headers: this.autorizacao() }));
+    return bilhete;
+  }
 }

@@ -1,0 +1,37 @@
+@use '../../estilos/hud' as hud;
+
+:host{display:block;height:100%}
+// Uma coluna só, do topo ao rodapé: a área de gesto fica com o que sobrar da altura.
+.tela{position:relative;isolation:isolate;display:flex;flex-direction:column;gap:.75rem;height:100%;padding:max(1rem,env(safe-area-inset-top)) 1rem max(1rem,env(safe-area-inset-bottom))}
+.topo{display:flex;flex-direction:column;gap:.25rem}
+.marca{margin:0;@include hud.rotulo(.6rem);@include hud.brilho-texto(hud.$ciano,.6)}
+.titulo{margin:0;font-size:1.35rem;font-weight:300;color:hud.$texto}
+.estado{display:flex;align-items:center;gap:.5rem;margin:.2rem 0 0;font:500 .7rem hud.$mono;letter-spacing:.14em;text-transform:uppercase;color:#cdeaff}
+.luz{width:8px;height:8px;border-radius:50%;background:hud.$alerta;box-shadow:0 0 8px hud.$alerta}
+.luz--ok{background:hud.$ok;box-shadow:0 0 8px hud.$ok}
+.latencia{margin:0;font:500 .7rem hud.$mono;color:hud.$ciano-forte}
+.fraco{color:#a6bed8}
+
+.modos{display:flex;gap:.5rem}
+.modos .botao{flex:1}
+.botao{@include hud.botao(6px);padding:.7rem .8rem;font-size:.72rem}
+.botao[aria-pressed='true']{border-color:hud.$ciano;color:hud.$ciano-forte;box-shadow:0 0 14px rgba(45,125,255,.35)}
+.botao--sair{border-color:rgba(255,107,125,.55);color:#ffd0d6}
+// O botão tem canto cortado (clip-path): contorno por fora seria recortado, então ele vai por dentro.
+.botao:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+
+// A área inteira é do dedo: sem rolagem, sem zoom do navegador, sem menu de toque longo.
+.touchpad,.camera{@include hud.moldura(16px);flex:1;min-height:12rem;display:grid;place-items:center;padding:1rem;touch-action:none;-webkit-touch-callout:none;
+  background:radial-gradient(ellipse at 50% 45%,rgba(45,125,255,.16),transparent 70%),repeating-linear-gradient(0deg,transparent 0 31px,rgba(95,242,255,.06) 31px 32px),repeating-linear-gradient(90deg,transparent 0 31px,rgba(95,242,255,.06) 31px 32px)}
+.camera{grid-template-rows:auto auto 1fr;gap:.6rem;place-items:start center}
+.video{width:min(16rem,70vw);aspect-ratio:4/3;object-fit:cover;transform:scaleX(-1);border:1px solid hud.$ciano-fraco}
+.gesto{margin:0;font:600 .8rem hud.$mono;letter-spacing:.14em;text-transform:uppercase;color:hud.$ciano-forte}
+.dica{max-width:22rem;margin:0;text-align:center;font-size:.8rem;line-height:1.5;color:#cfe3f5}
+.aviso{margin:0;min-height:1em;text-align:center;font:500 .66rem hud.$mono;letter-spacing:.08em;color:hud.$alerta}
+
+.acoes{display:flex;gap:.5rem}
+.acoes .botao{flex:1}
+.nota{margin:0;font-size:.76rem;line-height:1.45;color:#cfe3f5}
+
+.painel{@include hud.moldura(18px);margin:auto 0;padding:1.4rem 1.2rem}
+.subtitulo{margin:0 0 .6rem;font-size:1rem;font-weight:500;color:hud.$texto}

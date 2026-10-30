@@ -207,8 +207,8 @@ export interface SaidasDoToque {
   selecionou(peca: { nome: string; grupo: string }): void;
 }
 
-/** Arrastar meia tela com dois dedos explode ou monta tudo. */
-const EXPLOSAO_POR_ALTURA = 2;
+/** Arrastar meia tela com dois dedos explode ou monta tudo. O controle pelo celular usa o mesmo. */
+export const EXPLOSAO_POR_ALTURA = 2;
 
 /**
  * A casca do reconhecedor no DOM. Escuta os toques na **captura** do host e não os deixa chegar ao

@@ -1,0 +1,26 @@
+@use '../../estilos/hud' as hud;
+
+:host{display:contents}
+.botao{@include hud.botao(6px);padding:.5rem .75rem}
+.botao--forte{border-color:hud.$ciano;color:hud.$ciano-forte}
+// O botão tem canto cortado (clip-path): contorno por fora seria recortado, então ele vai por dentro.
+.botao:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+.ligado{display:inline-flex;align-items:center;gap:.45rem;font:500 .62rem hud.$mono;letter-spacing:.14em;text-transform:uppercase;color:hud.$ok}
+.ligado--caiu{color:hud.$alerta}
+.luz{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+// Acima do aviso dos gestos, que ocupa a linha logo em cima da barra.
+.aviso{position:absolute;inset:auto 0 calc(100% + 1.5rem);margin:0;text-align:center;font:500 .62rem hud.$mono;letter-spacing:.1em;color:hud.$alerta;pointer-events:none}
+
+.dialogo{@include hud.moldura(14px);width:min(22rem,calc(100vw - 2rem));max-height:calc(100svh - 2rem);overflow:auto;margin:auto;padding:1rem 1.1rem;color:hud.$texto;background:hud.$fundo-claro;border:0}
+.dialogo::backdrop{background:rgba(1,5,14,.7)}
+.titulo{margin:0 0 .9rem;font:600 .9rem hud.$mono;letter-spacing:.14em;text-transform:uppercase;color:hud.$ciano-forte}
+.qr{display:block;width:min(15rem,100%);aspect-ratio:1;margin:0 auto .8rem;shape-rendering:crispEdges}
+.nota{margin:.4rem 0;font-size:.78rem;line-height:1.45;color:#cfe3f5}
+.nota--erro{color:#ffd0d6}
+.url{display:block;margin-top:.25rem;font:500 .66rem hud.$mono;color:hud.$ciano-forte;word-break:break-all;user-select:all}
+.acoes{display:flex;justify-content:flex-end;gap:.5rem;margin-top:.8rem}
+
+@media(max-width:700px){
+  .botao{flex:1 1 0;padding:.55rem .4rem}
+  .aviso{position:static;flex:1 1 100%}
+}
