@@ -89,7 +89,7 @@ import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-hologram
           </div>
         </form>
       </section>
-      <app-galeria-holograma class="painel galeria" (regerar)="gerarDeNovo($event)" />
+      <app-galeria-holograma class="galeria"(regerar)="gerarDeNovo($event)" />
     </div>
     @if (destaque(); as peca) {
       <p class="painel destaque"><strong>{{ peca.nome }}</strong><span>Grupo · {{ peca.grupo }}</span></p>

@@ -16,7 +16,8 @@
 
 // A coluna da direita: o pedido ao modelo em cima, a galeria embaixo.
 // Metade da largura no máximo: a outra metade é do título, no canto oposto.
-.lateral{position:absolute;top:1rem;right:1rem;display:flex;flex-direction:column;align-items:flex-end;gap:.6rem;width:min(26rem,calc(50% - 1.5rem))}
+// Termina acima da barra de controles: a galeria aberta encolhe e rola por dentro.
+.lateral{position:absolute;top:1rem;right:1rem;max-height:calc(100% - 6.5rem);display:flex;flex-direction:column;align-items:flex-end;gap:.6rem;width:min(26rem,calc(50% - 1.5rem))}
 .lateral .painel{position:relative}
 .gerar{align-self:stretch}
 .formulario .rotulo{display:block}
@@ -58,7 +59,9 @@
 // No celular não há área para painéis flutuando sobre a cena: a camada entra no fluxo do conteúdo
 // (que cresce e rola com a HUD) e vira uma coluna — título, pedido, exemplos, cena e controles.
 @media(max-width:700px){
-  :host{position:relative;inset:auto;z-index:4;display:grid;grid-template-rows:auto auto auto minmax(16rem,56svh) auto;gap:.5rem;width:100%;align-self:stretch;justify-self:stretch;overflow:visible}
+  :host{position:relative;inset:auto;z-index:4;display:grid;grid-template-rows:auto auto auto minmax(16rem,56svh) auto;
+    // Coluna presa à largura da tela: sem isso a fileira da galeria (que rola de lado) alarga a grade inteira.
+    grid-template-columns:minmax(0,1fr);gap:.5rem;width:100%;align-self:stretch;justify-self:stretch;overflow:visible}
   // A coluna da direita se desfaz: os dois painéis viram linhas da grade.
   .lateral{display:contents}
   .gerar{grid-row:2}

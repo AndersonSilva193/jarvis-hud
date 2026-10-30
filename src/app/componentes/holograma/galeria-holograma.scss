@@ -1,10 +1,16 @@
 @use '../../estilos/hud' as hud;
 
-:host{display:flex;flex-direction:column;min-height:0}
+// Recolhida, sobra só o botão no canto; aberta, o painel desce embaixo dele, como o Histórico.
+:host{display:flex;flex-direction:column;align-items:flex-end;gap:.5rem;min-height:0}
+.alternar{@include hud.botao(7px);padding:.6rem .9rem}
+.alternar:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+.contagem{color:hud.$ciano-forte}
+.painel{@include hud.moldura(12px);align-self:stretch;display:flex;flex-direction:column;min-height:0;padding:.85rem 1rem}
+.painel:focus-visible{outline:2px solid hud.$ciano-forte;outline-offset:-2px}
 .rotulo{margin:0 0 .45rem;@include hud.rotulo(.58rem)}
 .descricao{margin:.2rem 0;font-size:.78rem;line-height:1.45;color:#b9d3ea}
-// A lista rola sozinha: o painel não pode descer por cima da barra de controles.
-.itens{display:flex;flex-direction:column;gap:.35rem;max-height:min(22rem,calc(100svh - 24rem));margin:0;padding:0 .15rem 0 0;list-style:none;overflow-y:auto;scrollbar-width:thin}
+// A lista rola sozinha no espaço que a coluna da direita deixa: nunca desce por cima da barra de controles.
+.itens{display:flex;flex:1 1 auto;flex-direction:column;gap:.35rem;min-height:0;margin:0;padding:0 .15rem 0 0;list-style:none;overflow-y:auto;scrollbar-width:thin}
 .item{display:flex;align-items:center;gap:.35rem;border:1px solid transparent}
 .item--atual{border-color:hud.$ciano-fraco;background:rgba(95,242,255,.05)}
 .abrir{display:flex;flex:1;align-items:center;gap:.6rem;min-width:0;padding:.25rem;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
@@ -25,6 +31,7 @@
 
 // No celular a galeria vira uma fileira que rola de lado, com a miniatura em cima do nome.
 @media(max-width:700px){
+  .painel{padding:.55rem .75rem}
   .itens{flex-direction:row;max-height:none;overflow-x:auto;overflow-y:hidden;padding:0 0 .2rem}
   .item{flex-direction:column;flex-shrink:0;width:6.5rem}
   .abrir{flex-direction:column;align-items:stretch;width:100%;text-align:center}
