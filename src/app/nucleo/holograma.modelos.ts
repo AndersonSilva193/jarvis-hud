@@ -252,3 +252,137 @@ export function lerErroHolograma(v: unknown): string | null {
   const texto = lerAvisoHolograma(v)?.trim();
   return texto ? texto : null;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Fase 6: a cena comandada pela conversa (`holograma.comando` no SSE geral).
+// ---------------------------------------------------------------------------------------------
+
+export const VISTAS_HOLOGRAMA = ['frente', 'lado', 'cima', 'isometrica'] as const;
+export type VistaHolograma = (typeof VISTAS_HOLOGRAMA)[number];
+export type EixoHolograma = 'x' | 'y' | 'z';
+
+/** Peças e grupos por id, como o servidor os resolveu. A HUD nunca interpreta o texto do alvo. */
+export interface AlvoDoFiltro {
+  grupos: readonly string[];
+  pecas: readonly string[];
+}
+
+export interface FiltrosDoHolograma {
+  destacados: AlvoDoFiltro;
+  isolados: AlvoDoFiltro;
+  escondidos: AlvoDoFiltro;
+}
+
+export const ALVO_VAZIO: AlvoDoFiltro = { grupos: [], pecas: [] };
+export const SEM_FILTROS: FiltrosDoHolograma = { destacados: ALVO_VAZIO, isolados: ALVO_VAZIO, escondidos: ALVO_VAZIO };
+
+/** O filtro vale para a peça? Vazio não vale para nenhuma. */
+export function noFiltro(alvo: AlvoDoFiltro, peca: Pick<PecaHolograma, 'id' | 'grupo'>): boolean {
+  return alvo.grupos.includes(peca.grupo) || alvo.pecas.includes(peca.id);
+}
+
+export function filtroVazio(alvo: AlvoDoFiltro): boolean {
+  return alvo.grupos.length === 0 && alvo.pecas.length === 0;
+}
+
+/** A peça escolhida: por gesto, toque ou voz. O `id` falta só na seleção antiga por grupo. */
+export interface PecaSelecionada {
+  id?: string;
+  nome: string;
+  grupo: string;
+}
+
+/** Uma ordem do Jarvis para a cena. `rapido`: veio sem modelo, e a confirmação é um som. */
+export type ComandoHolograma = { rapido: boolean } & (
+  | { acao: 'abrir' | 'fechar' | 'parar' | 'mostrar_tudo' | 'resetar' | 'cancelar_geracao' }
+  | { acao: 'carregar'; objeto: string; detalhe: DetalheHolograma; novo: boolean; provedor?: GeradorHolograma; falaPronto: string }
+  | { acao: 'explodir'; fator: number }
+  | { acao: 'girar'; eixo: EixoHolograma; graus: number }
+  | { acao: 'girar_continuo'; ligar: boolean; velocidade: number }
+  | { acao: 'zoom'; fator: number }
+  | { acao: 'vista'; vista: VistaHolograma }
+  | { acao: 'destacar' | 'isolar' | 'esconder'; alvo: AlvoDoFiltro }
+  | { acao: 'selecionar'; peca: string }
+);
+
+const SEM_COMPLEMENTO = ['abrir', 'fechar', 'parar', 'mostrar_tudo', 'resetar', 'cancelar_geracao'] as const;
+const MAX_ALVOS = 250;
+
+function ids(v: unknown): string[] | null {
+  if (!Array.isArray(v) || v.length > MAX_ALVOS) return null;
+  return v.every((id) => typeof id === 'string' && ID_GERACAO.test(id)) ? (v as string[]) : null;
+}
+
+/**
+ * Confere o `holograma.comando` campo a campo. Ação desconhecida (servidor mais novo) ou número fora
+ * da faixa voltam `null`, e o evento é ignorado como qualquer outro que esta HUD não entende.
+ */
+export function lerComandoHolograma(v: unknown): ComandoHolograma | null {
+  if (!objeto(v) || typeof v['acao'] !== 'string') return null;
+  const dados: Record<string, unknown> = objeto(v['dados']) ? v['dados'] : {};
+  const rapido = v['rapido'] === true;
+  const acao = v['acao'];
+  if ((SEM_COMPLEMENTO as readonly string[]).includes(acao)) {
+    return { acao: acao as (typeof SEM_COMPLEMENTO)[number], rapido };
+  }
+  switch (acao) {
+    case 'carregar': {
+      const alvo = texto(dados['objeto'], MAX_OBJETO_HOLOGRAMA);
+      if (!alvo) return null;
+      const detalhe = DETALHES_HOLOGRAMA.find((d) => d.valor === dados['detalhe'])?.valor ?? 'normal';
+      const comando: ComandoHolograma = {
+        acao, rapido, objeto: alvo, detalhe, novo: dados['novo'] === true, falaPronto: texto(dados['falaPronto'], 80),
+      };
+      const provedor = lerGeradorHolograma(dados['provedor']);
+      if (provedor) comando.provedor = provedor;
+      return comando;
+    }
+    case 'explodir':
+    case 'zoom': {
+      const fator = dados['fator'];
+      const [minimo, maximo] = acao === 'explodir' ? [0, 1] : [0.25, 4];
+      return finito(fator) && fator >= minimo && fator <= maximo ? { acao, rapido, fator } : null;
+    }
+    case 'girar': {
+      const graus = dados['graus'];
+      const eixo = dados['eixo'];
+      if (!finito(graus) || Math.abs(graus) > 720 || (eixo !== 'x' && eixo !== 'y' && eixo !== 'z')) return null;
+      return { acao, rapido, eixo, graus };
+    }
+    case 'girar_continuo': {
+      const bruta = dados['velocidade'];
+      const velocidade = finito(bruta) ? Math.min(5, Math.max(0.1, bruta)) : 1;
+      return { acao, rapido, ligar: dados['ligar'] !== false, velocidade };
+    }
+    case 'vista': {
+      const vista = VISTAS_HOLOGRAMA.find((nome) => nome === dados['vista']);
+      return vista ? { acao, rapido, vista } : null;
+    }
+    case 'destacar':
+    case 'isolar':
+    case 'esconder': {
+      const grupos = ids(dados['grupos'] ?? []);
+      const pecas = ids(dados['pecas'] ?? []);
+      return grupos && pecas ? { acao, rapido, alvo: { grupos, pecas } } : null;
+    }
+    case 'selecionar': {
+      const peca = dados['peca'];
+      return typeof peca === 'string' && ID_GERACAO.test(peca) ? { acao, rapido, peca } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** O que a HUD conta ao servidor no `POST /api/holograma/estado` (ver `EstadoDoHologramaDto`). */
+export interface EstadoDoHolograma {
+  aberto: boolean;
+  objeto?: { id: string; nome: string };
+  gerando?: boolean;
+  pecas?: { id: string; nome: string; grupo: string }[];
+  explosao?: number;
+  selecionada?: string;
+  isolado?: string[];
+  escondidos?: string[];
+  vista?: VistaHolograma | 'livre';
+}

@@ -97,12 +97,12 @@ export class HologramaService {
 
   /**
    * Pede um objeto; as peças entram na cena conforme o modelo escreve — ou numa reprodução rápida,
-   * se o servidor já o tem na galeria. `novo` força o modelo e substitui o que estava guardado.
+   * se o servidor já o tem na galeria. `novo` força o modelo e substitui o que estava guardado;
+   * `gerador` é o escolhido na tela, ou o que o Jarvis pediu ("gera com o local").
    */
-  gerar(objeto: string, detalhe: DetalheHolograma, novo = false): Promise<void> {
+  gerar(objeto: string, detalhe: DetalheHolograma, novo = false, gerador: GeradorHolograma = this.gerador()): Promise<void> {
     const limpo = objeto.trim().slice(0, MAX_OBJETO_HOLOGRAMA);
     if (!limpo) return Promise.resolve();
-    const gerador = this.gerador();
     return this.executar('gerar', (ouvintes, sinal) => this.stream.gerar(limpo, detalhe, gerador, ouvintes, sinal, novo));
   }
 

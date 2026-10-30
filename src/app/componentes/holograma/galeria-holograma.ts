@@ -1,5 +1,6 @@
 import { Component, ElementRef, afterNextRender, afterRenderEffect, inject, output, signal, viewChild } from '@angular/core';
 
+import { ComandosDoHologramaService } from '../../nucleo/comandos-do-holograma.service';
 import { HologramaService } from '../../nucleo/holograma.service';
 import { legendaDoItem, type ItemGaleria } from '../../nucleo/holograma.modelos';
 
@@ -72,6 +73,7 @@ import { legendaDoItem, type ItemGaleria } from '../../nucleo/holograma.modelos'
 })
 export class GaleriaHologramaComponent {
   protected readonly holograma = inject(HologramaService);
+  private readonly comandos = inject(ComandosDoHologramaService);
   /** "Gerar de novo": o pai repete o pedido do item com `novo=true`. */
   readonly regerar = output<ItemGaleria>();
   /** O item cujo ✕ já foi clicado uma vez: o segundo clique apaga. */
@@ -99,7 +101,7 @@ export class GaleriaHologramaComponent {
 
   protected abrir(item: ItemGaleria): void {
     this.aberta.set(false);
-    void this.holograma.abrirDaGaleria(item);
+    this.comandos.abrirDaGaleria(item);
   }
 
   protected gerarDeNovo(item: ItemGaleria): void {

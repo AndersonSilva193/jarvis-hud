@@ -19,6 +19,10 @@ export interface RespostaConversa {
   confirmacao: ConfirmacaoConversa | null;
   concluidoEm: string;
   erro: string | null;
+  /** O que se ouve, quando difere do texto (o aviso "Anotei" fica só na tela). */
+  fala?: string | null;
+  /** O comando curto do holograma: a cena mexendo é a resposta, e a HUD só toca um som. */
+  silenciosa?: boolean;
   escuta?: {
     tempoSegundos: number;
     opcoes?: string[];

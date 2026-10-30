@@ -165,10 +165,10 @@ export class ConversaService {
     this.progresso.set('');
     this.erro.set(resposta.erro ?? '');
     let narracao: Promise<void> | null = null;
-    if (narrar && !resposta.erro && !this.faladas.has(resposta.id)) {
+    if (narrar && !resposta.erro && !resposta.silenciosa && !this.faladas.has(resposta.id)) {
       this.player.parar();
       this.faladas.add(resposta.id);
-      narracao = this.voz.falar(resposta.texto);
+      narracao = this.voz.falar(resposta.fala || resposta.texto);
     }
     this.aoReceber?.(resposta, narracao);
     void this.recuperar();

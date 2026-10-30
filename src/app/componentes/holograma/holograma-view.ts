@@ -1,5 +1,6 @@
 import { Component, DestroyRef, ElementRef, NgZone, afterNextRender, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 
+import { ComandosDoHologramaService } from '../../nucleo/comandos-do-holograma.service';
 import { HologramaService } from '../../nucleo/holograma.service';
 import {
   DETALHES_HOLOGRAMA,
@@ -27,9 +28,10 @@ import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-hologram
 /**
  * A camada do Holograma no palco: a cena 3D por baixo e o painel da HUD por cima.
  *
- * O componente só faz a ponte entre os signals do `HologramaService` e a `CenaHolograma`, que é
- * Three.js puro e roda fora da zona do Angular. O único caminho de volta é a peça sob o mouse,
- * que muda poucas vezes — nada aqui dispara detecção de mudança a cada quadro.
+ * O componente desenha as peças do `HologramaService` na `CenaHolograma`, que é Three.js puro e roda
+ * fora da zona do Angular. Tudo o que **mexe** na cena — botões, slider, toque, gestos, celular e os
+ * comandos do Jarvis — passa pelo `ComandosDoHologramaService`; a view só registra a cena nele. O
+ * único caminho de volta é a peça sob o mouse, que muda poucas vezes.
  */
 @Component({
   selector: 'app-holograma-view',
@@ -99,12 +101,12 @@ import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-hologram
     } @else if (selecao(); as peca) {
       <div class="painel destaque destaque--selecao">
         <strong>{{ peca.nome }}</strong><span>Selecionado · {{ peca.grupo }}</span>
-        <button class="botao" type="button" (click)="limparSelecao()">Limpar seleção</button>
+        <button class="botao" type="button" (click)="comandos.limparSelecao()">Limpar seleção</button>
       </div>
     }
     @if (rastreio.ativo()) { <app-preview-gestos [gesto]="gesto()" /> }
     <section class="painel controles" aria-label="Controles do holograma">
-      <button class="botao botao--explodir" type="button" [attr.aria-pressed]="explosao() > 0" (click)="alternarExplosao()">
+      <button class="botao botao--explodir" type="button" [attr.aria-pressed]="explosao() > 0" (click)="comandos.alternarExplosao()">
         {{ explosao() > 0 ? 'Montar' : 'Explodir' }}
       </button>
       <label class="explosao">
@@ -112,26 +114,28 @@ import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-hologram
         <input type="range" min="0" max="100" step="1" [value]="explosao()" [attr.aria-valuetext]="explosao() + '%'" (input)="aoExplodir($event)" />
         <output aria-hidden="true">{{ explosao() }}%</output>
       </label>
-      <button class="botao" type="button" (click)="centralizar()">Centralizar</button>
-      <button class="botao" type="button" (click)="resetar()">Resetar</button>
+      <button class="botao" type="button" (click)="comandos.centralizar()">Centralizar</button>
+      <button class="botao" type="button" (click)="comandos.resetar()">Resetar</button>
       <app-botoes-gestos />
       <app-parear-celular />
-      <button class="botao" type="button" (click)="holograma.fechar()">Fechar</button>
+      <button class="botao" type="button" (click)="comandos.fechar()">Fechar</button>
     </section>
   `,
   styleUrl: './holograma-view.scss',
 })
 export class HologramaViewComponent {
   protected readonly holograma = inject(HologramaService);
+  protected readonly comandos = inject(ComandosDoHologramaService);
   protected readonly detalhes = DETALHES_HOLOGRAMA;
   protected readonly geradores = GERADORES_HOLOGRAMA;
   protected readonly maxObjeto = MAX_OBJETO_HOLOGRAMA;
   protected readonly objeto = signal('');
   protected readonly detalhe = signal<DetalheHolograma>('normal');
-  protected readonly explosao = signal(0);
+  /** A explosão em %, para o slider; o valor fino mora no serviço. */
+  protected readonly explosao = computed(() => Math.round(this.comandos.explosao() * 100));
   protected readonly destaque = signal<PecaDestacada | null>(null);
-  /** O grupo escolhido por gesto de apontar ou toque duplo; fica até limpar, resetar ou trocar de objeto. */
-  protected readonly selecao = signal<PecaDestacada | null>(null);
+  /** A peça escolhida por gesto, toque ou voz; fica até limpar, resetar ou trocar de objeto. */
+  protected readonly selecao = this.comandos.selecao;
   protected readonly falha = signal('');
   protected readonly rastreio = inject(RastreioDeMaoService);
   protected readonly gesto = signal('Sem mão');
@@ -188,11 +192,6 @@ export class HologramaViewComponent {
   /** O celular assumiu com a câmera do PC ligada: na queda, ela volta. */
   private cameraAntesDoCelular = false;
   private celularNoComando = false;
-  /**
-   * O fator do toque sem arredondar: dois dedos andando devagar somam frações de 1% a cada
-   * movimento, que o slider (em inteiros) engoliria.
-   */
-  private explosaoFina = 0;
 
   constructor() {
     afterNextRender(() => void this.criarCena());
@@ -226,14 +225,18 @@ export class HologramaViewComponent {
     effect(() => this.cena()?.aplicarPerfil(this.perfilDaCena()));
     // Gestos desligados: o que a mão deixou pela metade (cursor, rotação segurada) volta ao normal.
     effect(() => {
-      const cena = this.cena();
-      if (this.rastreio.ativo() || !cena) return;
+      if (this.rastreio.ativo() || !this.cena()) return;
       this.motor.reiniciar();
-      cena.apontar(null);
-      cena.segurarAutoRotacao(false);
+      untracked(() => {
+        this.comandos.apontar(null);
+        this.comandos.segurarAutoRotacao(false);
+        this.comandos.inicioDoGestoDeExplosao();
+      });
       this.gesto.set('Sem mão');
     });
-    // As peças só crescem dentro de uma geração: a cena recebe só as novas.
+    // As peças só crescem dentro de uma geração: a cena recebe só as novas. Explosão, seleção e
+    // filtros do objeto novo quem zera é o serviço, na hora do pedido — zerar aqui desfaria o
+    // "carrega o motor explodido", cuja explosão chega antes de a cena ver a geração nova.
     effect(() => {
       const cena = this.cena();
       const geracao = this.holograma.geracao();
@@ -241,16 +244,14 @@ export class HologramaViewComponent {
       if (!cena) return;
       if (geracao !== this.geracaoDesenhada) {
         cena.limpar();
-        // Objeto novo começa montado; na primeira sincronização não, senão o Three.js chegando
-        // depois de um clique em Explodir desfaria o clique.
-        if (this.geracaoDesenhada !== -1) this.explosao.set(0);
-        this.selecao.set(null);
         this.geracaoDesenhada = geracao;
         this.desenhadas = 0;
       }
       for (; this.desenhadas < pecas.length; this.desenhadas++) cena.adicionar(pecas[this.desenhadas]!);
+      // A peça que o Jarvis selecionou pode chegar depois do comando.
+      const selecionada = untracked(() => this.selecao()?.id);
+      if (selecionada) cena.selecionarPorId(selecionada);
     });
-    effect(() => this.cena()?.explodir(this.explosao() / 100));
     effect(() => this.cena()?.escanear(this.holograma.escaneando()));
     // Objeto parado — pronto, cortado ou cancelado: a câmera enquadra o que chegou, seja um átomo
     // pequeno ou um motor grande.
@@ -282,13 +283,9 @@ export class HologramaViewComponent {
       this.rastreio.desligar();
       this.canal.fechar();
       this.controleDeToque?.destruir();
+      this.comandos.desconectar();
       this.cena()?.destruir();
     });
-  }
-
-  protected limparSelecao(): void {
-    this.cena()?.limparSelecao();
-    this.selecao.set(null);
   }
 
   /** O "Gerar de novo" da galeria: o campo passa a mostrar o pedido que está sendo refeito. */
@@ -296,7 +293,7 @@ export class HologramaViewComponent {
     if (this.holograma.construindo()) return;
     this.objeto.set(item.objeto);
     this.detalhe.set(item.detalhe);
-    void this.holograma.gerarDeNovo(item);
+    this.comandos.gerarDeNovo(item);
   }
 
   protected aoDigitar(evento: Event): void {
@@ -317,39 +314,18 @@ export class HologramaViewComponent {
   protected aoGerar(evento: Event): void {
     evento.preventDefault();
     if (this.holograma.construindo() || !this.objeto().trim()) return;
-    void this.holograma.gerar(this.objeto(), this.detalhe());
+    this.comandos.carregar(this.objeto(), this.detalhe());
   }
 
   /** Durante a geração o botão é "Cancelar"; fora dela ele é o submit do formulário. */
   protected aoClicarAcao(evento: Event): void {
     if (!this.holograma.construindo()) return;
     evento.preventDefault();
-    this.holograma.cancelar();
+    this.comandos.cancelar();
   }
 
   protected aoExplodir(evento: Event): void {
-    if (evento.target instanceof HTMLInputElement) this.explosao.set(Number(evento.target.value));
-  }
-
-  protected alternarExplosao(): void {
-    this.explosao.set(this.explosao() > 0 ? 0 : 100);
-  }
-
-  protected centralizar(): void {
-    this.cena()?.centralizar();
-  }
-
-  protected resetar(): void {
-    this.explosao.set(0);
-    this.selecao.set(null);
-    this.cena()?.resetar();
-  }
-
-  /** Dois dedos deslizando juntos: soma ao fator atual (que o slider também pode ter mudado). */
-  private explodirMais(delta: number): void {
-    const base = Math.abs(this.explosaoFina * 100 - this.explosao()) < 1 ? this.explosaoFina : this.explosao() / 100;
-    this.explosaoFina = Math.min(1, Math.max(0, base + delta));
-    this.explosao.set(Math.round(this.explosaoFina * 100));
+    if (evento.target instanceof HTMLInputElement) this.comandos.explodir(Number(evento.target.value) / 100);
   }
 
   private sensibilidade(): Sensibilidade {
@@ -369,25 +345,32 @@ export class HologramaViewComponent {
             movimentoReduzido,
             perfil: this.perfilDaCena(),
             aoDestacar: (peca) => this.zona.run(() => this.destaque.set(peca)),
+            aoArrastar: () => this.comandos.arrastou(),
           }),
       );
+      // Gestos, celular e toque falam com o serviço, não com a cena: é ele que sabe que a voz
+      // acabou de explodir para 0.8 e que a mão tem de seguir dali.
+      const comandos = this.comandos;
       const sensibilidade = () => this.sensibilidade();
-      const selecionou = (peca: PecaDestacada) => this.selecao.set(peca);
-      const resetar = () => this.resetar();
+      const selecionou = (peca: PecaDestacada) => comandos.selecionou(peca);
+      const resetar = () => comandos.resetar();
       this.controleDeGestos = new ControlePorGestos(
-        cena,
+        comandos,
         {
-          explodir: (fator) => this.explosao.set(Math.round(fator * 100)),
+          explosaoInicio: () => comandos.inicioDoGestoDeExplosao(),
+          explodir: (fator) => comandos.explodirPorGesto(fator),
+          explosaoFim: (fator) => comandos.fimDoGestoDeExplosao(fator),
           resetar,
           selecionou,
           gesto: (nome) => this.gesto.set(nome),
         },
         sensibilidade,
       );
-      this.controleRemoto = new ControleRemoto(cena, this.controleDeGestos, (delta) => this.explodirMais(delta));
+      this.controleRemoto = new ControleRemoto(comandos, this.controleDeGestos, (delta) => comandos.explodirMais(delta));
       this.controleDeToque = this.zona.runOutsideAngular(
-        () => new ControleDeToque(host, cena, { explodirMais: (delta) => this.explodirMais(delta), resetar, selecionou }, sensibilidade),
+        () => new ControleDeToque(host, comandos, { explodirMais: (delta) => comandos.explodirMais(delta), resetar, selecionou }, sensibilidade),
       );
+      comandos.conectar(cena);
       this.cena.set(cena);
     } catch {
       this.falha.set('Este navegador não conseguiu abrir o WebGL do holograma.');

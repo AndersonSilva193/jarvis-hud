@@ -7,6 +7,7 @@ import type { HistoricoConversa, RespostaConversa } from './conversa.modelos';
 import type { Briefing } from './briefing.modelos';
 import type { Introducao } from './inicializacao.modelos';
 import type { RespostaVoz, StatusVoz } from './voz.modelos';
+import type { EstadoDoHolograma } from './holograma.modelos';
 import type { EstadoTela } from './tela.modelos';
 
 /** Por que uma tentativa de conexão não deu certo — o suficiente para a tela explicar. */
@@ -216,6 +217,11 @@ export class JarvisApiService {
 
   enviarEstadoTela(estado: EstadoTela): Promise<void> {
     return firstValueFrom(this.http.post<void>(this.config.rota('/api/tela/estado'), estado, { headers: this.autorizacao() }));
+  }
+
+  /** O retrato do holograma, para o Jarvis entender "disso" e "mais" (Fase 6). */
+  enviarEstadoHolograma(estado: EstadoDoHolograma): Promise<void> {
+    return firstValueFrom(this.http.post<void>(this.config.rota('/api/holograma/estado'), estado, { headers: this.autorizacao() }));
   }
 
   /** O bilhete de uso único (30 s) que abre o `/ws/holograma`: o token nunca vai na URL do socket. */

@@ -5,6 +5,7 @@ import { JarvisApiService, type ResultadoTeste, type TarefaComputer } from './ja
 import type { PedidoConversa, ProgressoConversa, RespostaConversa } from './conversa.modelos';
 import type { Briefing } from './briefing.modelos';
 import { lerCardTela, lerComandoTela, type CardTela, type ComandoTela } from './tela.modelos';
+import { lerComandoHolograma, type ComandoHolograma } from './holograma.modelos';
 
 export type StatusConexao = 'desligado' | 'conectando' | 'online' | 'reconectando';
 
@@ -25,6 +26,8 @@ export interface OuvintesDoBriefing {
   briefing: (briefing: Briefing) => void;
   /** Uma frase pronta para a tela dizer; hoje vem do despertar por palmas com a HUD já aberta. */
   falar?: (fala: FalaDaTela) => void;
+  /** Uma ordem do Jarvis para a cena do holograma (Fase 6). */
+  holograma?: (comando: ComandoHolograma) => void;
 }
 
 /** O corpo do evento `voz.falar`. */
@@ -127,6 +130,7 @@ export class JarvisEventosService {
     receber<unknown>('tela.card', dados => { const card = lerCardTela(dados); if (card) this.ouvintes?.card?.(card); });
     receber<unknown>('tela.comando', dados => { const comando = lerComandoTela(dados); if (comando) this.ouvintes?.comando?.(comando); });
     receber<unknown>('voz.falar', dados => { const fala = lerFalaDaTela(dados); if (fala) this.ouvintes?.falar?.(fala); });
+    receber<unknown>('holograma.comando', dados => { const comando = lerComandoHolograma(dados); if (comando) this.ouvintes?.holograma?.(comando); });
 
     fonte.onerror = () => {
       if (this.fonte !== fonte) return;

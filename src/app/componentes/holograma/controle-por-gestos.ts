@@ -7,10 +7,17 @@ export type AlvoDoControle = Pick<
   'girar' | 'lancarGiro' | 'aproximar' | 'apontar' | 'selecionarEm' | 'segurarAutoRotacao' | 'comecarInteracao' | 'terminarInteracao'
 >;
 
-/** O que não é da cena e sim da view: o fator do slider, o reset completo, a seleção e o rótulo. */
+/** O que não é da cena e sim do controle do holograma: a explosão, o reset, a seleção e o rótulo. */
 export interface SaidasDoControle {
-  /** Fator absoluto 0..1. */
+  /** A mão entrou no modo explosão: o próximo fator dela vira a referência. */
+  explosaoInicio?(): void;
+  /**
+   * A abertura da mão, 0..1. Quem recebe decide como aplicar — o `ComandosDoHologramaService` soma
+   * a variação ao fator que a cena tinha, para a mão continuar de onde a voz deixou.
+   */
   explodir(fator: number): void;
+  /** A mão saiu do modo explosão com este fator. Sem o método, vale como mais um `explodir`. */
+  explosaoFim?(fator: number): void;
   resetar(): void;
   selecionou(peca: PecaDestacada): void;
   gesto(nome: string): void;
@@ -70,8 +77,11 @@ export class ControlePorGestos {
         this.alvo.aproximar(zoomComSensibilidade(e.fator, s));
         break;
       case 'explosao':
-      case 'explosaoFim':
         this.saidas.explodir(e.fator);
+        break;
+      case 'explosaoFim':
+        if (this.saidas.explosaoFim) this.saidas.explosaoFim(e.fator);
+        else this.saidas.explodir(e.fator);
         break;
       case 'cursor':
         this.alvo.apontar({ x: e.x * 2 - 1, y: 1 - e.y * 2 });
@@ -91,6 +101,7 @@ export class ControlePorGestos {
         this.saidas.gesto(e.nome);
         break;
       case 'explosaoInicio':
+        this.saidas.explosaoInicio?.();
         break;
     }
   }

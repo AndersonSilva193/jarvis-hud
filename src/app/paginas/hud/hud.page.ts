@@ -19,6 +19,8 @@ import { normalizar, EscutaService, contem } from '../../nucleo/escuta.service';
 import { EscutaDeRespostaService } from '../../nucleo/escuta-de-resposta.service';
 import { normalizarCodigo } from '../../nucleo/normalizar-codigo';
 import { JarvisApiService, type TarefaComputer } from '../../nucleo/jarvis-api.service';
+import { ComandosDoHologramaService } from '../../nucleo/comandos-do-holograma.service';
+import { HologramaEstadoService } from '../../nucleo/holograma-estado.service';
 import { HologramaService } from '../../nucleo/holograma.service';
 import { InicializacaoService } from '../../nucleo/inicializacao.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
@@ -78,6 +80,9 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly escutaDeResposta = inject(EscutaDeRespostaService);
   protected readonly inicio = inject(InicializacaoService);
   protected readonly holograma = inject(HologramaService);
+  private readonly comandosDoHolograma = inject(ComandosDoHologramaService);
+  /** Conta ao servidor como está o holograma; injetar já o liga. */
+  private readonly estadoDoHolograma = inject(HologramaEstadoService);
   private readonly api = inject(JarvisApiService);
 
   protected readonly pedindo = signal(false);
@@ -222,7 +227,7 @@ export class HudPage implements OnInit, OnDestroy {
         else void this.player.tocar(briefing);
       },
       conectado: () => {
-        void this.conversa.recuperar(); this.estadoTela.reenviar();
+        void this.conversa.recuperar(); this.estadoTela.reenviar(); this.estadoDoHolograma.reenviar();
         void this.api.ultimaTarefaComputer().then(tarefa => this.tarefaComputer.set(tarefa))
           .catch(() => { });
       },
@@ -239,6 +244,7 @@ export class HudPage implements OnInit, OnDestroy {
       tarefaComputer: tarefa => this.tarefaComputer.set(tarefa),
       // O despertar por palmas achando a tela já aberta: só a frase curta, sem card nenhum.
       falar: (fala) => void this.voz.falar(fala.texto),
+      holograma: (comando) => this.comandosDoHolograma.aplicar(comando),
     });
 
     // Abriu com ?inicio=1, ou seja: o agente do PC acabou de acender esta tela por palmas ou por
@@ -277,7 +283,7 @@ export class HudPage implements OnInit, OnDestroy {
     this.escutaDeResposta.cancelar();
     this.conversa.aoReceber = null;
     this.inicio.cancelar(false);
-    this.holograma.fechar();
+    this.comandosDoHolograma.fechar();
     this.tela.encerrar();
     this.cota.parar();
     this.conversa.fechar();
@@ -445,7 +451,7 @@ export class HudPage implements OnInit, OnDestroy {
       if (this.tela.historicoAberto()) { this.tela.historicoAberto.set(false); evento.preventDefault(); return; }
       const foco = this.janelas.foco();
       if (foco) { this.janelas.fechar(foco); evento.preventDefault(); return; }
-      if (this.holograma.aberto()) { this.holograma.fechar(); evento.preventDefault(); return; }
+      if (this.holograma.aberto()) { this.comandosDoHolograma.fechar(); evento.preventDefault(); return; }
       this.escuta.cancelarDitado();
       this.voz.parar();
       // Fechar a consulta antes de parar: o palco volta a ficar vazio e o orbe retoma o centro.

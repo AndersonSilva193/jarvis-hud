@@ -33,10 +33,21 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import type { PecaHolograma } from '../../nucleo/holograma.modelos';
+import type { ModoDeGiro } from '../../nucleo/comandos-do-holograma.service';
+import {
+  SEM_FILTROS,
+  filtroVazio,
+  noFiltro,
+  type EixoHolograma,
+  type FiltrosDoHolograma,
+  type PecaHolograma,
+  type VistaHolograma,
+} from '../../nucleo/holograma.modelos';
 import { FabricaDeGeometrias } from './geometrias-holograma';
 
 export interface PecaDestacada {
+  /** Falta só no destaque do mouse, que é por grupo; a seleção sempre sabe a peça. */
+  id?: string;
   nome: string;
   grupo: string;
 }
@@ -51,9 +62,25 @@ export interface PerfilDaCena {
 export interface OpcoesDaCena {
   /** Chamado só quando a peça sob o mouse muda — nunca a cada quadro. */
   aoDestacar: (peca: PecaDestacada | null) => void;
+  /** O mouse começou a arrastar a câmera: a vista nomeada ("de cima") deixou de valer. */
+  aoArrastar?: () => void;
   movimentoReduzido: boolean;
   perfil: PerfilDaCena;
 }
+
+/**
+ * As vistas nomeadas, como direção da câmera a partir do alvo. "Cima" não é o polo exato: o
+ * OrbitControls perde o rumo em cima do eixo, e um fio de inclinação deixa a frente reconhecível.
+ */
+const VISTAS: Record<VistaHolograma, Vector3> = {
+  frente: new Vector3(0, 0.12, 1).normalize(),
+  lado: new Vector3(1, 0.12, 0).normalize(),
+  cima: new Vector3(0, 1, 0.08).normalize(),
+  isometrica: new Vector3(1, 0.8, 1).normalize(),
+};
+/** O quanto apagam as peças fora do destaque e fora do isolado. */
+const APAGADA = 0.25;
+const VELOCIDADE_DO_GIRO = 0.5;
 
 /** Coordenadas normalizadas do canvas: -1..1, `y` para cima. */
 export interface PontoNdc {
@@ -169,6 +196,9 @@ export class CenaHolograma {
   /** 0 a 1: a varredura acende e apaga suave, em vez de sumir no quadro da primeira peça. */
   private intensidadeDaVarredura = 0;
   private faseDaVarredura = 0;
+  /** Destaque, isolado e escondidos: por grupo e peça, valem também para a peça que chegar depois. */
+  private filtros: FiltrosDoHolograma = SEM_FILTROS;
+  private modoDeGiro: ModoDeGiro = 'auto';
 
   constructor(
     private readonly host: HTMLElement,
@@ -267,6 +297,8 @@ export class CenaHolograma {
     };
     raiz.position.copy(base);
     raiz.scale.setScalar(this.opcoes.movimentoReduzido ? 1 : 1e-3);
+    // O filtro do momento vale para quem chega: "isola os pistões" durante a montagem segue isolando.
+    raiz.visible = this.visivel(peca);
     this.objeto.add(raiz);
     this.pecas.push(peca);
 
@@ -294,6 +326,7 @@ export class CenaHolograma {
     this.fabrica.descartar();
     this.caixa.makeEmpty();
     this.centro.set(0, 0, 0);
+    this.objeto.rotation.set(0, 0, 0);
     this.selecionada = null;
     this.destacar(null);
   }
@@ -307,10 +340,51 @@ export class CenaHolograma {
     if (this.opcoes.movimentoReduzido) this.intensidadeDaVarredura = ligado ? 1 : 0;
   }
 
-  /** 0 = montado, 1 = explodido; o fator anda até o alvo suavemente. */
-  explodir(fator: number): void {
+  /**
+   * 0 = montado, 1 = explodido; o fator anda até o alvo suavemente. `imediato` é para quem já anima
+   * por conta própria (o comando de voz, em 600 ms): duas suavizações em série atrasariam o fim.
+   */
+  explodir(fator: number, imediato = false): void {
     this.alvoExplosao = MathUtils.clamp(fator, 0, 1);
-    if (this.opcoes.movimentoReduzido) this.fatorExplosao = this.alvoExplosao;
+    if (imediato || this.opcoes.movimentoReduzido) this.fatorExplosao = this.alvoExplosao;
+  }
+
+  /** Gira o objeto (não a câmera) em volta de um eixo do mundo. */
+  girarObjeto(eixo: EixoHolograma, radianos: number): void {
+    if (!Number.isFinite(radianos)) return;
+    this.objeto.rotation[eixo] += radianos;
+    this.ultimaInteracao = performance.now();
+  }
+
+  /** Leva a câmera a uma vista nomeada, na distância em que ela está. */
+  vista(nome: VistaHolograma): void {
+    const distancia = this.camera.position.distanceTo(this.controles.target);
+    this.inercia.set(0, 0);
+    this.voar(this.controles.target.clone().addScaledVector(VISTAS[nome], distancia), this.controles.target);
+    this.ultimaInteracao = performance.now();
+  }
+
+  /** Troca os filtros; cada peça (as que já estão e as que chegarem) consulta o atual. */
+  filtrar(filtros: FiltrosDoHolograma): void {
+    this.filtros = filtros;
+    for (const p of this.pecas) p.raiz.visible = this.visivel(p);
+    if (this.selecionada && !this.selecionada.raiz.visible) this.selecionada = null;
+    if (this.destacada && !this.destacada.raiz.visible) this.destacar(null);
+  }
+
+  /** Seleciona a peça pelo id que o servidor resolveu. */
+  selecionarPorId(id: string): PecaDestacada | null {
+    const peca = this.pecas.find((p) => p.dados.id === id);
+    if (!peca) return null;
+    this.selecionada = peca;
+    return { id: peca.dados.id, nome: peca.dados.nome, grupo: peca.dados.grupo };
+  }
+
+  /** `continuo` gira sempre, `parado` nunca, `auto` só quando ninguém mexe (o de sempre). */
+  definirGiro(modo: ModoDeGiro, velocidade = 1): void {
+    this.modoDeGiro = modo;
+    this.controles.autoRotateSpeed = VELOCIDADE_DO_GIRO * (modo === 'continuo' ? Math.max(0.1, velocidade) * 4 : 1);
+    if (modo === 'parado') this.inercia.set(0, 0);
   }
 
   /** Enquadra o objeto como está agora (já explodido, se for o caso), mantendo o ângulo da câmera. */
@@ -332,6 +406,7 @@ export class CenaHolograma {
   resetar(): void {
     this.explodir(0);
     this.inercia.set(0, 0);
+    this.objeto.rotation.set(0, 0, 0);
     this.selecionada = null;
     this.voar(CAMERA_INICIAL, ALVO_INICIAL);
     this.ultimaInteracao = -Infinity;
@@ -386,7 +461,7 @@ export class CenaHolograma {
     const peca = this.pecaEm(ndc.x, ndc.y);
     if (!peca) return null;
     this.selecionada = peca;
-    return { nome: peca.dados.nome, grupo: peca.dados.grupo };
+    return { id: peca.dados.id, nome: peca.dados.nome, grupo: peca.dados.grupo };
   }
 
   limparSelecao(): void {
@@ -596,13 +671,15 @@ export class CenaHolograma {
     this.animarVarredura(agora, dt, reduzido);
     this.voarPasso(dt);
     this.girarPorInercia(dt);
+    // Pedido de girar sempre ou de parar vence o "gira quando ninguém mexe"; o arrasto e a mão
+    // continuam segurando, porque quem está mexendo é o dono.
     this.controles.autoRotate =
-      !reduzido &&
+      this.modoDeGiro !== 'parado' &&
       !this.arrastando &&
       !this.maoNaCamera &&
       !this.voo &&
-      !this.destacada &&
-      agora - this.ultimaInteracao > OCIOSO_ATE_GIRAR_MS;
+      (this.modoDeGiro === 'continuo' ||
+        (!reduzido && !this.destacada && agora - this.ultimaInteracao > OCIOSO_ATE_GIRAR_MS));
     this.controles.update(dt);
 
     // Raio só quando o ponteiro (mouse ou dedo apontando) mexeu, ou de vez em quando, porque o
@@ -619,7 +696,10 @@ export class CenaHolograma {
     const entrada = 1 - (1 - t) ** 3;
     // O flash acende no meio da entrada e apaga junto com ela.
     const flash = t < 1 ? Math.sin(Math.PI * t) : 0;
-    const alvoDestaque = grupo === null ? 1 : p.dados.grupo === grupo ? 1.8 : 0.25;
+    // O mouse e a seleção mandam; sem eles, o destaque pedido pelo Jarvis.
+    const destacados = this.filtros.destacados;
+    const alvoDestaque = grupo !== null ? (p.dados.grupo === grupo ? 1.8 : APAGADA)
+      : filtroVazio(destacados) ? 1 : noFiltro(destacados, p.dados) ? 1.8 : APAGADA;
     p.destaque += (alvoDestaque - p.destaque) * suave(dt, 10);
     p.raiz.scale.setScalar(Math.max(1e-3, entrada));
     p.raiz.position.copy(p.base).addScaledVector(p.direcao, this.fatorExplosao * DISTANCIA_DA_EXPLOSAO);
@@ -648,9 +728,21 @@ export class CenaHolograma {
     }
   }
 
+  /** Escondida, ou fora do que foi isolado, a peça não aparece nem recebe o mouse. */
+  private visivel(p: PecaNaCena): boolean {
+    const { isolados, escondidos } = this.filtros;
+    return !noFiltro(escondidos, p.dados) && (filtroVazio(isolados) || noFiltro(isolados, p.dados));
+  }
+
+  /** O primeiro acerto numa peça visível: o raio do Three.js não olha `visible`. */
+  private acertar(): { point: Vector3; object: Object3D } | undefined {
+    return this.raio.intersectObjects(this.alvosDoRaio, false)
+      .find((acerto) => this.porObjeto.get(acerto.object)?.raiz.visible);
+  }
+
   private lancarRaio(): void {
     this.raio.setFromCamera(this.ponteiro, this.camera);
-    const acerto = this.raio.intersectObjects(this.alvosDoRaio, false)[0];
+    const acerto = this.acertar();
     this.destacar(acerto ? (this.porObjeto.get(acerto.object) ?? null) : null);
     if (this.cursor3d.ativo) {
       const profundidade = this.camera.position.distanceTo(this.controles.target);
@@ -661,7 +753,7 @@ export class CenaHolograma {
 
   private pecaEm(x: number, y: number): PecaNaCena | null {
     this.raio.setFromCamera(new Vector2(x, y), this.camera);
-    const acerto = this.raio.intersectObjects(this.alvosDoRaio, false)[0];
+    const acerto = this.acertar();
     return acerto ? (this.porObjeto.get(acerto.object) ?? null) : null;
   }
 
@@ -691,6 +783,7 @@ export class CenaHolograma {
     this.arrastando = true;
     this.voo = null;
     this.inercia.set(0, 0);
+    this.opcoes.aoArrastar?.();
   };
 
   private readonly aoTerminarArrasto = (): void => {
