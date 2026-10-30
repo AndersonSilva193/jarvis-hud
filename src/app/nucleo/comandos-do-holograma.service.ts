@@ -161,7 +161,12 @@ export class ComandosDoHologramaService {
   }
 
   abrirDaGaleria(item: ItemGaleria): void {
-    void this.holograma.abrirDaGaleria(item);
+    this.abrirDaGaleriaPorId(item.id);
+  }
+
+  /** O Jarvis achou o objeto na galeria: reproduz o salvo, sem gerar outro. */
+  abrirDaGaleriaPorId(id: string): void {
+    void this.holograma.abrirDaGaleriaPorId(id);
     this.novoObjeto();
     this.falaPronto = null;
   }
@@ -339,6 +344,7 @@ export class ComandosDoHologramaService {
         return this.carregar(comando.objeto, comando.detalhe, {
           novo: comando.novo, gerador: comando.provedor, falaPronto: comando.falaPronto,
         });
+      case 'abrir_galeria': return this.abrirDaGaleriaPorId(comando.id);
       case 'explodir': return this.explodir(comando.fator, true);
       case 'girar': return this.girarEixo(comando.eixo, comando.graus);
       case 'girar_continuo': return this.girarContinuo(comando.ligar, comando.velocidade);

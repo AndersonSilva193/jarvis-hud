@@ -92,7 +92,12 @@ export class HologramaService {
 
   /** Reabre um objeto da galeria: o servidor reproduz as peças sem gastar modelo. */
   abrirDaGaleria(item: ItemGaleria): Promise<void> {
-    return this.executar('galeria', (ouvintes, sinal) => this.stream.abrir(item.id, ouvintes, sinal));
+    return this.abrirDaGaleriaPorId(item.id);
+  }
+
+  /** O mesmo, só com o id: é o que chega quando o Jarvis acha o objeto na galeria. */
+  abrirDaGaleriaPorId(id: string): Promise<void> {
+    return this.executar('galeria', (ouvintes, sinal) => this.stream.abrir(id, ouvintes, sinal));
   }
 
   /**

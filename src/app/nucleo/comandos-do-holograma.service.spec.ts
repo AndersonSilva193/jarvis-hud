@@ -64,6 +64,7 @@ function hologramaDeMentira() {
     fechar: vi.fn(() => aberto.set(false)),
     cancelar: vi.fn(),
     abrirDaGaleria: vi.fn(async () => undefined),
+    abrirDaGaleriaPorId: vi.fn(async () => { aberto.set(true); geracao.update((g) => g + 1); fase.set('construindo'); }),
     gerarDeNovo: vi.fn(async () => undefined),
   };
 }
@@ -144,6 +145,14 @@ describe('ComandosDoHologramaService', () => {
     servico.aplicar({ acao: 'explodir', rapido: false, fator: 0.8 });
     tempo.avancar(600);
     expect(servico.explosao()).toBeCloseTo(0.8, 5);
+  });
+
+  it('"abre o átomo da galeria": abre o item pelo id e não gera nada', () => {
+    servico.explodir(0.6);
+    servico.aplicar({ acao: 'abrir_galeria', rapido: false, id: 'exemplo_atomo', nome: 'Átomo de carbono' });
+    expect(holograma.abrirDaGaleriaPorId).toHaveBeenCalledWith('exemplo_atomo');
+    expect(holograma.gerar).not.toHaveBeenCalled();
+    expect(servico.explosao()).toBe(0);
   });
 
   it('filtro e explosão pedidos antes da cena chegam a ela ao conectar', () => {

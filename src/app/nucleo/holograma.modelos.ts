@@ -296,6 +296,8 @@ export interface PecaSelecionada {
 export type ComandoHolograma = { rapido: boolean } & (
   | { acao: 'abrir' | 'fechar' | 'parar' | 'mostrar_tudo' | 'resetar' | 'cancelar_geracao' }
   | { acao: 'carregar'; objeto: string; detalhe: DetalheHolograma; novo: boolean; provedor?: GeradorHolograma; falaPronto: string }
+  /** O objeto já está na galeria (o servidor procurou antes): abre pelo id, sem modelo. */
+  | { acao: 'abrir_galeria'; id: string; nome: string }
   | { acao: 'explodir'; fator: number }
   | { acao: 'girar'; eixo: EixoHolograma; graus: number }
   | { acao: 'girar_continuo'; ligar: boolean; velocidade: number }
@@ -336,6 +338,10 @@ export function lerComandoHolograma(v: unknown): ComandoHolograma | null {
       const provedor = lerGeradorHolograma(dados['provedor']);
       if (provedor) comando.provedor = provedor;
       return comando;
+    }
+    case 'abrir_galeria': {
+      const id = dados['id'];
+      return typeof id === 'string' && ID_GERACAO.test(id) ? { acao, rapido, id, nome: texto(dados['nome'], 80) } : null;
     }
     case 'explodir':
     case 'zoom': {

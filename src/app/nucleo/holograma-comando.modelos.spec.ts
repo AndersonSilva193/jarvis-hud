@@ -16,6 +16,9 @@ describe('lerComandoHolograma', () => {
       falaPronto: 'Pronto: {n} peças.',
     });
     expect(lerComandoHolograma({ acao: 'vista', dados: { vista: 'cima' } })).toEqual({ acao: 'vista', rapido: false, vista: 'cima' });
+    expect(lerComandoHolograma({ acao: 'abrir_galeria', dados: { id: 'exemplo_atomo', nome: 'Átomo de carbono' } }))
+      .toEqual({ acao: 'abrir_galeria', rapido: false, id: 'exemplo_atomo', nome: 'Átomo de carbono' });
+    expect(lerComandoHolograma({ acao: 'abrir_galeria', dados: { id: '../segredo' } })).toBeNull();
   });
 
   it('recusa o que não confere: ação nova, número fora da faixa, id torto', () => {
