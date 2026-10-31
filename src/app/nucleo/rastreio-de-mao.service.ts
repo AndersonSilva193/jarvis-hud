@@ -3,6 +3,7 @@ import { Service, inject, signal } from '@angular/core';
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 
 import type { GravacaoDeGestos, MaoDetectada, Ponto, QuadroDeMaos } from '../gestos/gestos.modelos';
+import { INTERVALO_DA_LUZ_MS, LADO_DA_AMOSTRA, LUZ_INICIAL, avaliarLuz, brilhoMedio, type EstadoDaLuz } from '../gestos/luz';
 import { PerfilDoAparelhoService } from './perfil-do-aparelho.service';
 
 export type StatusDoRastreio = 'desligado' | 'carregando' | 'ligado' | 'pausado' | 'indisponivel';
@@ -34,8 +35,13 @@ export class RastreioDeMaoService {
   readonly aviso = signal('');
   readonly delegate = signal<'GPU' | 'CPU' | null>(null);
   readonly gravando = signal(false);
+  /** A câmera está ligada mas escura demais para achar a mão (`gestos/luz.ts`). */
+  readonly poucaLuz = signal(false);
 
   private detector: HandLandmarker | null = null;
+  private luz: EstadoDaLuz = LUZ_INICIAL;
+  private ultimaLuz = 0;
+  private amostra: CanvasRenderingContext2D | null = null;
   private maosDoDetector = 0;
   private video: HTMLVideoElement | null = null;
   private stream: MediaStream | null = null;
@@ -107,6 +113,8 @@ export class RastreioDeMaoService {
     this.sessao++;
     this.pararLaco();
     this.fecharCamera();
+    this.luz = LUZ_INICIAL;
+    this.poucaLuz.set(false);
     document.removeEventListener('visibilitychange', this.aoMudarVisibilidade);
     this.video = null;
   }
@@ -218,7 +226,14 @@ export class RastreioDeMaoService {
         lado: resultado.handedness[i]?.[0]?.categoryName ?? `mao${i}`,
         pontos: pontos.map((p): Ponto => [p.x, p.y, p.z]),
       }));
-      if (maos.length) this.ultimaMao = agora;
+      if (maos.length) {
+        this.ultimaMao = agora;
+        // Achou a mão: a luz basta, seja qual for a média.
+        if (this.luz.escuro || this.luz.seguidas) this.trocarLuz(LUZ_INICIAL);
+      } else if (agora - this.ultimaLuz >= INTERVALO_DA_LUZ_MS) {
+        this.ultimaLuz = agora;
+        this.medirLuz(video);
+      }
       const quadro: QuadroDeMaos = { t: instante, aspecto: video.videoWidth / video.videoHeight, maos };
       for (const ouvinte of this.ouvintes) ouvinte(quadro);
       if (agora - this.ultimaMao > INATIVIDADE_MS) {
@@ -228,6 +243,33 @@ export class RastreioDeMaoService {
     }
     this.agendar();
   };
+
+  /**
+   * O brilho de um quadro reduzido a 32×24, num canvas que nunca entra na página: a cópia é lida e
+   * sobrescrita no segundo seguinte, e nada dela é codificado nem enviado.
+   */
+  private medirLuz(video: HTMLVideoElement): void {
+    try {
+      if (!this.amostra) {
+        const tela = document.createElement('canvas');
+        tela.width = LADO_DA_AMOSTRA.largura;
+        tela.height = LADO_DA_AMOSTRA.altura;
+        this.amostra = tela.getContext('2d', { willReadFrequently: true });
+      }
+      const ctx = this.amostra;
+      if (!ctx) return;
+      const { largura, altura } = LADO_DA_AMOSTRA;
+      ctx.drawImage(video, 0, 0, largura, altura);
+      this.trocarLuz(avaliarLuz(this.luz, brilhoMedio(ctx.getImageData(0, 0, largura, altura).data)));
+    } catch {
+      // Sem canvas 2D: fica o "Sem mão" de sempre, que é o que havia antes da medida.
+    }
+  }
+
+  private trocarLuz(estado: EstadoDaLuz): void {
+    this.luz = estado;
+    if (this.poucaLuz() !== estado.escuro) this.poucaLuz.set(estado.escuro);
+  }
 
   /** Aba oculta solta a câmera; na volta, se o botão ainda está ligado, religa sem perguntar de novo. */
   private readonly aoMudarVisibilidade = (): void => {

@@ -53,7 +53,9 @@ export class PreviewGestosComponent {
       case 'carregando':
         return 'Ligando a câmera…';
       case 'ligado':
-        return this.rastreio.gravando() ? 'Câmera ligada · gravando' : 'Câmera ligada';
+        if (this.rastreio.gravando()) return 'Câmera ligada · gravando';
+        // Escuro, o detector não acha a mão: dizer por quê poupa o dono de achar que o gesto quebrou.
+        return this.rastreio.poucaLuz() ? 'Pouca luz · acenda uma luz' : 'Câmera ligada';
       case 'pausado':
         return 'Câmera pausada';
       default:

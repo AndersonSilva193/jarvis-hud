@@ -48,6 +48,11 @@ export interface PecaHolograma {
   contorno: boolean;
   /** Só em `tube` e `line`, relativos à posição. */
   pontos: readonly Vetor3[] | null;
+  /**
+   * O id da primeira cópia, igual em todas as cópias de um mesmo `rep`/`rad`; ausente na peça escrita
+   * uma vez só. Num objeto grande a cena desenha a série inteira numa chamada só à GPU.
+   */
+  serie?: string;
 }
 
 export interface FimHolograma {
@@ -198,6 +203,7 @@ export function lerPecaHolograma(v: unknown): PecaHolograma | null {
     opacidade,
     contorno: v['contorno'] !== false,
     pontos,
+    ...(typeof v['serie'] === 'string' && ID_GERACAO.test(v['serie']) ? { serie: v['serie'] } : {}),
   };
 }
 

@@ -37,6 +37,7 @@
 .destaque strong{font:600 .8rem hud.$mono;letter-spacing:.08em;color:hud.$ciano-forte}
 .destaque span{font:500 .6rem hud.$mono;letter-spacing:.18em;text-transform:uppercase;color:#a6bed8}
 .destaque--selecao{pointer-events:auto}
+.medida{right:1rem;bottom:5.2rem;padding:.4rem .6rem;pointer-events:none;font:500 .62rem hud.$mono;letter-spacing:.12em;color:#cdeaff}
 // Com a câmera no canto, o nome da peça passa para o lado dela.
 @media(min-width:701px){:host(.holograma--gestos) .destaque{left:13rem}}
 

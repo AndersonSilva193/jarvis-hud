@@ -6,6 +6,7 @@ import {
   CircleGeometry,
   Color,
   DoubleSide,
+  Euler,
   FrontSide,
   FogExp2,
   Group,
@@ -14,9 +15,11 @@ import {
   LineSegments,
   MathUtils,
   Mesh,
+  Matrix4,
   MeshBasicMaterial,
   PerspectiveCamera,
   PolarGridHelper,
+  Quaternion,
   Raycaster,
   RingGeometry,
   Scene,
@@ -25,6 +28,7 @@ import {
   Vector2,
   Vector3,
   WebGLRenderer,
+  type Intersection,
   type Object3D,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -44,6 +48,24 @@ import {
   type VistaHolograma,
 } from '../../nucleo/holograma.modelos';
 import { FabricaDeGeometrias } from './geometrias-holograma';
+import { LoteDaSerie } from './lote-instanciado';
+
+/**
+ * Acima de tantas peças, as cópias de um mesmo `rep`/`rad` passam a ser desenhadas num lote
+ * instanciado (`LoteDaSerie`): duas chamadas à GPU por série, em vez de duas por cópia.
+ * Abaixo disso a peça avulsa é barata e não vale a troca.
+ */
+export const LIMIAR_DE_INSTANCIAS = 120;
+
+/** O retrato de desempenho, uma vez por segundo, quando a HUD abre com `?medir=1`. */
+export interface MedidaDaCena {
+  fps: number;
+  /** Chamadas de desenho do quadro inteiro: a cena mais os passes do bloom e da saída. */
+  chamadas: number;
+  pecas: number;
+  /** Séries desenhadas por instância; zero abaixo do limiar ou com `?instancias=0`. */
+  lotes: number;
+}
 
 export interface PecaDestacada {
   /** Falta só no destaque do mouse, que é por grupo; a seleção sempre sabe a peça. */
@@ -66,6 +88,10 @@ export interface OpcoesDaCena {
   aoArrastar?: () => void;
   movimentoReduzido: boolean;
   perfil: PerfilDaCena;
+  /** `false` desliga os lotes instanciados (`?instancias=0`): é o "antes" da medição. */
+  instanciar?: boolean;
+  /** Com ele, a cena mede FPS e chamadas de desenho e avisa uma vez por segundo. */
+  aoMedir?: (medida: MedidaDaCena) => void;
 }
 
 /**
@@ -131,9 +157,17 @@ const ANEIS = [
 
 interface PecaNaCena {
   dados: PecaHolograma;
-  raiz: Group;
+  /** Desenhada sozinha: o grupo com a malha e o contorno. `null` quando a peça está num lote. */
+  raiz: Group | null;
   malha: Mesh<BufferGeometry, MeshBasicMaterial> | null;
   contorno: Line<BufferGeometry, LineBasicMaterial> | null;
+  /** Ou numa série instanciada, no `indice` dela. */
+  lote: LoteDaSerie<PecaNaCena> | null;
+  indice: number;
+  /** A rotação da peça, para a matriz da instância (a avulsa a guarda no próprio grupo). */
+  giro: Quaternion;
+  /** Fora do filtro (escondida, ou fora do isolado): não aparece nem recebe o mouse. */
+  visivel: boolean;
   base: Vector3;
   direcao: Vector3;
   /** A direção veio da peça; sem ela, é recalculada pelo centro a cada peça nova. */
@@ -164,7 +198,17 @@ export class CenaHolograma {
   private readonly fixos: { dispose(): void }[] = [];
   private readonly fabrica: FabricaDeGeometrias;
   private readonly pecas: PecaNaCena[] = [];
-  private readonly porObjeto = new Map<Object3D, PecaNaCena>();
+  /** A peça avulsa, ou o lote cujo `instanceId` diz qual cópia o raio acertou. */
+  private readonly porObjeto = new Map<Object3D, PecaNaCena | LoteDaSerie<PecaNaCena>>();
+  private readonly lotes: LoteDaSerie<PecaNaCena>[] = [];
+  private readonly lotePorSerie = new Map<string, LoteDaSerie<PecaNaCena>>();
+  /** Passou do limiar neste objeto: as séries já estão em lote, e as próximas cópias vão direto. */
+  private instanciando = false;
+  private readonly matriz = new Matrix4();
+  private readonly onde = new Vector3();
+  private readonly escala = new Vector3();
+  private readonly corDaMalha = new Color();
+  private medicao = { inicio: 0, quadros: 0 };
   private readonly alvosDoRaio: Object3D[] = [];
   private readonly caixa = new Box3();
   private readonly centro = new Vector3();
@@ -258,56 +302,30 @@ export class CenaHolograma {
   }
 
   adicionar(dados: PecaHolograma): void {
-    const geometria = this.fabrica.obter(dados);
-    const raiz = new Group();
-    raiz.rotation.set(
+    const opacidade = dados.opacidade < 1 ? dados.opacidade : OPACIDADE_PADRAO;
+    const giro = new Quaternion().setFromEuler(new Euler(
       MathUtils.degToRad(dados.rotacao[0]),
       MathUtils.degToRad(dados.rotacao[1]),
       MathUtils.degToRad(dados.rotacao[2]),
-    );
-    const cor = new Color(dados.cor);
-    const opacidade = dados.opacidade < 1 ? dados.opacidade : OPACIDADE_PADRAO;
-    const alvoMalha = opacidade * PESO_DO_PREENCHIMENTO;
-    let malha: PecaNaCena['malha'] = null;
-    let contorno: PecaNaCena['contorno'] = null;
-    if (geometria.malha) {
-      const material = new MeshBasicMaterial({
-        color: cor, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false,
-        // Face de trás também somaria luz: só o anel, que é chato, precisa dos dois lados.
-        side: dados.forma === 'ring' ? DoubleSide : FrontSide,
-      });
-      malha = new Mesh(geometria.malha, material);
-      raiz.add(malha);
-    }
-    if (dados.contorno || !geometria.malha) {
-      const material = new LineBasicMaterial({
-        color: cor, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false,
-      });
-      contorno = geometria.malha ? new LineSegments(geometria.contorno, material) : new Line(geometria.contorno, material);
-      raiz.add(contorno);
-    }
+    ));
     const base = new Vector3(...dados.posicao);
     const peca: PecaNaCena = {
-      dados, raiz, malha, contorno, base, cor, alvoMalha,
+      dados, raiz: null, malha: null, contorno: null, lote: null, indice: -1, giro, visivel: true, base,
+      cor: new Color(dados.cor),
+      alvoMalha: opacidade * PESO_DO_PREENCHIMENTO,
       direcao: dados.explosao ? new Vector3(...dados.explosao).normalize() : new Vector3(),
       direcaoPropria: dados.explosao !== null,
       nascimento: this.opcoes.movimentoReduzido ? -Infinity : performance.now(),
       alvoContorno: Math.min(1, opacidade + 0.4),
       destaque: 1,
     };
-    raiz.position.copy(base);
-    raiz.scale.setScalar(this.opcoes.movimentoReduzido ? 1 : 1e-3);
     // O filtro do momento vale para quem chega: "isola os pistões" durante a montagem segue isolando.
-    raiz.visible = this.visivel(peca);
-    this.objeto.add(raiz);
+    peca.visivel = this.visivel(peca);
     this.pecas.push(peca);
+    if (this.instanciando && cabeEmLote(dados)) this.porNoLote(peca);
+    else this.desenharSozinha(peca);
+    if (!this.instanciando && this.opcoes.instanciar !== false && this.pecas.length > LIMIAR_DE_INSTANCIAS) this.agruparSeries();
 
-    // O feixe do projetor (o: 0.08) cobre o objeto inteiro: não pode roubar o mouse das peças.
-    const alvo = malha && opacidade >= 0.1 ? malha : contorno && !malha ? contorno : null;
-    if (alvo) {
-      this.alvosDoRaio.push(alvo);
-      this.porObjeto.set(alvo, peca);
-    }
     this.caixa.expandByPoint(base);
     this.caixa.getCenter(this.centro);
     for (const p of this.pecas) if (!p.direcaoPropria) direcaoPeloCentro(p, this.centro);
@@ -315,11 +333,15 @@ export class CenaHolograma {
 
   /** Larga o objeto atual e devolve à GPU geometrias e materiais. */
   limpar(): void {
-    for (const p of this.pecas) {
-      this.objeto.remove(p.raiz);
-      p.malha?.material.dispose();
-      p.contorno?.material.dispose();
+    for (const p of this.pecas) if (p.raiz) this.desfazerSozinha(p);
+    for (const lote of this.lotes) {
+      this.objeto.remove(lote.malha);
+      if (lote.contorno) this.objeto.remove(lote.contorno);
+      lote.descartar();
     }
+    this.lotes.length = 0;
+    this.lotePorSerie.clear();
+    this.instanciando = false;
     this.pecas.length = 0;
     this.alvosDoRaio.length = 0;
     this.porObjeto.clear();
@@ -367,9 +389,12 @@ export class CenaHolograma {
   /** Troca os filtros; cada peça (as que já estão e as que chegarem) consulta o atual. */
   filtrar(filtros: FiltrosDoHolograma): void {
     this.filtros = filtros;
-    for (const p of this.pecas) p.raiz.visible = this.visivel(p);
-    if (this.selecionada && !this.selecionada.raiz.visible) this.selecionada = null;
-    if (this.destacada && !this.destacada.raiz.visible) this.destacar(null);
+    for (const p of this.pecas) {
+      p.visivel = this.visivel(p);
+      if (p.raiz) p.raiz.visible = p.visivel;
+    }
+    if (this.selecionada && !this.selecionada.visivel) this.selecionada = null;
+    if (this.destacada && !this.destacada.visivel) this.destacar(null);
   }
 
   /** Seleciona a peça pelo id que o servidor resolveu. */
@@ -389,7 +414,17 @@ export class CenaHolograma {
 
   /** Enquadra o objeto como está agora (já explodido, se for o caso), mantendo o ângulo da câmera. */
   centralizar(): void {
-    const caixa = new Box3().setFromObject(this.objeto);
+    // Peça por peça, e não o grupo inteiro: o contorno de um lote tem a caixa de uma cópia só, na
+    // origem, e puxaria o enquadramento para o centro. A caixa do `InstancedMesh` cobre as cópias.
+    // As matrizes do lote só são escritas no quadro, e o enquadramento pode vir antes dele (a última
+    // peça e o `fim` no mesmo instante): com as cópias ainda na origem, a caixa encolheria.
+    const agora = performance.now();
+    for (const p of this.pecas) if (p.lote) this.animarPeca(p, agora, 0, null);
+    for (const lote of this.lotes) lote.publicar();
+    this.objeto.updateMatrixWorld();
+    const caixa = new Box3();
+    for (const p of this.pecas) if (p.raiz) caixa.expandByObject(p.raiz);
+    for (const lote of this.lotes) caixa.expandByObject(lote.malha);
     if (caixa.isEmpty()) {
       this.voar(CAMERA_INICIAL, ALVO_INICIAL);
       return;
@@ -605,6 +640,89 @@ export class CenaHolograma {
     this.cursor3d = { grupo, ativo: false };
   }
 
+  /** A peça com o grupo, a malha e o contorno dela: duas chamadas à GPU. */
+  private desenharSozinha(peca: PecaNaCena): void {
+    const { dados, cor } = peca;
+    const geometria = this.fabrica.obter(dados);
+    const raiz = new Group();
+    raiz.quaternion.copy(peca.giro);
+    if (geometria.malha) {
+      const material = new MeshBasicMaterial({
+        color: cor, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false,
+        // Face de trás também somaria luz: só o anel, que é chato, precisa dos dois lados.
+        side: dados.forma === 'ring' ? DoubleSide : FrontSide,
+      });
+      peca.malha = new Mesh(geometria.malha, material);
+      raiz.add(peca.malha);
+    }
+    if (dados.contorno || !geometria.malha) {
+      const material = new LineBasicMaterial({
+        color: cor, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false,
+      });
+      peca.contorno = geometria.malha ? new LineSegments(geometria.contorno, material) : new Line(geometria.contorno, material);
+      raiz.add(peca.contorno);
+    }
+    raiz.position.copy(peca.base);
+    raiz.scale.setScalar(this.opcoes.movimentoReduzido ? 1 : 1e-3);
+    raiz.visible = peca.visivel;
+    this.objeto.add(raiz);
+    peca.raiz = raiz;
+
+    const { malha, contorno } = peca;
+    // O feixe do projetor (o: 0.08) cobre o objeto inteiro: não pode roubar o mouse das peças.
+    const alvo = malha && peca.alvoMalha >= 0.1 * PESO_DO_PREENCHIMENTO ? malha : contorno && !malha ? contorno : null;
+    if (alvo) {
+      this.alvosDoRaio.push(alvo);
+      this.porObjeto.set(alvo, peca);
+    }
+  }
+
+  /** Tira a peça avulsa da cena, devolvendo os materiais; a geometria é da fábrica. */
+  private desfazerSozinha(peca: PecaNaCena): void {
+    if (!peca.raiz) return;
+    this.objeto.remove(peca.raiz);
+    for (const parte of [peca.malha, peca.contorno]) {
+      if (!parte) continue;
+      parte.material.dispose();
+      this.porObjeto.delete(parte);
+      const i = this.alvosDoRaio.indexOf(parte);
+      if (i >= 0) this.alvosDoRaio.splice(i, 1);
+    }
+    peca.raiz = peca.malha = peca.contorno = null;
+  }
+
+  /** A cópia entra no lote da série dela; o lote nasce com a primeira. */
+  private porNoLote(peca: PecaNaCena): void {
+    const { dados } = peca;
+    let lote = this.lotePorSerie.get(dados.serie!);
+    if (!lote || lote.cheio) {
+      lote = new LoteDaSerie<PecaNaCena>(this.fabrica.obter(dados), dados.forma, dados.contorno);
+      this.lotes.push(lote);
+      this.lotePorSerie.set(dados.serie!, lote);
+      this.objeto.add(lote.malha);
+      if (lote.contorno) this.objeto.add(lote.contorno);
+      if (peca.alvoMalha >= 0.1 * PESO_DO_PREENCHIMENTO) {
+        this.alvosDoRaio.push(lote.malha);
+        this.porObjeto.set(lote.malha, lote);
+      }
+    }
+    peca.lote = lote;
+    peca.indice = lote.acrescentar(peca);
+  }
+
+  /**
+   * O objeto passou do limiar: as cópias que já estão na tela trocam a peça avulsa pelo lote da
+   * série, sem perder a entrada em andamento — o estado da animação é da `PecaNaCena`, não do desenho.
+   */
+  private agruparSeries(): void {
+    this.instanciando = true;
+    for (const p of this.pecas) {
+      if (!p.raiz || !cabeEmLote(p.dados)) continue;
+      this.desfazerSozinha(p);
+      this.porNoLote(p);
+    }
+  }
+
   private aplicarGiro(dAz: number, dPol: number): void {
     this.deslocamento.copy(this.camera.position).sub(this.controles.target);
     this.esferica.setFromVector3(this.deslocamento);
@@ -666,6 +784,7 @@ export class CenaHolograma {
     if (Math.abs(this.alvoExplosao - this.fatorExplosao) < 1e-4) this.fatorExplosao = this.alvoExplosao;
     const grupo = (this.destacada ?? this.selecionada)?.dados.grupo ?? null;
     for (const p of this.pecas) this.animarPeca(p, agora, dt, grupo);
+    for (const lote of this.lotes) lote.publicar();
 
     if (!reduzido) for (const anel of this.aneis) anel.rotation.z += (anel.userData['velocidade'] as number) * dt;
     this.animarVarredura(agora, dt, reduzido);
@@ -688,8 +807,29 @@ export class CenaHolograma {
     if (apontando && !this.arrastando && (this.ponteiroMudou || ++this.contagem % 6 === 0)) this.lancarRaio();
     this.ponteiroMudou = false;
     if (this.cursor3d.ativo) this.cursor3d.grupo.quaternion.copy(this.camera.quaternion);
+    if (this.opcoes.aoMedir) {
+      // O composer chama o renderer uma vez por passe, e cada chamada zeraria a contagem: aqui ela
+      // soma o quadro inteiro.
+      this.renderer.info.autoReset = false;
+      this.renderer.info.reset();
+    }
     this.composer.render(dt);
+    if (this.opcoes.aoMedir) this.medir(agora);
   };
+
+  private medir(agora: number): void {
+    const m = this.medicao;
+    if (!m.inicio) m.inicio = agora;
+    m.quadros++;
+    if (agora - m.inicio < 1_000) return;
+    this.opcoes.aoMedir?.({
+      fps: Math.round((m.quadros * 1_000) / (agora - m.inicio)),
+      chamadas: this.renderer.info.render.calls,
+      pecas: this.pecas.length,
+      lotes: this.lotes.length,
+    });
+    this.medicao = { inicio: agora, quadros: 0 };
+  }
 
   private animarPeca(p: PecaNaCena, agora: number, dt: number, grupo: string | null): void {
     const t = MathUtils.clamp((agora - p.nascimento) / ENTRADA_MS, 0, 1);
@@ -701,14 +841,25 @@ export class CenaHolograma {
     const alvoDestaque = grupo !== null ? (p.dados.grupo === grupo ? 1.8 : APAGADA)
       : filtroVazio(destacados) ? 1 : noFiltro(destacados, p.dados) ? 1.8 : APAGADA;
     p.destaque += (alvoDestaque - p.destaque) * suave(dt, 10);
+    const alfaDaMalha = Math.min(1, p.alvoMalha * entrada * p.destaque + flash * 0.2);
+    const alfaDoContorno = Math.min(1, p.alvoContorno * entrada * Math.min(p.destaque, 1.3) + flash * 0.5);
+    this.onde.copy(p.base).addScaledVector(p.direcao, this.fatorExplosao * DISTANCIA_DA_EXPLOSAO);
+    if (p.lote) {
+      // A cópia instanciada recebe os mesmos números da avulsa, só que por instância.
+      const tom = this.corDaMalha.copy(p.cor).lerp(BRANCO, flash * 0.7);
+      const matriz = p.visivel ? this.matriz.compose(this.onde, p.giro, this.escala.setScalar(Math.max(1e-3, entrada))) : null;
+      p.lote.colocar(p.indice, matriz, tom, alfaDaMalha, tom, alfaDoContorno);
+      return;
+    }
+    if (!p.raiz) return;
     p.raiz.scale.setScalar(Math.max(1e-3, entrada));
-    p.raiz.position.copy(p.base).addScaledVector(p.direcao, this.fatorExplosao * DISTANCIA_DA_EXPLOSAO);
+    p.raiz.position.copy(this.onde);
     if (p.malha) {
-      p.malha.material.opacity = Math.min(1, p.alvoMalha * entrada * p.destaque + flash * 0.2);
+      p.malha.material.opacity = alfaDaMalha;
       p.malha.material.color.copy(p.cor).lerp(BRANCO, flash * 0.7);
     }
     if (p.contorno) {
-      p.contorno.material.opacity = Math.min(1, p.alvoContorno * entrada * Math.min(p.destaque, 1.3) + flash * 0.5);
+      p.contorno.material.opacity = alfaDoContorno;
       p.contorno.material.color.copy(p.cor).lerp(BRANCO, flash * 0.7);
     }
   }
@@ -734,27 +885,36 @@ export class CenaHolograma {
     return !noFiltro(escondidos, p.dados) && (filtroVazio(isolados) || noFiltro(isolados, p.dados));
   }
 
+  /** A peça de um acerto: a avulsa direto, a do lote pelo `instanceId`. */
+  private pecaDoAcerto(acerto: Intersection): PecaNaCena | null {
+    const dono = this.porObjeto.get(acerto.object);
+    if (!(dono instanceof LoteDaSerie)) return dono ?? null;
+    return acerto.instanceId === undefined ? null : (dono.membros[acerto.instanceId] ?? null);
+  }
+
   /** O primeiro acerto numa peça visível: o raio do Three.js não olha `visible`. */
-  private acertar(): { point: Vector3; object: Object3D } | undefined {
-    return this.raio.intersectObjects(this.alvosDoRaio, false)
-      .find((acerto) => this.porObjeto.get(acerto.object)?.raiz.visible);
+  private acertar(): { ponto: Vector3; peca: PecaNaCena } | null {
+    for (const acerto of this.raio.intersectObjects(this.alvosDoRaio, false)) {
+      const peca = this.pecaDoAcerto(acerto);
+      if (peca?.visivel) return { ponto: acerto.point, peca };
+    }
+    return null;
   }
 
   private lancarRaio(): void {
     this.raio.setFromCamera(this.ponteiro, this.camera);
     const acerto = this.acertar();
-    this.destacar(acerto ? (this.porObjeto.get(acerto.object) ?? null) : null);
+    this.destacar(acerto?.peca ?? null);
     if (this.cursor3d.ativo) {
       const profundidade = this.camera.position.distanceTo(this.controles.target);
-      if (acerto) this.cursor3d.grupo.position.copy(acerto.point);
+      if (acerto) this.cursor3d.grupo.position.copy(acerto.ponto);
       else this.raio.ray.at(profundidade, this.cursor3d.grupo.position);
     }
   }
 
   private pecaEm(x: number, y: number): PecaNaCena | null {
     this.raio.setFromCamera(new Vector2(x, y), this.camera);
-    const acerto = this.acertar();
-    return acerto ? (this.porObjeto.get(acerto.object) ?? null) : null;
+    return this.acertar()?.peca ?? null;
   }
 
   private destacar(peca: PecaNaCena | null): void {
@@ -795,6 +955,14 @@ export class CenaHolograma {
 /** Fração de aproximação que não depende da taxa de quadros: `1 - e^(-velocidade·dt)`. */
 function suave(dt: number, velocidade: number): number {
   return 1 - Math.exp(-velocidade * dt);
+}
+
+/**
+ * Só a cópia de uma série vai para o lote, e só com malha: a `line` é uma linha contínua, que o
+ * `InstancedMesh` não desenha, e o raio dela é o do `Line` — fica avulsa.
+ */
+function cabeEmLote(dados: PecaHolograma): boolean {
+  return dados.serie !== undefined && dados.forma !== 'line';
 }
 
 function direcaoPeloCentro(peca: PecaNaCena, centro: Vector3): void {

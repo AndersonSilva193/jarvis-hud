@@ -23,7 +23,7 @@ import { GaleriaHologramaComponent } from './galeria-holograma';
 import { ParearCelularComponent } from './parear-celular';
 import { PreviewGestosComponent } from './preview-gestos';
 // Só tipos: o valor vem do `import()` dinâmico, e o Three.js fica fora do chunk da HUD.
-import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-holograma';
+import type { CenaHolograma, MedidaDaCena, PecaDestacada, PerfilDaCena } from './cena-holograma';
 
 /**
  * A camada do Holograma no palco: a cena 3D por baixo e o painel da HUD por cima.
@@ -105,6 +105,10 @@ import type { CenaHolograma, PecaDestacada, PerfilDaCena } from './cena-hologram
       </div>
     }
     @if (rastreio.ativo()) { <app-preview-gestos [gesto]="gesto()" /> }
+    @if (medida(); as m) {
+      <!-- Só com ?medir=1: ferramenta de quem mede, fora do leitor de tela. -->
+      <p class="painel medida" aria-hidden="true">{{ m.fps }} fps · {{ m.chamadas }} chamadas · {{ m.pecas }} peças · {{ m.lotes }} séries instanciadas</p>
+    }
     <section class="painel controles" aria-label="Controles do holograma">
       <button class="botao botao--explodir" type="button" [attr.aria-pressed]="explosao() > 0" (click)="comandos.alternarExplosao()">
         {{ explosao() > 0 ? 'Montar' : 'Explodir' }}
@@ -139,6 +143,7 @@ export class HologramaViewComponent {
   protected readonly falha = signal('');
   protected readonly rastreio = inject(RastreioDeMaoService);
   protected readonly gesto = signal('Sem mão');
+  protected readonly medida = signal<MedidaDaCena | null>(null);
 
   protected readonly estado = computed(() => {
     const total = contar(this.holograma.pecas().length);
@@ -339,10 +344,14 @@ export class HologramaViewComponent {
       if (!this.vivo) return;
       const movimentoReduzido = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
       const host = this.alvo().nativeElement;
+      // Medir é coisa de quem abriu a HUD com `?medir=1`; `?instancias=0` é o "antes" da comparação.
+      const parametros = new URLSearchParams(location.search);
       const cena = this.zona.runOutsideAngular(
         () =>
           new CenaHolograma(host, {
             movimentoReduzido,
+            instanciar: parametros.get('instancias') !== '0',
+            aoMedir: parametros.has('medir') ? (medida) => this.zona.run(() => this.medida.set(medida)) : undefined,
             perfil: this.perfilDaCena(),
             aoDestacar: (peca) => this.zona.run(() => this.destaque.set(peca)),
             aoArrastar: () => this.comandos.arrastou(),
