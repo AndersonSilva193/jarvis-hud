@@ -39,7 +39,8 @@ test.beforeEach(async ({ page }) => {
   });
   await page.route('https://api.hud.test/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
-    const corpo = path.endsWith('/historico') ? { sessao: 'teste', revisao: 0, trocas: [], emAndamento: null, ultima: null } : null;
+    const corpo = path.endsWith('/historico') ? { sessao: 'teste', revisao: 0, trocas: [], emAndamento: null, ultima: null }
+      : path.endsWith('/galeria') ? ['dna', 'atomo'].map(id => ({ id: `exemplo_${id}`, nome: id === 'dna' ? 'DNA' : 'Átomo', pecas: 10, fixo: true })) : null;
     await route.fulfill({ status: path === '/api/tela/estado' ? 204 : 200, contentType: 'application/json', body: path === '/api/tela/estado' ? '' : JSON.stringify(corpo) });
   });
   await page.goto('/'); await expect(page.locator('.orbe--livre')).toBeVisible();
@@ -48,15 +49,17 @@ test.beforeEach(async ({ page }) => {
 test('holograma monta o exemplo pelo stream com Bearer, explode e fecha com Esc', async ({ page }) => {
   const erros: string[] = []; page.on('pageerror', (e) => erros.push(e.message));
   let autorizacao = '';
-  await page.route('https://api.hud.test/api/holograma/exemplo/dna', async (route) => {
+  await page.route('https://api.hud.test/api/holograma/exemplo_dna/stream', async (route) => {
     autorizacao = route.request().headers()['authorization'] ?? '';
     await route.fulfill({ status: 200, contentType: 'text/event-stream', body: STREAM });
   });
 
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
   await expect(page.locator('app-holograma-view')).toBeVisible();
   await expect(page.locator('.orbe--recuado')).toHaveCount(1);
-  await page.getByRole('button', { name: 'DNA' }).click();
+  await page.getByRole('button', { name: /^Galeria/ }).click();
+  await page.getByRole('button', { name: 'Abrir DNA', exact: true }).click();
 
   // A peça de forma desconhecida é descartada pelo validador da HUD.
   await expect(page.locator('app-holograma-view [role=status]')).toHaveText(`${PECAS.length} peças`);
@@ -72,15 +75,20 @@ test('holograma monta o exemplo pelo stream com Bearer, explode e fecha com Esc'
   await expect(page.getByLabel('Vista explodida')).toHaveValue('0');
 
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Ferramentas', exact: true })).toBeHidden();
+  await expect(page.locator('app-holograma-view')).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(page.locator('app-holograma-view')).toHaveCount(0);
   await expect(page.locator('.orbe--livre')).toBeVisible();
   expect(erros).toEqual([]);
 });
 
 test('holograma explica o token recusado', async ({ page }) => {
-  await page.route('https://api.hud.test/api/holograma/exemplo/atomo', (route) => route.fulfill({ status: 401, body: '' }));
+  await page.route('https://api.hud.test/api/holograma/exemplo_atomo/stream', (route) => route.fulfill({ status: 401, body: '' }));
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
-  await page.getByRole('button', { name: 'Átomo' }).click();
+  await page.getByRole('button', { name: /^Galeria/ }).click();
+  await page.getByRole('button', { name: 'Abrir Átomo', exact: true }).click();
   await expect(page.locator('app-holograma-view [role=status]')).toHaveText('Token recusado pela API.');
 });
 
@@ -105,6 +113,7 @@ test('holograma gerado pelo modelo: escaneia, mantém as peças no erro e cancel
     });
   });
 
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
   const estado = page.locator('app-holograma-view .estado');
   await expect(page.getByRole('button', { name: 'Gerar' })).toBeDisabled();
@@ -113,7 +122,7 @@ test('holograma gerado pelo modelo: escaneia, mantém as peças no erro e cancel
   await page.getByRole('button', { name: 'Gerar' }).click();
 
   await expect(estado).toHaveText('Escaneando…');
-  await expect(page.getByRole('button', { name: 'Cancelar' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancelar', exact: true })).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(pedidos[0]?.searchParams.get('objeto')).toBe('motor V8');
   expect(pedidos[0]?.searchParams.get('detalhe')).toBe('detalhado');
@@ -124,7 +133,7 @@ test('holograma gerado pelo modelo: escaneia, mantém as peças no erro e cancel
 
   await page.getByRole('button', { name: 'Gerar' }).click();
   await expect(estado).toHaveText('Escaneando…');
-  await page.getByRole('button', { name: 'Cancelar' }).click();
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
   await expect(estado).toHaveText('Cancelado · 0 peças');
   await expect(page.getByRole('button', { name: 'Gerar' })).toBeFocused();
   expect(erros).toEqual([]);
@@ -139,7 +148,9 @@ test('gestos sem permissão da câmera avisam e os ajustes abrem e fecham sem fe
   });
   await page.reload(); await expect(page.locator('.orbe--livre')).toBeVisible();
 
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
+  await page.getByText('Gestos e celular', { exact: true }).click();
   const gestos = page.getByRole('button', { name: 'Gestos' });
   await gestos.click();
   await expect(page.locator('app-botoes-gestos .aviso')).toHaveText('Permissão da câmera negada.');

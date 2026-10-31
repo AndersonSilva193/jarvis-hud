@@ -4,6 +4,7 @@ import { JarvisApiService } from './jarvis-api.service';
 import { ConfigStore } from './config.store';
 import { VozService } from './voz.service';
 import { BriefingPlayerService } from './briefing-player.service';
+import { PainelHudService } from './painel-hud.service';
 import type {
   HistoricoConversa,
   PedidoConversa,
@@ -27,9 +28,11 @@ export class ConversaService {
   readonly limpando = signal(false);
   readonly erro = signal('');
   readonly progresso = signal('');
-  /** A barra de conversa está aberta na tela. Vai e volta com o `[(aberta)]` da barra. */
-  readonly chatAberto = signal(false);
-  /** Rascunho ou ditado em curso: enquanto houver, o chat não se recolhe sozinho. */
+  private readonly painel = inject(PainelHudService);
+  /** A abertura visual depende apenas da lateral escolhida pela pessoa. */
+  readonly chatAberto = computed(() => this.painel.ativo() === 'conversa');
+  readonly narrandoId = signal<string | null>(null);
+  /** Rascunho ou ditado em curso, sem implicar abertura do painel. */
   readonly compondo = signal(false);
   /** O card já olhado e fechado no ✕ — ele não volta sozinho ao palco. */
   private readonly dispensada = signal<string | null>(null);
@@ -42,14 +45,14 @@ export class ConversaService {
    * A resposta que merece o palco.
    *
    * Fala simples não entra: ela é falada, legendada embaixo do orbe e fica no histórico. Só o
-   * que se olha — anexo, código de confirmação ou erro — toma o centro da tela.
+   * que se olha — anexo ou código de confirmação — toma o centro da tela.
    */
   readonly cartao = computed(() => {
     const resposta = this.resposta();
     return resposta && resposta.id !== this.dispensada() && temOlhar(resposta) ? resposta : null;
   });
   /** A conversa ocupa o palco, e por isso o briefing espera a vez. */
-  readonly naTela = computed(() => this.conversando() || !!this.cartao());
+  readonly naTela = computed(() => this.ocupada() || !!this.cartao());
   private ativa = false;
   private geracao = 0;
   private consulta = 0;
@@ -81,7 +84,7 @@ export class ConversaService {
   }
   /** A conversa assume o palco: o briefing cala e espera a vez. Quem abre o chat é a pessoa. */
   assumirPalco(): void {
-    this.player.parar();
+    this.player.parar(true);
   }
   mostrarBriefing(): void {
     if (!this.ocupada()) {
@@ -91,7 +94,7 @@ export class ConversaService {
   }
   /** Devolve a tela ao orbe: fecha o chat e dispensa o card da última resposta. */
   recolher(): void {
-    this.chatAberto.set(false);
+    if (this.chatAberto()) this.painel.fechar();
     this.dispensar();
   }
   /** Tira do palco o card da resposta atual, sem apagá-la do histórico. */
@@ -166,9 +169,12 @@ export class ConversaService {
     this.erro.set(resposta.erro ?? '');
     let narracao: Promise<void> | null = null;
     if (narrar && !resposta.erro && !resposta.silenciosa && !this.faladas.has(resposta.id)) {
-      this.player.parar();
+      this.player.parar(true);
       this.faladas.add(resposta.id);
-      narracao = this.voz.falar(resposta.fala || resposta.texto);
+      this.narrandoId.set(resposta.id);
+      narracao = this.voz.falar(resposta.fala || resposta.texto).finally(() => {
+        if (this.narrandoId() === resposta.id) this.narrandoId.set(null);
+      });
     }
     this.aoReceber?.(resposta, narracao);
     void this.recuperar();
@@ -263,7 +269,7 @@ export class ConversaService {
   }
 }
 
-/** O que se olha numa resposta: anexo, código de confirmação ou um erro para ler. */
+/** Anexos e confirmações continuam no palco; erros ficam no aviso e na lateral. */
 function temOlhar(resposta: RespostaConversa): boolean {
-  return resposta.anexos.length > 0 || !!resposta.confirmacao || !!resposta.erro;
+  return resposta.anexos.length > 0 || !!resposta.confirmacao;
 }

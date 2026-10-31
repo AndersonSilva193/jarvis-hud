@@ -1,5 +1,6 @@
 import { Component, ElementRef, OnDestroy, computed, effect, inject, input, untracked } from '@angular/core';
 import { JanelasService } from '../../nucleo/janelas.service';
+import { PainelHudService } from '../../nucleo/painel-hud.service';
 import type { Janela } from '../../nucleo/tela.modelos';
 
 @Component({
@@ -37,6 +38,8 @@ export class JanelaComponent implements OnDestroy {
   readonly janela = input.required<Janela>();
   readonly miniPlayer = input(false);
   protected readonly janelas = inject(JanelasService);
+  private readonly painel = inject(PainelHudService);
+  private readonly focada = computed(() => this.janelas.foco() === this.janela().id && this.janela().estado !== 'minimizada');
   private readonly elemento = inject<ElementRef<HTMLElement>>(ElementRef);
   protected readonly geometria = computed(() => {
     if (!this.miniPlayer()) return this.janela();
@@ -48,10 +51,11 @@ export class JanelaComponent implements OnDestroy {
   private retorno: HTMLElement | null = null;
   constructor() {
     effect(() => {
-      const focada = this.janelas.foco() === this.janela().id;
+      const focada = this.focada();
       if (focada) untracked(() => queueMicrotask(() => {
         const host = this.elemento.nativeElement;
-        if (!host.isConnected || host.contains(document.activeElement)) return;
+        if (!host.isConnected || host.contains(document.activeElement) || this.painel.ativo() ||
+            document.activeElement instanceof Element && document.activeElement.closest('dialog[open]')) return;
         if (document.activeElement instanceof HTMLElement) this.retorno = document.activeElement;
         host.querySelector<HTMLElement>('article')?.focus({ preventScroll: true });
       }));

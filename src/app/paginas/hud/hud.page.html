@@ -12,7 +12,6 @@
       <span class="barras" aria-hidden="true"><i></i><i></i><i></i><i></i></span>{{ sinalDeVoz() }}
     </span>
     <span class="relogio" aria-hidden="true">{{ relogio() }}</span>
-    <app-historico-conversa [(aberto)]="tela.historicoAberto" [trocas]="conversa.trocas()" [ocupada]="conversa.ocupada()" (limpar)="limparConversa()" />
   </header>
   <div class="estado-central">
     <p class="falando" role="status" aria-live="polite"><span class="ponto" [class.ponto--ativo]="voz.falando() || escuta.ouvindo() || conversa.ocupada()" aria-hidden="true"></span>{{ estadoApresentacao() }}</p>
@@ -37,6 +36,8 @@
     }
     <div class="tracos" aria-hidden="true"></div>
   </div>
+  <div class="corpo-hud" [class.corpo-hud--painel]="painel.ativo() !== null">
+  <div class="coluna-palco">
   <main class="conteudo" [class.conteudo--holograma]="holograma.aberto()" aria-label="Janelas do Jarvis">
     <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [class.orbe--recuado]="holograma.aberto()" [class.orbe--formando]="orbeFormando()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
     <app-sondas class="sondas" [class.sondas--livre]="orbeLivre()" [class.sondas--recuado]="holograma.aberto()" [recuada]="!orbeLivre()" [estado]="estadoOrbe()" [escutaDisponivel]="escuta.disponivel" [escutaLigada]="escuta.ligada()" [ditando]="escuta.ditando()" [progresso]="conversa.progresso()" [rotuloVoz]="cota.rotulo()" />
@@ -46,12 +47,12 @@
     <div class="palco" #areaJanelas>
       @for (janela of janelas.janelas(); track janela.id) {
         <app-janela [janela]="janela" [miniPlayer]="janela.estado === 'minimizada' && midia.bandeja() === janela.id">
-          <app-conteudo-janela [janela]="janela" [ocupada]="conversa.ocupada()" (comando)="enviarTexto($event)" />
+          <app-conteudo-janela [janela]="janela" [ocupada]="conversa.ocupada()" [narrandoId]="conversa.narrandoId()" [textoRevelado]="voz.textoRevelado()" (comando)="enviarTexto($event)" />
         </app-janela>
       }
     </div>
   </main>
-  @if (!conversa.naTela() && concluidos().length) {
+  @if (concluidos().length) {
     <section class="arquivo" aria-label="Arquivo do briefing">
       <p class="rotulo-arquivo">{{ player.restaurado() ? 'Último briefing' : 'Briefing' }} <span>· gerado em {{ geracaoBriefing() }}</span></p>
       <nav class="fileira" aria-label="Cards do briefing">
@@ -65,7 +66,7 @@
       </nav>
     </section>
   }
-  <p class="legenda-voz" role="region" aria-label="Legenda da fala" aria-live="off">@if (voz.trechoAtual()) {<span class="legenda-quem" aria-hidden="true">Jarvis</span>}{{ voz.trechoAtual() }}</p>
+  <app-legenda-voz [transcricao]="escuta.ditando() ? escuta.transcricao().slice(-voz.limiteLegenda()) : ''" />
   @if (janelas.minimizadas().length) {
     <section class="bandeja" aria-label="Janelas minimizadas">
       @if (midia.bandeja()) { <div class="espaco-player" #bandejaPlayer></div> }
@@ -77,11 +78,28 @@
       }</nav>
     </section>
   }
-  <div class="doca" role="region" aria-label="Conversa com o Jarvis">
-    @if (conversa.conversando()) {
-      <app-dialogo-conversa [trocas]="conversa.trocas()" [resposta]="conversa.resposta()" [ocultar]="conversa.cartao()?.id ?? ''" [progresso]="conversa.progresso()" [erro]="conversa.erro()" />
-    }
-    <app-barra-conversa [(texto)]="rascunho" [(aberta)]="conversa.chatAberto" [ocupada]="conversa.ocupada()" [ditando]="escuta.ditando() && escutaDeResposta.fase() !== 'ouvindo'" [vozDisponivel]="escuta.disponivel" (enviar)="enviarTexto()" (microfone)="ditar()" (digitando)="aoDigitar()" />
+  </div>
+  <app-painel-hud [aberto]="painel.ativo() !== null" [titulo]="painel.ativo() === 'conversa' ? 'Conversa' : 'Ferramentas'" (fechar)="painel.fechar()">
+    <section [hidden]="painel.ativo() !== 'conversa'" aria-label="Conversa e histórico">
+      <p class="ajuda-painel">Conversa atual e últimas dez trocas · HUD e Telegram</p>
+      <app-dialogo-conversa [trocas]="conversa.trocas()" [resposta]="conversa.resposta()" [ocultar]="conversa.cartao()?.id ?? ''" [progresso]="conversa.progresso()" [erro]="conversa.erro()" [narrandoId]="conversa.narrandoId()" [textoRevelado]="voz.textoRevelado()" />
+      <app-barra-conversa [(texto)]="rascunho" [embutida]="true" [ocupada]="conversa.ocupada()" [ditando]="escuta.ditando()" [vozDisponivel]="escuta.disponivel" (enviar)="enviarTexto()" (microfone)="ditar('', true)" (digitando)="aoDigitar()" />
+      <button class="botao limpar-conversa" type="button" [disabled]="conversa.ocupada()" (click)="limparConversa()">Limpar conversa</button>
+    </section>
+    <section [hidden]="painel.ativo() !== 'ferramentas'" aria-label="Central de ferramentas">
+      <h3 class="titulo-ferramentas">Geral</h3>
+      <div class="ferramentas-gerais">
+        @if (escuta.disponivel) { <button class="botao microfone" type="button" [attr.aria-pressed]="escuta.ligada()" (click)="alternarEscuta()">Ativação por voz {{ escuta.ligada() ? 'ligada' : 'desligada' }}</button> }
+        <button class="botao bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo() || conversa.ocupada()">{{ pedindo() ? 'Preparando…' : 'Briefing' }}</button>
+        @if (player.briefing() || briefingGuardado()) { <button class="botao" type="button" [disabled]="conversa.ocupada()" (click)="consultarBriefing()">Ver briefing</button> }
+        @if (player.fase() === 'tocando') { <button class="botao" type="button" (click)="player.pular()">Próximo</button> }
+        <button class="botao" type="button" [attr.aria-pressed]="holograma.aberto()" (click)="alternarHolograma()">Holograma</button>
+        <a class="elo" routerLink="/configuracao" aria-label="Configurar Jarvis">Configuração</a>
+      </div>
+      @if (cota.rotulo(); as rotulo) { <p class="cota-voz">{{ rotulo }}</p> }
+      @if (holograma.aberto()) { <app-ferramentas-holograma /> }
+    </section>
+  </app-painel-hud>
   </div>
   <footer class="rodape">
     @if (tarefaComputer(); as tarefa) {
@@ -96,19 +114,16 @@
     <div class="avisos" role="status">
       @if (janelas.aviso()) { <span>{{ janelas.aviso() }}</span> }
       @if (erro()) { <span class="erro">{{ erro() }}</span> }
+      @if (conversa.erro()) { <span class="erro erro-conversa">{{ conversa.erro() }}</span> }
       @if (escuta.motivo() === 'permissao-negada') { <span class="erro">Microfone bloqueado pelo navegador</span> }
       @if (escutaDeResposta.aviso()) { <span>{{ escutaDeResposta.aviso() }}</span> }
       @if (briefingGuardado()) { <span>Um briefing está disponível para consulta.</span> }
     </div>
-    <div class="acoes">
-      @if (cota.rotulo(); as rotulo) { <span class="cota-voz" role="status">{{ rotulo }}</span> }
-      <a class="elo" routerLink="/configuracao" aria-label="Configurar Jarvis">Configuração</a>
-      @if (escuta.disponivel) { <button class="botao microfone" type="button" [attr.aria-pressed]="escuta.ligada()" (click)="alternarEscuta()">Ativação por voz <span>{{ escuta.ligada() ? 'ligada' : 'desligada' }}</span></button> }
-      @if (player.fase() === 'tocando' || voz.falando()) { <button class="botao" type="button" (click)="player.parar()">Parar fala</button> }
-      @if (player.fase() === 'tocando') { <button class="botao" type="button" (click)="player.pular()">Próximo</button> }
-      @if (conversa.naTela()) { <button class="botao" type="button" [disabled]="conversa.ocupada()" (click)="consultarBriefing()">Ver briefing</button> }
-      <button class="botao" type="button" [attr.aria-pressed]="holograma.aberto()" (click)="holograma.alternar()">Holograma</button>
-      <button class="botao bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo() || conversa.ocupada()">{{ pedindo() ? 'Preparando…' : 'Briefing' }}</button>
+    <div class="acoes" role="group" aria-label="Atalhos da HUD">
+      <span class="microfone-compacto">{{ sinalDeVoz() }}</span>
+      @if (player.fase() === 'tocando' || voz.falando() || voz.preparando()) { <button class="botao" type="button" (click)="player.parar(true)">Parar fala</button> }
+      <button class="botao" type="button" aria-controls="painel-hud" [attr.aria-expanded]="painel.ativo() === 'conversa'" (click)="painel.alternar('conversa')">Conversa</button>
+      <button class="botao" type="button" aria-controls="painel-hud" [attr.aria-expanded]="painel.ativo() === 'ferramentas'" (click)="painel.alternar('ferramentas')">Ferramentas</button>
     </div>
   </footer>
 </div>

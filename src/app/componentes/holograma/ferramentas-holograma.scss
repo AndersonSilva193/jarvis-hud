@@ -1,0 +1,20 @@
+@use '../../estilos/hud' as hud;
+:host{display:block;min-width:0;color:hud.$texto}
+details{border-top:1px solid #305a70;padding:.8rem 0}
+summary{cursor:pointer;min-height:44px;align-content:center;font:600 .78rem hud.$mono;color:#a6f8ff;letter-spacing:.07em}
+.painel{padding:.6rem 0}
+.rotulo{display:block;margin:.4rem 0;font:500 .68rem hud.$mono;color:#a6f8ff}
+.campos{display:flex;flex-wrap:wrap;gap:.5rem}
+.entrada{min-width:0;box-sizing:border-box;min-height:44px;padding:.5rem;background:#030e20;color:#dff4ff;border:1px solid #537d91;font:inherit}
+.entrada::placeholder{color:#9fbed4}
+.campos input{flex:1 1 100%;width:100%}
+.seletor{flex:1;max-width:100%}
+.seletor option{background:#07162c}
+.descricao{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;font-size:.78rem;margin:.6rem 0}
+.controles{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;padding:.5rem 0}
+.botao{@include hud.botao(6px);min-height:44px;padding:.5rem .7rem}
+.botao--cancelar{color:#ffd0d6;border-color:#ffadb8}
+.explosao{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;flex:1 1 100%;font-size:.78rem}
+.explosao input{width:100%;accent-color:#5ff2ff}
+.explosao output{color:#a6f8ff}
+:focus-visible{outline:2px solid #a6f8ff;outline-offset:-3px}

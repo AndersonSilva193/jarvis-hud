@@ -42,7 +42,8 @@ export class BriefingPlayerService {
   readonly indiceAtual = signal(-1);
   readonly briefing = signal<Briefing | null>(null);
 
-  readonly atual = computed(() => this.blocos()[this.indiceAtual()] ?? null);
+  private readonly retido = signal<Bloco | null>(null);
+  readonly atual = computed(() => this.blocos()[this.indiceAtual()] ?? this.retido());
   readonly legenda = computed(() => {
     switch (this.fase()) {
       case 'gerando':
@@ -70,6 +71,7 @@ export class BriefingPlayerService {
 
   /** Um briefing começou a ser montado no servidor. */
   gerando(): void {
+    this.retido.set(null);
     this.restaurado.set(false); this.selecionado.set(null);
     this.cancelamento.abort();
     this.execucao += 1;
@@ -85,6 +87,7 @@ export class BriefingPlayerService {
     if (this.fase() === 'tocando' || this.fase() === 'gerando') {
       return;
     }
+    this.retido.set(null);
     this.restaurado.set(true); this.selecionado.set(null);
     const blocos = blocosDe(briefing);
     this.briefing.set(briefing);
@@ -105,6 +108,7 @@ export class BriefingPlayerService {
       return;
     }
 
+    this.retido.set(null);
     this.cancelamento.abort();
     this.restaurado.set(false); this.selecionado.set(null);
     this.cancelamento = new AbortController();
@@ -179,7 +183,9 @@ export class BriefingPlayerService {
   fecharConsulta(): void { this.selecionado.set(null); }
 
   /** Encerra a reprodução onde está e manda tudo para a fileira. */
-  parar(): void {
+  parar(preservarAtual = false): void {
+    const atual = this.atual();
+    this.retido.set(preservarAtual ? atual : null);
     this.cancelamento.abort();
     this.execucao += 1;
     this.voz.parar();

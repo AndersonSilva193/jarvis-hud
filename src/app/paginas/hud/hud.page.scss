@@ -5,7 +5,7 @@
 // --respiro é a margem lateral: o campo da onda usa o mesmo valor para ir de borda a borda.
 .hud{--respiro:clamp(1rem,3vw,3.5rem);position:relative;isolation:isolate;min-height:100%;height:100dvh;display:flex;flex-direction:column;gap:clamp(.6rem,1.4vh,1rem);padding:1.4rem var(--respiro);overflow-x:hidden;overflow-y:auto;background:hud.$fundo}
 
-.cabecalho{display:flex;align-items:center;gap:1.5rem;min-height:2.5rem;position:relative;padding-right:10rem}
+.cabecalho{display:flex;align-items:center;gap:1.5rem;min-height:2.5rem;position:relative;padding-right:0}
 .marca{color:hud.$texto;text-decoration:none;letter-spacing:.25em;font:600 1rem hud.$mono;@include hud.brilho-texto(hud.$ciano,.25)}.marca span{display:block;font-size:.55rem;color:#8caaca;margin-top:.4rem;letter-spacing:.22em}
 .conexao{font-size:.7rem;color:#a6bed8;display:flex;gap:.5rem;align-items:center;letter-spacing:.1em;text-transform:uppercase}.luz,.ponto{display:inline-block;width:6px;height:6px;border-radius:50%;background:#7893ae}.luz--online{background:#68e4bf;box-shadow:0 0 10px #68e4bf99}
 // O selo de voz abre o lado direito do cabeçalho; as barras só se mexem com som entrando ou saindo.
@@ -55,20 +55,19 @@
 .fechar{border-radius:50%;width:28px;height:28px;background:transparent;color:hud.$ciano-forte;cursor:pointer;line-height:1;flex-shrink:0}
 .fechar:hover{background:#163750;border-color:hud.$ciano}
 
-// A legenda da fala: só aparece enquanto há voz, e some sem deixar buraco na tela.
-.legenda-voz{display:flex;flex-wrap:wrap;justify-content:center;align-items:baseline;gap:.8rem;margin:0;text-align:center;min-height:1.6em;max-width:65rem;align-self:center;font-size:clamp(.85rem,1.5vw,1rem);line-height:1.5;color:#d8e9f8}
-.legenda-quem{font:500 .55rem hud.$mono;letter-spacing:.3em;text-transform:uppercase;color:hud.$ciano}
-.doca{display:flex;flex-direction:column;width:min(100%,52rem);align-self:center;flex-shrink:0}
-
-// Só a ponta oposta: a outra é o estado natural do card, que o próprio elemento já define.
 @keyframes entrando{from{opacity:0;transform:translateY(12px)}}
-// A saída desce e encolhe: o card vai na direção da fileira, onde ele reaparece como miniatura.
 @keyframes saindo{to{opacity:0;transform:translateY(2.5rem) scale(.9)}}
-
 @media(min-width:1800px){.hud{--respiro:clamp(3rem,7vw,11rem)}.conteudo{--orbe:min(66vh,50rem)}}
-@media(max-width:700px){.hud{--respiro:1rem;padding:1rem;gap:.75rem}.cabecalho{padding-right:7rem;gap:.8rem;flex-wrap:wrap}.marca{font-size:.8rem}.relogio{font-size:.58rem;letter-spacing:.14em}.conteudo{min-height:18rem;--orbe:100vw}.sinal-voz{display:none}.orbe--livre{--escala:1.03}.card-principal{max-height:none}.legenda-voz{font-size:.8rem;gap:.5rem}}
-
-// As sondas ficam fora do quadrado do orbe: abaixo desta largura elas cairiam em cima dele.
+@media(max-width:700px){.hud{--respiro:1rem;padding:1rem;gap:.75rem}.cabecalho{gap:.8rem;flex-wrap:wrap}.marca{font-size:.8rem}.relogio{font-size:.58rem;letter-spacing:.14em}.conteudo{min-height:18rem;--orbe:100vw}.sinal-voz{display:none}.orbe--livre{--escala:1.03}.card-principal{max-height:none}.conteudo--holograma{flex:1 0 auto}}
 @media(max-width:1100px){.sondas{display:none}}
-// No celular o holograma entra no fluxo com altura própria: o conteúdo cresce e a HUD rola, em vez de espremer a cena por cima da conversa.
-@media(max-width:700px){.conteudo--holograma{flex:1 0 auto}}
+
+
+
+// O painel ocupa uma coluna própria: o palco nunca fica por baixo dele.
+.corpo-hud{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;flex:1;min-height:0}
+.coluna-palco{display:flex;flex-direction:column;gap:.65rem;min-width:0;min-height:0}
+[hidden]{display:none!important}
+.ferramentas-gerais{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
+.limpar-conversa{margin-top:1rem}
+@media(min-width:1024px){.corpo-hud--painel{grid-template-columns:minmax(0,1fr) 380px}.corpo-hud app-painel-hud{overflow:hidden}}
+@media(max-width:1023px){.corpo-hud{flex:1 0 auto}.coluna-palco{min-height:50dvh}}

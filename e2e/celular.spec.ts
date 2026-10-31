@@ -21,6 +21,7 @@ test('no celular, a galeria cheia rola de lado sem alargar o holograma', async (
     return route.fulfill({ status: 200, contentType: 'application/json', body: galeria ? JSON.stringify(itens) : 'null' });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
   await page.getByRole('button', { name: /^Galeria/ }).click();
   await expect(page.getByText('Vírus da gripe 7')).toBeAttached();
@@ -53,6 +54,7 @@ test('a galeria é um botão que expande, como o Histórico', async ({ page }) =
     return route.fulfill({ status: 200, contentType: 'application/json', body: galeria ? JSON.stringify(itens) : 'null' });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
 
   // Recolhida: só o botão, com a contagem.

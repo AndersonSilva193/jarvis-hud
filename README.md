@@ -20,9 +20,9 @@ abaixo de 1100 px. No cabeçalho, o selo **Voz online / Voz em espera** diz se a
 está ligada, e as barras dele mexem enquanto há som entrando ou saindo.
 
 O palco tem **até seis janelas em destaque**, e respostas de conversa só entram quando têm **o que se olha**: um bloco do briefing, uma
-imagem ou arquivo anexado, um código de confirmação, um erro. Fala simples do Jarvis não vira card
+imagem ou arquivo anexado, um código de confirmação. Erros ficam em avisos compactos. Fala simples do Jarvis não vira card
 — ela é falada, aparece na legenda embaixo do orbe e fica no histórico. Para ler a conversa, abra o
-chat (**Conversar**) ou o **Histórico** no topo; para conversar por texto o tempo todo, há o
+painel **Conversa**, que reúne a conversa atual e as últimas dez trocas; para conversar por texto o tempo todo, há o
 Telegram.
 
 Quando o bloco acaba de ser falado, o card desce para a fileira de baixo e vira miniatura; depois
@@ -77,14 +77,23 @@ Do lado do Jarvis, `HUD_ORIGEM` precisa listar a origem de onde o HUD é aberto 
    interrompe a fala em curso. Clicar de novo na mesma miniatura, no **✕** do card ou em `Esc`
    fecha a consulta e devolve o centro ao orbe.
 
-Abaixo do orbe, uma legenda discreta mostra o trecho que está sendo falado agora — é o texto
-entregue à síntese, sem simular sincronia palavra a palavra, que o navegador não informa.
+Abaixo do palco, uma legenda de até duas linhas revela palavras conforme a reprodução avança.
+Na ElevenLabs, a sincronização é estimada pela duração e pelo relógio do MP3; na voz do navegador,
+usa eventos `boundary`, com uma estimativa quando eles não existem. O texto usado é a narração
+real (`fala`, quando informada). O último trecho permanece por dois segundos após o término.
 
-Teclas: `→` pula o bloco atual; `Esc` fecha primeiro o histórico aberto ou a janela focada. Sem janela, cancela ditado/fala. `Alt + setas` move a janela; setas com foco na alça redimensionam.
+Teclas: `→` pula o bloco atual; `Esc` fecha primeiro o diálogo ou painel aberto, depois a janela focada ou o holograma. Sem janela, cancela ditado/fala. `Alt + setas` move a janela; setas com foco na alça redimensionam.
 
-A barra de conversa fica compacta em repouso (**Conversar** e o microfone) e só expande ao clicar ou
-ao começar um ditado. Ela nunca se recolhe sozinha enquanto houver rascunho ou ditado em curso.
-Aberta, ela mostra acima de si as últimas trocas — é ali que a fala do Jarvis vira texto na tela.
+Os atalhos **Conversa** e **Ferramentas** abrem a mesma lateral, um de cada vez. No desktop,
+ela ocupa uma coluna de 380 px sem cobrir o palco; abaixo de 1.024 px, é modal e contém o foco.
+Fechar ou trocar de painel preserva o rascunho. Ditado, processamento e resposta por voz não
+abrem o chat automaticamente. A resposta atual acompanha a fala; ao terminar, o texto completo
+fica disponível para consulta.
+
+**Ferramentas** reúne voz, briefing, configuração e os controles do holograma em três grupos:
+**Gerar e galeria**, **Visualização** e **Gestos e celular**. Recolher a lateral mantém a cena,
+a geração, a câmera e o celular funcionando. **Parar fala** e **Parar tarefa no PC** continuam
+acessíveis quando necessários. Interromper a narração para conversar mantém o card do briefing.
 
 ## Saudação e horário
 

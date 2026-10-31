@@ -44,6 +44,7 @@ afterEach(() => {
 
 describe('o palco do HUD', () => {
   beforeEach(() => {
+    sessionStorage.clear();
     // O jsdom não tem canvas; aqui o que se mede é o palco, não o desenho do orbe.
     vi.spyOn(OrbeComponent.prototype, 'ngAfterViewInit').mockImplementation(() => {});
     TestBed.configureTestingModule({
@@ -171,12 +172,44 @@ describe('o palco do HUD', () => {
   it('o diálogo só aparece com o chat aberto', () => {
     const tela = TestBed.createComponent(HudPage);
     tela.detectChanges();
-    expect(tela.nativeElement.querySelector('app-dialogo-conversa')).toBeNull();
+    expect(tela.nativeElement.querySelector('app-painel-hud').classList.contains('aberto')).toBe(false);
 
-    tela.nativeElement.querySelector('.compacta button').click();
+    tela.nativeElement.querySelector('[aria-controls="painel-hud"]').click();
     tela.detectChanges();
     expect(tela.nativeElement.querySelector('app-dialogo-conversa')).not.toBeNull();
     expect(TestBed.inject(ConversaService).chatAberto()).toBe(true);
+  });
+
+  it('pedido e ditado não abrem a lateral nem sobrescrevem o rascunho digitado', () => {
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+    const conversa = TestBed.inject(ConversaService);
+    const escuta = TestBed.inject(EscutaService);
+    tela.componentInstance['rascunho'].set('Texto que ainda quero terminar');
+    escuta.ditando.set(true);
+    escuta.transcricao.set('Mostre a serotonina');
+    conversa.pensando({ id: 'voz-1', canal: 'hud', estado: 'processando', texto: 'Mostre a serotonina', iniciadoEm: '' });
+    tela.detectChanges();
+    expect(conversa.chatAberto()).toBe(false);
+    expect(tela.nativeElement.querySelector('app-painel-hud').classList.contains('aberto')).toBe(false);
+    expect(tela.componentInstance['rascunho']()).toBe('Texto que ainda quero terminar');
+    expect(tela.nativeElement.querySelector('app-legenda-voz').textContent).toContain('Mostre a serotonina');
+  });
+
+  it('interromper a narração para conversar mantém o card atual no palco', () => {
+    const tela = TestBed.createComponent(HudPage);
+    tela.detectChanges();
+    const player = TestBed.inject(BriefingPlayerService);
+    player.mostrar(BRIEFING);
+    player.indiceAtual.set(1);
+    player.fase.set('tocando');
+    tela.detectChanges();
+    const janela = tela.nativeElement.querySelector('app-janela');
+    TestBed.inject(ConversaService).assumirPalco();
+    tela.detectChanges();
+    expect(player.fase()).toBe('concluido');
+    expect(player.atual()?.id).toBe(player.blocos()[1]?.id);
+    expect(tela.nativeElement.querySelector('app-janela')).toBe(janela);
   });
 
   it('sem briefing nenhum, a tela é só o orbe e a linha de estado', () => {
@@ -212,7 +245,7 @@ describe('o palco do HUD', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(espera.fase()).toBe('inativa');
     espera.fase.set('opcoes');
-    tela.nativeElement.querySelector('.compacta button').click();
+    tela.nativeElement.querySelector('[aria-controls="painel-hud"]').click();
     tela.detectChanges();
     espera.fase.set('opcoes');
     const campo: HTMLTextAreaElement = tela.nativeElement.querySelector('#mensagem-jarvis');

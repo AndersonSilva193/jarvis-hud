@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 import { JarvisApiService } from './jarvis-api.service';
 import type { RespostaVoz } from './voz.modelos';
+import { RoteiroLegenda } from './legenda-fala';
 
 /** Acima disso o Chrome corta a fala no meio, então o texto vai em pedaços. */
 const LIMITE_DO_PEDACO = 180;
@@ -42,7 +43,14 @@ export class VozService {
   readonly falando = signal(false);
   /** 0 a 1, de quanto o orbe deve pulsar agora. */
   readonly intensidade = signal(0);
-  readonly trechoAtual = signal('');
+  private readonly roteiro = signal(new RoteiroLegenda(''));
+  private readonly palavraAtual = signal(-1);
+  readonly limiteLegenda = signal(72);
+  readonly trechoAtual = computed(() => this.roteiro().trecho(this.palavraAtual(), this.limiteLegenda()));
+  readonly textoRevelado = computed(() => this.roteiro().revelado(this.palavraAtual()));
+  readonly preparando = signal(false);
+  private apagarLegenda: ReturnType<typeof setTimeout> | null = null;
+  private atualizarLegenda: (() => void) | null = null;
 
   private readonly vozes = signal<SpeechSynthesisVoice[]>([]);
   readonly voz = computed(() => escolherVoz(this.vozes()));
@@ -127,6 +135,8 @@ export class VozService {
     }
     this.parar();
     const minhaVez = ++this.execucao;
+    this.roteiro.set(new RoteiroLegenda(limpo));
+    this.preparando.set(true);
     const cancelar = () => {
       if (minhaVez === this.execucao) this.parar();
     };
@@ -138,6 +148,7 @@ export class VozService {
       }
       // Só agora: até aqui ninguém falou nada, e acender "FALANDO" antes seria mentira.
       this.antesDaFala.forEach((ouvinte) => ouvinte());
+      this.preparando.set(false);
       this.falando.set(true);
       this.ultimoBoundary = performance.now();
       this.animar();
@@ -153,15 +164,26 @@ export class VozService {
     } finally {
       sinal?.removeEventListener('abort', cancelar);
       if (minhaVez === this.execucao) {
-        this.trechoAtual.set('');
+        this.atualizarLegenda = null;
+        this.preparando.set(false);
         this.falando.set(false);
         this.intensidade.set(0);
+        if (this.palavraAtual() >= 0) {
+          this.apagarLegenda = setTimeout(() => {
+            if (minhaVez === this.execucao) this.palavraAtual.set(-1);
+            this.apagarLegenda = null;
+          }, 2_000);
+        }
       }
     }
   }
 
   parar(): void {
-    this.trechoAtual.set('');
+    if (this.apagarLegenda !== null) clearTimeout(this.apagarLegenda);
+    this.apagarLegenda = null;
+    this.atualizarLegenda = null;
+    this.palavraAtual.set(-1);
+    this.preparando.set(false);
     this.execucao += 1;
     this.concluirPedaco?.();
     this.falando.set(false);
@@ -226,8 +248,7 @@ export class VozService {
     }
     audio.src = this.api.urlDoAudio(rota);
     this.ligarAnalise(audio);
-    // Com áudio não há `boundary` nem pedaços: a legenda mostra a frase inteira.
-    this.trechoAtual.set(texto);
+    this.palavraAtual.set(-1);
     try {
       await audio.play();
     } catch {
@@ -237,6 +258,14 @@ export class VozService {
       return true;
     }
     this.tocandoAudio = true;
+    const atualizar = () => {
+      if (minhaVez !== this.execucao || audio.paused) return;
+      // A duração pode chegar depois de play(). Até lá aguardamos os metadados.
+      if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+      this.revelar(this.roteiro().indiceNoTempo(audio.currentTime / audio.duration));
+    };
+    this.atualizarLegenda = atualizar;
+    atualizar();
     await new Promise<void>((resolver) => {
       let encerrado = false;
       const encerrar = () => {
@@ -247,11 +276,15 @@ export class VozService {
         clearTimeout(salvaguarda);
         audio.onended = null;
         audio.onerror = null;
+        if (this.atualizarLegenda === atualizar) this.atualizarLegenda = null;
         this.tocandoAudio = false;
         if (this.concluirPedaco === encerrar) this.concluirPedaco = null;
         resolver();
       };
-      audio.onended = encerrar;
+      audio.onended = () => {
+        if (minhaVez === this.execucao) this.revelar(this.roteiro().palavras.length - 1);
+        encerrar();
+      };
       audio.onerror = encerrar;
       this.concluirPedaco = encerrar;
       // Mesma ideia da síntese: se o `ended` não vier, a fila não pode travar para sempre.
@@ -315,17 +348,21 @@ export class VozService {
     if (!this.disponivel) {
       return;
     }
-    for (const pedaco of fatiar(texto, LIMITE_DO_PEDACO)) {
+    const pedacos = fatiar(texto, LIMITE_DO_PEDACO);
+    this.roteiro.set(new RoteiroLegenda(pedacos.join(' ')));
+    this.palavraAtual.set(-1);
+    let inicio = 0;
+    for (const pedaco of pedacos) {
       if (minhaVez !== this.execucao) {
         return;
       }
-      await this.falarPedaco(pedaco);
+      await this.falarPedaco(pedaco, minhaVez, inicio);
+      inicio += pedaco.length + 1;
     }
   }
 
-  private falarPedaco(texto: string): Promise<void> {
+  private falarPedaco(texto: string, minhaVez: number, inicio: number): Promise<void> {
     return new Promise<void>((resolver) => {
-      this.trechoAtual.set(texto);
       const fala = new SpeechSynthesisUtterance(texto);
       fala.lang = 'pt-BR';
       const voz = this.voz();
@@ -337,6 +374,15 @@ export class VozService {
       fala.volume = 1;
 
       let encerrado = false;
+      let comecouEm: number | null = null;
+      let recebeuBoundary = false;
+      const roteiroLocal = new RoteiroLegenda(texto);
+      const atualizar = () => {
+        if (minhaVez !== this.execucao || comecouEm === null || recebeuBoundary || speechSynthesis.paused) return;
+        const duracaoEstimada = Math.max(800, roteiroLocal.pesoTotal * 65 / fala.rate);
+        const indice = roteiroLocal.indiceNoTempo((performance.now() - comecouEm) / duracaoEstimada);
+        this.revelar(this.roteiro().indiceNoCaractere(inicio + (roteiroLocal.palavras[indice]?.inicio ?? 0)));
+      };
       let salvaguarda: ReturnType<typeof setTimeout>;
       const encerrar = () => {
         if (encerrado) {
@@ -345,16 +391,38 @@ export class VozService {
         encerrado = true;
         clearTimeout(salvaguarda);
         fala.onboundary = null;
+        fala.onstart = null;
+        fala.onpause = null;
+        fala.onresume = null;
         fala.onend = null;
         fala.onerror = null;
+        if (this.atualizarLegenda === atualizar) this.atualizarLegenda = null;
         if (this.concluirPedaco === encerrar) this.concluirPedaco = null;
         resolver();
       };
 
-      fala.onboundary = () => {
-        this.ultimoBoundary = performance.now();
+      this.atualizarLegenda = atualizar;
+      let pausouEm = 0;
+      fala.onstart = () => {
+        if (minhaVez !== this.execucao) return;
+        comecouEm = performance.now();
+        atualizar();
       };
-      fala.onend = encerrar;
+      fala.onpause = () => { pausouEm = performance.now(); };
+      fala.onresume = () => {
+        if (comecouEm !== null) comecouEm += performance.now() - pausouEm;
+      };
+      fala.onboundary = (evento) => {
+        if (minhaVez !== this.execucao || encerrado) return;
+        // Algumas vozes só informam frases: nesses casos a estimativa continua revelando palavras.
+        recebeuBoundary = evento.name !== 'sentence';
+        this.ultimoBoundary = performance.now();
+        this.revelar(this.roteiro().indiceNoCaractere(inicio + evento.charIndex));
+      };
+      fala.onend = () => {
+        if (minhaVez === this.execucao) this.revelar(this.roteiro().indiceNoCaractere(inicio + texto.length - 1));
+        encerrar();
+      };
       // cancel() cai em onerror em alguns navegadores e em onend em outros: os dois encerram.
       fala.onerror = encerrar;
 
@@ -385,6 +453,7 @@ export class VozService {
         this.quadro = null;
         return;
       }
+      this.atualizarLegenda?.();
       if (this.tocandoAudio && this.analisador && this.amostras) {
         this.intensidade.set(energiaDe(this.analisador, this.amostras));
       } else {
@@ -400,6 +469,10 @@ export class VozService {
       this.quadro = requestAnimationFrame(passo);
     };
     this.quadro = requestAnimationFrame(passo);
+  }
+
+  private revelar(indice: number): void {
+    this.palavraAtual.update(atual => Math.max(atual, indice));
   }
 }
 

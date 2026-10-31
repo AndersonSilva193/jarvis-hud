@@ -7,7 +7,7 @@ import type { RespostaConversa } from '../../nucleo/conversa.modelos';
   imports: [AnexoConversaComponent],
   template: ` <div class="resposta">
     @if (resposta(); as r) {
-      <p class="texto" aria-live="polite" aria-atomic="true">{{ r.texto }}</p>
+      <p class="texto" aria-live="off">{{ textoVisivel() ?? r.texto }}</p>
       @for (anexo of r.anexos; track anexo.id) {
         <app-anexo-conversa [anexo]="anexo" />
       }
@@ -113,6 +113,7 @@ import type { RespostaConversa } from '../../nucleo/conversa.modelos';
 })
 export class RespostaConversaComponent {
   readonly resposta = input<RespostaConversa | null>(null);
+  readonly textoVisivel = input<string | null>(null);
   readonly erro = input('');
   readonly ocupada = input(false);
   readonly comando = output<string>();

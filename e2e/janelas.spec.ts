@@ -89,10 +89,10 @@ test('comando local não chama conversa; frase mais longa vai para o Jarvis', as
   const enviados: string[] = [];
   await page.route('https://api.hud.test/api/conversa', async route => { enviados.push(route.request().postDataJSON().texto); await route.fulfill({ status: 202, json: { id: 'pedido1' } }); });
   await emitir(page, 'tela.card', pesquisa());
-  await page.getByRole('button', { name: 'Conversar', exact: false }).first().click();
+  await page.getByRole('button', { name: 'Conversa', exact: true }).click();
   await page.getByLabel('Sua mensagem').fill('Jarvis, limpa a tela'); await page.getByLabel('Sua mensagem').press('Enter');
   await expect(page.locator('app-janela')).toHaveCount(0); expect(enviados).toEqual([]);
-  await page.getByRole('button', { name: 'Conversar', exact: false }).first().click();
+  await page.getByRole('button', { name: 'Conversa', exact: true }).click();
   await page.getByLabel('Sua mensagem').fill('limpa a tela da minha casa'); await page.getByLabel('Sua mensagem').press('Enter');
   await expect.poll(() => enviados).toEqual(['limpa a tela da minha casa']);
 });
@@ -132,10 +132,10 @@ test('prévia de página, notícia e confirmação continuam acessíveis', async
   await emitir(page, 'conversa.resposta', resposta);
   await expect(page.locator('app-resposta-conversa')).toContainText('1234');
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.getByRole('button', { name: 'Histórico', exact: true }).click();
-  await expect(page.locator('#historico-conversa')).toBeFocused();
+  await page.getByRole('button', { name: 'Conversa', exact: true }).click();
+  await expect(page.locator('#painel-hud-titulo')).toBeFocused();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.keyboard.press('Escape'); await expect(page.locator('.alternar')).toBeFocused();
+  await page.keyboard.press('Escape'); await expect(page.getByRole('button', { name: 'Conversa', exact: true })).toBeFocused();
 });
 
 test('YouTube real: carregamento e reprodução ou bloqueio explícito @externo', async ({ page }, info) => {

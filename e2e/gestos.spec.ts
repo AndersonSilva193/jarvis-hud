@@ -34,12 +34,18 @@ test('gestos ligam com wasm e modelo da própria HUD, sem pedido para fora, e de
     if (pedido.method() !== 'GET' && /image|octet/.test(pedido.headers()['content-type'] ?? '')) externos.push(`upload ${pedido.url()}`);
   });
 
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
+  await page.getByText('Gestos e celular', { exact: true }).click();
   await page.getByRole('button', { name: 'Gestos' }).click();
   // O wasm tem ~13 MB e o modelo ~8 MB: o primeiro carregamento demora.
   await expect(page.locator('app-preview-gestos .indicador')).toHaveText('Câmera ligada', { timeout: 30_000 });
   await expect(page.getByRole('button', { name: 'Gestos' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('app-preview-gestos .gesto')).toHaveText('Sem mão');
+  await page.getByRole('button', { name: 'Fechar painel' }).click();
+  await expect(page.locator('app-preview-gestos .indicador')).toHaveText('Câmera ligada');
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Gestos', exact: true })).toHaveAttribute('aria-pressed', 'true');
   // O detector roda sobre os quadros do vídeo: espera alguns ciclos sem erro.
   await page.waitForTimeout(1_500);
 
@@ -51,7 +57,7 @@ test('gestos ligam com wasm e modelo da própria HUD, sem pedido para fora, e de
   await expect(page.locator('app-preview-gestos .indicador')).toHaveText('Câmera ligada');
   await page.getByRole('button', { name: 'Mostrar câmera' }).click();
 
-  await page.getByRole('button', { name: 'Fechar' }).click();
+  await page.getByRole('button', { name: 'Fechar', exact: true }).click();
   await expect(page.locator('app-holograma-view')).toHaveCount(0);
   const trilhasVivas = await page.evaluate(() =>
     [...document.querySelectorAll('video')].flatMap((v) => (v.srcObject instanceof MediaStream ? v.srcObject.getTracks() : [])).filter((t) => t.readyState === 'live').length,

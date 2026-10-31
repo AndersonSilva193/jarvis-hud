@@ -2,25 +2,14 @@ import { Component, DestroyRef, ElementRef, NgZone, afterNextRender, computed, e
 
 import { ComandosDoHologramaService } from '../../nucleo/comandos-do-holograma.service';
 import { HologramaService } from '../../nucleo/holograma.service';
-import {
-  DETALHES_HOLOGRAMA,
-  GERADORES_HOLOGRAMA,
-  MAX_OBJETO_HOLOGRAMA,
-  lerGeradorHolograma,
-  type DetalheHolograma,
-  type ItemGaleria,
-} from '../../nucleo/holograma.modelos';
 import { MotorDeGestos } from '../../gestos/motor-de-gestos';
 import { AjustesDeGestosService } from '../../nucleo/ajustes-de-gestos.service';
 import { CanalDaHudService } from '../../nucleo/canal-da-hud.service';
 import { PerfilDoAparelhoService } from '../../nucleo/perfil-do-aparelho.service';
 import { RastreioDeMaoService } from '../../nucleo/rastreio-de-mao.service';
-import { BotoesGestosComponent } from './botoes-gestos';
 import { ControleDeToque } from './controle-de-toque';
 import { ControlePorGestos, type Sensibilidade } from './controle-por-gestos';
 import { ControleRemoto } from './controle-remoto';
-import { GaleriaHologramaComponent } from './galeria-holograma';
-import { ParearCelularComponent } from './parear-celular';
 import { PreviewGestosComponent } from './preview-gestos';
 // Só tipos: o valor vem do `import()` dinâmico, e o Three.js fica fora do chunk da HUD.
 import type { CenaHolograma, MedidaDaCena, PecaDestacada, PerfilDaCena } from './cena-holograma';
@@ -35,7 +24,7 @@ import type { CenaHolograma, MedidaDaCena, PecaDestacada, PerfilDaCena } from '.
  */
 @Component({
   selector: 'app-holograma-view',
-  imports: [GaleriaHologramaComponent, PreviewGestosComponent, BotoesGestosComponent, ParearCelularComponent],
+  imports: [PreviewGestosComponent],
   host: { class: 'holograma', '[class.holograma--gestos]': 'rastreio.ativo()' },
   template: `
     <div class="cena" #alvo role="img" [attr.aria-label]="descricaoDaCena()"></div>
@@ -43,65 +32,18 @@ import type { CenaHolograma, MedidaDaCena, PecaDestacada, PerfilDaCena } from '.
     <section class="painel titulo" aria-labelledby="holograma-nome">
       <p class="rotulo">Holograma</p>
       <h2 id="holograma-nome" class="nome">{{ holograma.meta()?.nome ?? 'Nenhum objeto' }}</h2>
-      @if (holograma.meta()?.descricao; as descricao) { <p class="descricao">{{ descricao }}</p> }
+
       <p class="estado" [class.estado--erro]="holograma.fase() === 'erro' || holograma.fase() === 'incompleto'" role="status" aria-live="polite" [attr.title]="dicaDosAvisos()">
         @if (holograma.construindo()) { <span class="pulso" aria-hidden="true"></span> }{{ estado() }}
       </p>
-      @if (holograma.podeContinuar()) {
-        <button class="botao" type="button" style="margin-top: 0.5rem" (click)="holograma.continuar()">Continuar</button>
-      }
-      @if (holograma.trocaDeGerador(); as troca) { <p class="descricao" role="status">{{ troca }}</p> }
-      @if (holograma.selo(); as selo) { <p class="rotulo" title="Gerador, peças e custo estimado desta geração">{{ selo }}</p> }
+      @if (holograma.construindo()) { <button class="botao" type="button" (click)="comandos.cancelar()">Cancelar geração</button> }
+
     </section>
-    <div class="lateral">
-      <section class="painel gerar" aria-label="Gerar holograma">
-        <form class="formulario" (submit)="aoGerar($event)">
-          <label class="rotulo" for="holograma-objeto">Gerar objeto</label>
-          <div class="campos">
-            <input
-              id="holograma-objeto"
-              class="entrada"
-              type="text"
-              autocomplete="off"
-              placeholder="motor V8, turbina, DNA…"
-              [attr.maxlength]="maxObjeto"
-              [value]="objeto()"
-              (input)="aoDigitar($event)"
-            />
-            <select class="entrada seletor" aria-label="Nível de detalhe" (change)="aoEscolherDetalhe($event)">
-              @for (opcao of detalhes; track opcao.valor) {
-                <option [value]="opcao.valor" [selected]="opcao.valor === detalhe()">{{ opcao.rotulo }}</option>
-              }
-            </select>
-            <!-- Um botão só, que troca de papel: o foco continua nele quando a geração começa e termina. -->
-            <button
-              class="botao botao--gerar"
-              [class.botao--cancelar]="holograma.construindo()"
-              [attr.type]="holograma.construindo() ? 'button' : 'submit'"
-              [disabled]="!holograma.construindo() && !objeto().trim()"
-              (click)="aoClicarAcao($event)"
-            >
-              {{ holograma.construindo() ? 'Cancelar' : 'Gerar' }}
-            </button>
-          </div>
-          <div class="descricao">
-            <label class="rotulo" for="holograma-gerador">Gerador:</label>
-            <select id="holograma-gerador" class="entrada seletor" (change)="aoEscolherGerador($event)">
-              @for (opcao of geradores; track opcao.valor) {
-                <option [value]="opcao.valor" [selected]="opcao.valor === holograma.gerador()">{{ opcao.rotulo }}</option>
-              }
-            </select>
-          </div>
-        </form>
-      </section>
-      <app-galeria-holograma class="galeria"(regerar)="gerarDeNovo($event)" />
-    </div>
     @if (destaque(); as peca) {
       <p class="painel destaque"><strong>{{ peca.nome }}</strong><span>Grupo · {{ peca.grupo }}</span></p>
     } @else if (selecao(); as peca) {
       <div class="painel destaque destaque--selecao">
         <strong>{{ peca.nome }}</strong><span>Selecionado · {{ peca.grupo }}</span>
-        <button class="botao" type="button" (click)="comandos.limparSelecao()">Limpar seleção</button>
       </div>
     }
     @if (rastreio.ativo()) { <app-preview-gestos [gesto]="gesto()" /> }
@@ -109,34 +51,13 @@ import type { CenaHolograma, MedidaDaCena, PecaDestacada, PerfilDaCena } from '.
       <!-- Só com ?medir=1: ferramenta de quem mede, fora do leitor de tela. -->
       <p class="painel medida" aria-hidden="true">{{ m.fps }} fps · {{ m.chamadas }} chamadas · {{ m.pecas }} peças · {{ m.lotes }} séries instanciadas</p>
     }
-    <section class="painel controles" aria-label="Controles do holograma">
-      <button class="botao botao--explodir" type="button" [attr.aria-pressed]="explosao() > 0" (click)="comandos.alternarExplosao()">
-        {{ explosao() > 0 ? 'Montar' : 'Explodir' }}
-      </button>
-      <label class="explosao">
-        <span>Vista explodida</span>
-        <input type="range" min="0" max="100" step="1" [value]="explosao()" [attr.aria-valuetext]="explosao() + '%'" (input)="aoExplodir($event)" />
-        <output aria-hidden="true">{{ explosao() }}%</output>
-      </label>
-      <button class="botao" type="button" (click)="comandos.centralizar()">Centralizar</button>
-      <button class="botao" type="button" (click)="comandos.resetar()">Resetar</button>
-      <app-botoes-gestos />
-      <app-parear-celular />
-      <button class="botao" type="button" (click)="comandos.fechar()">Fechar</button>
-    </section>
+
   `,
   styleUrl: './holograma-view.scss',
 })
 export class HologramaViewComponent {
   protected readonly holograma = inject(HologramaService);
   protected readonly comandos = inject(ComandosDoHologramaService);
-  protected readonly detalhes = DETALHES_HOLOGRAMA;
-  protected readonly geradores = GERADORES_HOLOGRAMA;
-  protected readonly maxObjeto = MAX_OBJETO_HOLOGRAMA;
-  protected readonly objeto = signal('');
-  protected readonly detalhe = signal<DetalheHolograma>('normal');
-  /** A explosão em %, para o slider; o valor fino mora no serviço. */
-  protected readonly explosao = computed(() => Math.round(this.comandos.explosao() * 100));
   protected readonly destaque = signal<PecaDestacada | null>(null);
   /** A peça escolhida por gesto, toque ou voz; fica até limpar, resetar ou trocar de objeto. */
   protected readonly selecao = this.comandos.selecao;
@@ -291,46 +212,6 @@ export class HologramaViewComponent {
       this.comandos.desconectar();
       this.cena()?.destruir();
     });
-  }
-
-  /** O "Gerar de novo" da galeria: o campo passa a mostrar o pedido que está sendo refeito. */
-  protected gerarDeNovo(item: ItemGaleria): void {
-    if (this.holograma.construindo()) return;
-    this.objeto.set(item.objeto);
-    this.detalhe.set(item.detalhe);
-    this.comandos.gerarDeNovo(item);
-  }
-
-  protected aoDigitar(evento: Event): void {
-    if (evento.target instanceof HTMLInputElement) this.objeto.set(evento.target.value);
-  }
-
-  protected aoEscolherDetalhe(evento: Event): void {
-    const valor = evento.target instanceof HTMLSelectElement ? evento.target.value : '';
-    const escolhido = this.detalhes.find((d) => d.valor === valor);
-    if (escolhido) this.detalhe.set(escolhido.valor);
-  }
-
-  protected aoEscolherGerador(evento: Event): void {
-    const escolhido = lerGeradorHolograma(evento.target instanceof HTMLSelectElement ? evento.target.value : '');
-    if (escolhido) this.holograma.escolherGerador(escolhido);
-  }
-
-  protected aoGerar(evento: Event): void {
-    evento.preventDefault();
-    if (this.holograma.construindo() || !this.objeto().trim()) return;
-    this.comandos.carregar(this.objeto(), this.detalhe());
-  }
-
-  /** Durante a geração o botão é "Cancelar"; fora dela ele é o submit do formulário. */
-  protected aoClicarAcao(evento: Event): void {
-    if (!this.holograma.construindo()) return;
-    evento.preventDefault();
-    this.comandos.cancelar();
-  }
-
-  protected aoExplodir(evento: Event): void {
-    if (evento.target instanceof HTMLInputElement) this.comandos.explodir(Number(evento.target.value) / 100);
   }
 
   private sensibilidade(): Sensibilidade {

@@ -4,6 +4,7 @@ import { MidiaService } from './midia.service';
 import { ConversaService } from './conversa.service';
 import { BriefingPlayerService } from './briefing-player.service';
 import { VozService } from './voz.service';
+import { PainelHudService } from './painel-hud.service';
 import { reconhecerComandoRapido, normalizarComando } from './comandos-rapidos';
 import type { Bloco } from './briefing.modelos';
 import type { CardTela, ComandoTela, EstadoTela, Janela } from './tela.modelos';
@@ -15,7 +16,8 @@ export class TelaService {
   private readonly conversa = inject(ConversaService);
   private readonly player = inject(BriefingPlayerService);
   private readonly voz = inject(VozService);
-  readonly historicoAberto = signal(false);
+  private readonly painel = inject(PainelHudService);
+  readonly historicoAberto = computed(() => this.painel.ativo() === 'conversa');
   readonly ativa = signal(false);
   mostrarBriefing: (() => void) | null = null;
   private readonly consultas = new Map<Bloco, string>();
@@ -43,7 +45,7 @@ export class TelaService {
     });
     effect(() => {
       if (!this.ativa()) return;
-      const bloco = this.conversa.naTela() ? null : this.player.atual();
+      const bloco = this.player.atual();
       untracked(() => {
         if (this.transitoria && this.janelas.obter(this.transitoria)?.conteudo.dados !== bloco) { this.janelas.retirar(this.transitoria); this.transitoria = null; }
         if (bloco && !this.transitoria) this.transitoria = this.janelas.abrir({ tipo: 'briefing', dados: bloco }, { titulo: bloco.rotulo, origem: 'briefing', selo: 'BRIEFING' });
@@ -75,10 +77,10 @@ export class TelaService {
     const { acao, alvo, valor } = comando;
     if (alvo && !this.janelas.obter(alvo)) return false;
     switch (acao) {
-      case 'limpar': this.player.fecharConsulta(); this.player.parar(); this.historicoAberto.set(false); this.conversa.chatAberto.set(false); this.janelas.limpar(); return true;
+      case 'limpar': this.player.fecharConsulta(); this.player.parar(); this.painel.fechar(); this.janelas.limpar(); return true;
       case 'fechar_tudo': this.player.fecharConsulta(); this.player.parar(); this.janelas.fecharTudo(); return true;
-      case 'abrir_historico': this.historicoAberto.set(true); return true;
-      case 'fechar_historico': this.historicoAberto.set(false); return true;
+      case 'abrir_historico': this.painel.abrir('conversa'); return true;
+      case 'fechar_historico': if (this.historicoAberto()) this.painel.fechar(); return true;
       case 'mostrar_briefing': this.mostrarBriefing?.(); return true;
       case 'repetir_briefing': {
         const briefing = this.player.briefing();
@@ -126,7 +128,7 @@ export class TelaService {
     if (!this.executar({ acao: comando.acao, alvo, valor: '' })) return false;
     void this.voz.falar(comando.fala); return true;
   }
-  encerrar(): void { this.ativa.set(false); this.janelas.fecharTudo(); this.mostrarBriefing = null; this.historicoAberto.set(false); this.consultas.clear(); this.respostas.clear(); this.respostaAnterior = null; this.transitoria = null; }
+  encerrar(): void { this.ativa.set(false); this.janelas.fecharTudo(); this.mostrarBriefing = null; this.painel.fechar(); this.consultas.clear(); this.respostas.clear(); this.respostaAnterior = null; this.transitoria = null; }
   private fechada(j: Janela): void {
     if (j.tipo === 'resposta' && j.conteudo.tipo === 'resposta' && this.conversa.resposta()?.id === j.conteudo.dados.id) this.conversa.dispensar();
     if (j.id === this.transitoria) { this.transitoria = null; this.player.parar(); }

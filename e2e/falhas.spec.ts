@@ -85,6 +85,7 @@ test.beforeEach(async ({ page }) => {
 async function abrirEGerar(page: Page, objeto: string): Promise<void> {
   await page.goto('/');
   await expect(page.locator('.orbe--livre')).toBeVisible();
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
   await page.getByLabel('Gerar objeto').fill(objeto);
   await page.getByRole('button', { name: 'Gerar' }).click();
@@ -204,6 +205,7 @@ test('câmera ocupada por outro programa: avisa, solta o botão e o holograma se
   cenarios['camera'] = (res) => res.end(META + evento('peca', peca('a', 0)) + evento('fim', { pecas: 1, avisos: 0, status: 'completo' }));
   await abrirEGerar(page, 'camera');
   await expect(estado(page)).toHaveText('1 peça');
+  await page.getByText('Gestos e celular', { exact: true }).click();
   await page.getByRole('button', { name: 'Gestos' }).click();
   await expect(page.locator('app-botoes-gestos .aviso')).toHaveText('A câmera está em uso por outro programa.');
   await expect(page.getByRole('button', { name: 'Gestos' })).toHaveAttribute('aria-pressed', 'false');
@@ -217,6 +219,7 @@ test('câmera escura avisa pouca luz em vez de só "Sem mão", e nada trava', as
   cenarios['escuro'] = (res) => res.end(META + evento('peca', peca('a', 0)) + evento('fim', { pecas: 1, avisos: 0, status: 'completo' }));
   await abrirEGerar(page, 'escuro');
   await expect(estado(page)).toHaveText('1 peça');
+  await page.getByText('Gestos e celular', { exact: true }).click();
   await page.getByRole('button', { name: 'Gestos' }).click();
   // O wasm e o modelo do MediaPipe demoram a carregar na primeira vez.
   await expect(page.locator('app-preview-gestos .indicador')).toHaveText('Pouca luz · acenda uma luz', { timeout: 40_000 });

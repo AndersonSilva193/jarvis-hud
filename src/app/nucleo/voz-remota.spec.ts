@@ -8,9 +8,10 @@ import type { RespostaVoz } from './voz.modelos';
 
 /** Uma utterance de mentira, para ver o que foi parar na síntese do navegador. */
 class FalaFalsa {
+  onstart: (() => void) | null = null;
   onend: (() => void) | null = null;
   onerror: (() => void) | null = null;
-  onboundary: (() => void) | null = null;
+  onboundary: ((evento: { charIndex: number; name?: string }) => void) | null = null;
   lang = '';
   rate = 1;
   pitch = 1;
@@ -28,6 +29,8 @@ class AudioFalso {
   crossOrigin: string | null = null;
   preload = '';
   currentTime = 0;
+  duration = 6;
+  paused = false;
   onended: (() => void) | null = null;
   onerror: (() => void) | null = null;
   readonly pause = vi.fn();
@@ -103,7 +106,8 @@ describe('voz com a ElevenLabs', () => {
     vi.unstubAllGlobals();
   });
 
-  it('toca o MP3 da API e mostra a frase inteira na legenda', async () => {
+  it('toca o MP3 e revela palavras pelo relógio do áudio, mantendo o último trecho por dois segundos', async () => {
+    vi.useFakeTimers();
     montar(async () => ({ provedor: 'elevenlabs', url: '/api/voz/audio/abc' }));
 
     const fala = voz.falar('Bom dia, senhor.');
@@ -113,12 +117,17 @@ describe('voz com a ElevenLabs', () => {
     expect(audio.src).toBe('https://jarvis.teste/api/voz/audio/abc?token=t');
     // Sem isto o AnalyserNode receberia um nó "sujo" e o orbe ficaria parado.
     expect(audio.crossOrigin).toBe('anonymous');
-    expect(voz.trechoAtual()).toBe('Bom dia, senhor.');
+    expect(voz.trechoAtual()).toBe('Bom');
+    audio.currentTime = 3;
+    await vi.advanceTimersByTimeAsync(20);
+    expect(voz.trechoAtual()).toBe('Bom dia,');
     expect(falas).toHaveLength(0);
 
     audio.terminar();
     await fala;
     expect(voz.falando()).toBe(false);
+    expect(voz.trechoAtual()).toBe('Bom dia, senhor.');
+    await vi.advanceTimersByTimeAsync(2_000);
     expect(voz.trechoAtual()).toBe('');
   });
 
@@ -131,6 +140,87 @@ describe('voz com a ElevenLabs', () => {
     expect(AudioFalso.criados).toHaveLength(0);
     expect(falas.map((f) => f.text)).toEqual(['A agenda de hoje está livre.']);
 
+    falas[0]!.onend?.();
+    await fala;
+  });
+
+  it('não avança a legenda enquanto o MP3 está pausado ou sem metadados', async () => {
+    vi.useFakeTimers();
+    montar(async () => ({ provedor: 'elevenlabs', url: '/audio' }));
+    const fala = voz.falar('Bom dia, senhor.');
+    await inicioDaFala();
+    const audio = AudioFalso.criados[0]!;
+    audio.paused = true;
+    audio.currentTime = 5;
+    await vi.advanceTimersByTimeAsync(500);
+    expect(voz.trechoAtual()).toBe('Bom');
+    audio.paused = false;
+    audio.duration = Number.NaN;
+    await vi.advanceTimersByTimeAsync(500);
+    expect(voz.trechoAtual()).toBe('Bom');
+    audio.duration = 6;
+    await vi.advanceTimersByTimeAsync(20);
+    expect(voz.trechoAtual()).toBe('Bom dia, senhor.');
+    voz.parar();
+    await fala;
+    expect(voz.trechoAtual()).toBe('');
+  });
+
+  it('aguarda o início da síntese e usa boundary para revelar as palavras', async () => {
+    montar(async () => ({ provedor: 'navegador' }));
+    const fala = voz.falar('Bom dia, senhor.');
+    await inicioDaFala();
+    expect(voz.trechoAtual()).toBe('');
+    falas[0]!.onstart?.();
+    expect(voz.trechoAtual()).toBe('Bom');
+    falas[0]!.onboundary?.({ charIndex: 4 });
+    expect(voz.textoRevelado()).toBe('Bom dia,');
+    falas[0]!.onend?.();
+    await fala;
+    expect(voz.textoRevelado()).toBe('Bom dia, senhor.');
+  });
+
+  it('estima a legenda quando a voz do navegador não emite boundary', async () => {
+    vi.useFakeTimers();
+    montar(async () => ({ provedor: 'navegador' }));
+    const fala = voz.falar('Bom dia, senhor.');
+    await inicioDaFala();
+    falas[0]!.onstart?.();
+    await vi.advanceTimersByTimeAsync(700);
+    expect(voz.trechoAtual()).toBe('Bom dia,');
+    falas[0]!.onend?.();
+    await fala;
+  });
+
+  it('eventos e temporizadores antigos não alteram uma nova fala', async () => {
+    vi.useFakeTimers();
+    montar(async () => ({ provedor: 'elevenlabs', url: '/audio' }));
+    const primeira = voz.falar('Bom dia, senhor.');
+    await inicioDaFala();
+    const audio = AudioFalso.criados[0]!;
+    const fimAntigo = audio.onended;
+    audio.terminar();
+    await primeira;
+    const segunda = voz.falar('Às suas ordens.');
+    await inicioDaFala();
+    fimAntigo?.();
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(voz.trechoAtual()).toBe('Às');
+    expect(voz.falando()).toBe(true);
+    voz.parar();
+    await segunda;
+    expect(voz.trechoAtual()).toBe('');
+  });
+
+  it('eventos de frase não impedem a estimativa das palavras', async () => {
+    vi.useFakeTimers();
+    montar(async () => ({ provedor: 'navegador' }));
+    const fala = voz.falar('Bom dia, senhor.');
+    await inicioDaFala();
+    falas[0]!.onstart?.();
+    falas[0]!.onboundary?.({ charIndex: 0, name: 'sentence' });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(voz.trechoAtual()).toBe('Bom dia,');
     falas[0]!.onend?.();
     await fala;
   });

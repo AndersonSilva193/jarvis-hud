@@ -50,6 +50,7 @@ interface Medida { fps: number; chamadas: number; pecas: number; lotes: number }
 async function medir(page: Page, consulta: string): Promise<Medida[]> {
   await page.goto(`/${consulta}`);
   await expect(page.locator('.orbe--livre')).toBeVisible();
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
   await page.getByLabel('Gerar objeto').fill('banco de prova');
   await page.getByRole('button', { name: 'Gerar' }).click();

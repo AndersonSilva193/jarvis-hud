@@ -26,3 +26,9 @@
 :focus-visible{outline:2px solid #9eefff;outline-offset:4px}
 
 @media(max-width:700px){.rodape{justify-content:center}.acoes{margin:0}.botao{min-height:44px}}
+
+.microfone-compacto{font:500 .65rem hud.$mono;color:#a6f8ff;letter-spacing:.08em}
+.erro-conversa{display:inline-block;max-width:min(26rem,80vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+.acoes .botao{min-height:44px}
+.ajuda-painel{font-size:.73rem;color:#b8cbe0;margin:0 0 .8rem;line-height:1.5}
+.titulo-ferramentas{font:600 .75rem hud.$mono;letter-spacing:.1em;color:#a6f8ff;margin:0 0 .7rem}

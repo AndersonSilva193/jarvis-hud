@@ -45,8 +45,10 @@ test.describe('PC: o celular como controle do holograma', () => {
     });
     const mandar = (m: unknown) => servidor!.send(JSON.stringify(m));
 
-    await page.getByRole('button', { name: 'Holograma', exact: true }).click();
-    await page.getByRole('button', { name: 'Usar celular como controle' }).click();
+    await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
+  await page.getByRole('button', { name: 'Holograma', exact: true }).click();
+    await page.getByText('Gestos e celular', { exact: true }).click();
+  await page.getByRole('button', { name: 'Usar celular como controle' }).click();
     const dialogo = page.getByRole('dialog', { name: 'Celular como controle' });
     await expect(dialogo.getByRole('img', { name: 'QR code que abre o controle no celular' })).toBeVisible();
     expect(autorizacao).toBe('Bearer token-de-teste');
@@ -60,9 +62,14 @@ test.describe('PC: o celular como controle do holograma', () => {
     await expect(page.getByText('Celular conectado')).toBeVisible();
 
     // Os mesmos caminhos do gesto local: explosão absoluta (câmera) e relativa (touchpad).
-    mandar([{ t: 'explodir', v: 0.6 }]);
+    await expect(page.locator('app-holograma-view canvas')).toHaveCount(1);
+    // O primeiro fator ancora a mão; a abertura seguinte soma a variação.
+    mandar([{ t: 'explodir', v: 0 }, { t: 'explodir', v: 0.6 }]);
     await expect(page.getByLabel('Vista explodida')).toHaveValue('60');
+    await page.getByRole('button', { name: 'Fechar painel' }).click();
     mandar({ t: 'explodir', dv: 0.2 });
+    await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
+    await expect(page.getByText('Celular conectado')).toBeVisible();
     await expect(page.getByLabel('Vista explodida')).toHaveValue('80');
     mandar([{ t: 'girar', dx: 0.05, dy: 0 }, { t: 'zoom', f: 1.1 }, { t: 'resetar' }]);
     await expect(page.getByLabel('Vista explodida')).toHaveValue('0');
@@ -106,9 +113,11 @@ test('PC: canal que não abre avisa em vez de ficar só em "Preparando"', async 
   await page.routeWebSocket(/\/ws\/holograma/, (ws) => ws.close({ code: 1011 }));
   await page.goto('/'); await expect(page.locator('.orbe--livre')).toBeVisible();
 
+  await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
+  await page.getByText('Gestos e celular', { exact: true }).click();
   await page.getByRole('button', { name: 'Usar celular como controle' }).click();
-  await expect(page.getByRole('dialog').getByText('O servidor não abriu o canal do controle. Tentando de novo…')).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Celular como controle', exact: true }).getByText('O servidor não abriu o canal do controle. Tentando de novo…')).toBeVisible();
 });
 
 test.describe('celular: a página /controle', () => {

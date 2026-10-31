@@ -1,3 +1,4 @@
+import { PainelHudService } from './painel-hud.service';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { signal } from '@angular/core';
@@ -356,7 +357,7 @@ describe('voz e escuta integradas', () => {
     const conversa = TestBed.inject(ConversaService);
     // A conversa assume a tela: o briefing em curso para e o que chegar depois fica guardado.
     conversa.assumirPalco();
-    conversa.chatAberto.set(true);
+    TestBed.inject(PainelHudService).abrir('conversa');
     const eventos = TestBed.inject(JarvisEventosService);
     const ouvintes = vi.mocked(eventos.conectar).mock.calls[0][0];
     ouvintes.briefing({ ...BRIEFING, abertura: 'Novo briefing' });

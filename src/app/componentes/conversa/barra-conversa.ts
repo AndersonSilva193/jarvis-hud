@@ -2,6 +2,7 @@ import { Component, ElementRef, computed, input, model, output, viewChild } from
 
 @Component({
   selector: 'app-barra-conversa',
+  host: { '[class.embutida]': 'embutida()' },
   template: ` <div class="barra" role="group" aria-label="Conversar com o Jarvis">
     <div class="compacta" [hidden]="expandida()">
       <button
@@ -38,6 +39,7 @@ import { Component, ElementRef, computed, input, model, output, viewChild } from
         aria-describedby="ajuda-conversa"
       ></textarea>
       <div class="acoes">
+        @if (!embutida()) {
         <button
           type="button"
           aria-label="Recolher conversa"
@@ -46,6 +48,7 @@ import { Component, ElementRef, computed, input, model, output, viewChild } from
         >
           Recolher
         </button>
+        }
         @if (vozDisponivel()) {
           <button
             type="button"
@@ -80,6 +83,10 @@ import { Component, ElementRef, computed, input, model, output, viewChild } from
     :host {
       display: block;
     }
+    :host.embutida .editor{grid-template-columns:minmax(0,1fr);padding:.8rem}
+    :host.embutida .acoes{justify-content:flex-end;flex-wrap:wrap}
+    :host.embutida textarea{font-size:1rem;min-height:6rem}
+    :host.embutida button{min-height:44px}
     [hidden] {
       display: none !important;
     }
@@ -211,7 +218,8 @@ export class BarraConversaComponent {
   readonly texto = model('');
   /** Quem guarda o estado é a página: a tela inteira muda conforme o chat está aberto ou não. */
   readonly aberta = model(false);
-  readonly expandida = computed(() => this.aberta() || this.ditando() || !!this.texto());
+  readonly embutida = input(false);
+  readonly expandida = computed(() => this.embutida() || this.aberta() || this.ditando() || !!this.texto());
   private readonly campo = viewChild<ElementRef<HTMLTextAreaElement>>('campo');
   abrir(): void {
     this.aberta.set(true);

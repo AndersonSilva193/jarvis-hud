@@ -6,7 +6,10 @@ import { Component, OnDestroy, OnInit, computed, effect, inject, signal, afterRe
 import { ConversaService } from '../../nucleo/conversa.service';
 import { BarraConversaComponent } from '../../componentes/conversa/barra-conversa';
 import { DialogoConversaComponent } from '../../componentes/conversa/dialogo-conversa';
-import { HistoricoConversaComponent } from '../../componentes/conversa/historico-conversa';
+import { PainelHudComponent } from '../../componentes/painel-hud/painel-hud';
+import { LegendaVozComponent } from '../../componentes/conversa/legenda-voz';
+import { FerramentasHologramaComponent } from '../../componentes/holograma/ferramentas-holograma';
+import { PainelHudService } from '../../nucleo/painel-hud.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 
@@ -51,7 +54,9 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
     ConteudoJanelaComponent,
     BarraConversaComponent,
     DialogoConversaComponent,
-    HistoricoConversaComponent,
+    PainelHudComponent,
+    LegendaVozComponent,
+    FerramentasHologramaComponent,
     OrbeComponent,
     SondasComponent,
     InicializacaoComponent,
@@ -70,6 +75,8 @@ export class HudPage implements OnInit, OnDestroy {
   private readonly bandejaPlayer = viewChild<ElementRef<HTMLElement>>('bandejaPlayer');
 
   protected readonly conversa = inject(ConversaService);
+  protected readonly painel = inject(PainelHudService);
+  private readonly ditadoNoEditor = signal(false);
   protected readonly rascunho = signal('');
   protected readonly briefingGuardado = signal<Briefing | null>(null);
   protected readonly player = inject(BriefingPlayerService);
@@ -194,7 +201,7 @@ export class HudPage implements OnInit, OnDestroy {
       limpar(() => { observador.disconnect(); window.removeEventListener('resize', medir); window.removeEventListener('scroll', medir, true); });
     });
     effect(() => {
-      if (this.escuta.ditando() && this.escutaDeResposta.fase() !== 'ouvindo') {
+      if (this.ditadoNoEditor() && this.escuta.ditando() && this.escutaDeResposta.fase() !== 'ouvindo') {
         this.rascunho.set(this.escuta.transcricao());
       }
     });
@@ -219,11 +226,11 @@ export class HudPage implements OnInit, OnDestroy {
     this.eventos.conectar({
       gerando: () => {
         this.escutaDeResposta.cancelar();
-        if (!this.conversa.naTela() && !this.escuta.ditando()) this.player.gerando();
+        if (!this.conversa.naTela() && !this.conversa.chatAberto() && !this.escuta.ditando()) this.player.gerando();
       },
       briefing: (briefing) => {
         this.escutaDeResposta.cancelar();
-        if (this.conversa.naTela() || this.escuta.ditando()) this.briefingGuardado.set(briefing);
+        if (this.conversa.naTela() || this.conversa.chatAberto() || this.escuta.ditando()) this.briefingGuardado.set(briefing);
         else void this.player.tocar(briefing);
       },
       conectado: () => {
@@ -396,18 +403,19 @@ export class HudPage implements OnInit, OnDestroy {
     }
   }
 
-  protected async ditar(inicial = ''): Promise<void> {
+  protected async ditar(inicial = '', noEditor = false): Promise<void> {
     if (this.conversa.ocupada()) return;
     if (this.escuta.ditando()) {
       this.escuta.cancelarDitado();
       return;
     }
     this.voz.destravar();
+    this.ditadoNoEditor.set(noEditor);
     this.escutaDeResposta.cancelar();
     this.conversa.assumirPalco();
     const texto = await this.escuta.ditar(inicial);
     if (!this.ativa || !texto) return;
-    this.rascunho.set(texto);
+    if (noEditor) this.rascunho.set(texto);
     const confirmacao = this.conversa.resposta()?.confirmacao;
     const codigo = normalizarCodigo(texto);
     if (
@@ -416,7 +424,13 @@ export class HudPage implements OnInit, OnDestroy {
       codigo === normalizarCodigo(confirmacao.codigo)
     ) {
       await this.enviarTexto('confirmo ' + confirmacao.codigo);
-    } else await this.enviarTexto();
+    } else await this.enviarTexto(noEditor ? undefined : texto);
+  }
+
+  protected alternarHolograma(): void {
+    const abrindo = !this.holograma.aberto();
+    this.holograma.alternar();
+    if (abrindo && !this.holograma.pecas().length) this.painel.abrir('ferramentas');
   }
 
   protected consultarBriefing(): void {
@@ -445,10 +459,11 @@ export class HudPage implements OnInit, OnDestroy {
   private readonly aoTeclar = (evento: KeyboardEvent): void => {
     if (evento.defaultPrevented) return;
     if (evento.key === 'Escape') {
+      if (evento.target instanceof Element && evento.target.closest('dialog[open]')) return;
+      if (this.painel.ativo()) { this.painel.fechar(); evento.preventDefault(); return; }
       this.escutaDeResposta.cancelar();
       // Antes de tudo: quem apertou Esc durante a abertura quer a tela, não o filme.
       if (this.inicio.rodando()) { this.inicio.cancelar(); evento.preventDefault(); return; }
-      if (this.tela.historicoAberto()) { this.tela.historicoAberto.set(false); evento.preventDefault(); return; }
       const foco = this.janelas.foco();
       if (foco) { this.janelas.fechar(foco); evento.preventDefault(); return; }
       if (this.holograma.aberto()) { this.comandosDoHolograma.fechar(); evento.preventDefault(); return; }

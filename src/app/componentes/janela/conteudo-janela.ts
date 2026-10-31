@@ -22,7 +22,7 @@ import { RespostaConversaComponent } from '../conversa/resposta-conversa';
       @case ('musica') { <app-card-musica [dados]="conteudo.dados" [id]="janela().id" /> }
       @case ('pagina') { <app-card-pagina [dados]="conteudo.dados" /> }
       @case ('noticia') { <app-card-noticia [dados]="conteudo.dados" /> }
-      @case ('resposta') { <app-resposta-conversa [resposta]="conteudo.dados" [erro]="conteudo.dados.erro ?? ''" [ocupada]="ocupada()" (comando)="comando.emit($event)" /> }
+      @case ('resposta') { <app-resposta-conversa [resposta]="conteudo.dados" [textoVisivel]="narrandoId() === conteudo.dados.id ? textoRevelado() : null" [erro]="conteudo.dados.erro ?? ''" [ocupada]="ocupada()" (comando)="comando.emit($event)" /> }
       @case ('briefing') {
         @let bloco = conteudo.dados;
         @switch (bloco.tipo) {
@@ -40,5 +40,7 @@ import { RespostaConversaComponent } from '../conversa/resposta-conversa';
 export class ConteudoJanelaComponent {
   readonly janela = input.required<Janela>();
   readonly ocupada = input(false);
+  readonly narrandoId = input<string | null>(null);
+  readonly textoRevelado = input('');
   readonly comando = output<string>();
 }

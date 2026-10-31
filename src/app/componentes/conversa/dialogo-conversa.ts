@@ -8,11 +8,11 @@ import {
 } from '@angular/core';
 import type { RespostaConversa, TrocaConversa } from '../../nucleo/conversa.modelos';
 
-/** Quantas trocas ficam à vista. O resto está no histórico, atrás do botão do topo. */
-const TROCAS_NA_TELA = 4;
+/** O mesmo limite do histórico compartilhado da API. */
+const TROCAS_NA_TELA = 10;
 
 /**
- * O diálogo em curso, encostado na barra de conversa.
+ * A conversa atual e o histórico, dentro da lateral.
  *
  * É aqui que a fala do Jarvis vira texto na tela — e só enquanto o chat está aberto. Fechada a
  * barra, a resposta fica só no histórico e no que foi dito em voz alta: o centro da tela é do
@@ -20,7 +20,7 @@ const TROCAS_NA_TELA = 4;
  */
 @Component({
   selector: 'app-dialogo-conversa',
-  template: `<div class="rolo" #rolo>
+  template: `<div class="rolo" #rolo (scroll)="aoRolar()">
     <ol aria-label="Conversa em curso">
       @for (troca of ultimas(); track troca.id) {
         <li>
@@ -29,7 +29,7 @@ const TROCAS_NA_TELA = 4;
             {{ troca.pedido }}
           </p>
           @if (troca.resposta.texto) {
-            <p class="fala"><span class="quem">Jarvis</span>{{ troca.resposta.texto }}</p>
+            <p class="fala"><span class="quem">Jarvis</span>{{ textoDa(troca.resposta) }}</p>
           }
         </li>
       } @empty {
@@ -37,7 +37,7 @@ const TROCAS_NA_TELA = 4;
       }
     </ol>
     @if (recemChegada(); as resposta) {
-      <p class="fala solta"><span class="quem">Jarvis</span>{{ resposta.texto }}</p>
+      <p class="fala solta"><span class="quem">Jarvis</span>{{ textoDa(resposta) }}</p>
     }
     @if (progresso()) {
       <p class="progresso" role="status">
@@ -53,7 +53,7 @@ const TROCAS_NA_TELA = 4;
       display: block;
     }
     .rolo {
-      max-height: min(32vh, 20rem);
+      max-height: 55dvh;
       overflow: auto;
       padding: 0.9rem 1.1rem;
       background: linear-gradient(160deg, rgba(10, 32, 62, 0.58), rgba(3, 12, 26, 0.72));
@@ -135,6 +135,16 @@ export class DialogoConversaComponent {
   readonly ocultar = input('');
   readonly progresso = input('');
   readonly erro = input('');
+  readonly narrandoId = input<string | null>(null);
+  readonly textoRevelado = input('');
+  private acompanhar = true;
+  protected textoDa(resposta: RespostaConversa): string {
+    return resposta.id === this.narrandoId() ? this.textoRevelado() : resposta.texto;
+  }
+  protected aoRolar(): void {
+    const elemento = this.rolo()?.nativeElement;
+    if (elemento) this.acompanhar = elemento.scrollHeight - elemento.scrollTop - elemento.clientHeight < 40;
+  }
   private readonly rolo = viewChild<ElementRef<HTMLElement>>('rolo');
   protected readonly ultimas = computed(() =>
     this.trocas()
@@ -157,8 +167,9 @@ export class DialogoConversaComponent {
       this.ultimas();
       this.recemChegada();
       this.progresso();
+      this.textoRevelado();
       const elemento = this.rolo()?.nativeElement;
-      if (elemento) elemento.scrollTop = elemento.scrollHeight;
+      if (elemento && this.acompanhar) elemento.scrollTop = elemento.scrollHeight;
     });
   }
 }

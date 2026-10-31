@@ -1,3 +1,4 @@
+import { PainelHudService } from './painel-hud.service';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
@@ -183,11 +184,11 @@ describe('ConversaService', () => {
     expect(servico.resposta()).toBeNull();
   });
   it('fala simples não ocupa a tela; só o que se olha segura o palco', async () => {
-    servico.chatAberto.set(true);
-    expect(servico.naTela()).toBe(true);
+    TestBed.inject(PainelHudService).abrir('conversa');
+    expect(servico.naTela()).toBe(false);
 
     // Fechado o chat, a resposta de texto é falada e guardada no histórico — a tela volta ao orbe.
-    servico.chatAberto.set(false);
+    TestBed.inject(PainelHudService).fechar();
     servico.receber(resposta());
     expect(servico.cartao()).toBeNull();
     expect(servico.naTela()).toBe(false);
@@ -238,11 +239,11 @@ describe('ConversaService', () => {
     expect(servico.naTela()).toBe(false);
   });
   it('chat aberto pela pessoa continua aberto depois da resposta', () => {
-    servico.chatAberto.set(true);
+    TestBed.inject(PainelHudService).abrir('conversa');
     servico.receber(resposta());
     // Quem abriu o chat foi a pessoa; só ela o fecha, no Recolher, no Esc ou no Ver briefing.
     expect(servico.chatAberto()).toBe(true);
-    expect(servico.naTela()).toBe(true);
+    expect(servico.naTela()).toBe(false);
     servico.recolher();
     expect(servico.naTela()).toBe(false);
   });
