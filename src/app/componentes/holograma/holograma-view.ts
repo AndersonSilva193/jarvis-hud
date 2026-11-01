@@ -15,7 +15,7 @@ import { PreviewGestosComponent } from './preview-gestos';
 import type { CenaHolograma, MedidaDaCena, PecaDestacada, PerfilDaCena } from './cena-holograma';
 
 /**
- * A camada do Holograma no palco: a cena 3D por baixo e o painel da HUD por cima.
+ * O palco imersivo do holograma: identificação, cena 3D e leitura da seleção/gestos.
  *
  * O componente desenha as peças do `HologramaService` na `CenaHolograma`, que é Three.js puro e roda
  * fora da zona do Angular. Tudo o que **mexe** na cena — botões, slider, toque, gestos, celular e os
@@ -27,11 +27,11 @@ import type { CenaHolograma, MedidaDaCena, PecaDestacada, PerfilDaCena } from '.
   imports: [PreviewGestosComponent],
   host: { class: 'holograma', '[class.holograma--gestos]': 'rastreio.ativo()' },
   template: `
-    <div class="cena" #alvo role="img" [attr.aria-label]="descricaoDaCena()"></div>
-    @if (falha()) { <p class="falha" role="alert">{{ falha() }}</p> }
-    <section class="painel titulo" aria-labelledby="holograma-nome">
-      <p class="rotulo">Holograma</p>
-      <h2 id="holograma-nome" class="nome">{{ holograma.meta()?.nome ?? 'Nenhum objeto' }}</h2>
+    <section class="titulo" aria-labelledby="holograma-nome">
+      <div class="identidade">
+        <p class="rotulo">Holograma</p>
+        <h2 id="holograma-nome" class="nome">{{ holograma.meta()?.nome ?? 'Novo holograma' }}</h2>
+      </div>
 
       <p class="estado" [class.estado--erro]="holograma.fase() === 'erro' || holograma.fase() === 'incompleto'" role="status" aria-live="polite" [attr.title]="dicaDosAvisos()">
         @if (holograma.construindo()) { <span class="pulso" aria-hidden="true"></span> }{{ estado() }}
@@ -39,19 +39,22 @@ import type { CenaHolograma, MedidaDaCena, PecaDestacada, PerfilDaCena } from '.
       @if (holograma.construindo()) { <button class="botao" type="button" (click)="comandos.cancelar()">Cancelar geração</button> }
 
     </section>
+    <div class="cena" #alvo role="img" [attr.aria-label]="descricaoDaCena()"></div>
+    @if (falha()) { <p class="falha" role="alert">{{ falha() }}</p> }
+    <div class="leitura">
+    @if (rastreio.ativo()) { <app-preview-gestos [gesto]="gesto()" /> }
     @if (destaque(); as peca) {
-      <p class="painel destaque"><strong>{{ peca.nome }}</strong><span>Grupo · {{ peca.grupo }}</span></p>
+      <p class="destaque"><strong>{{ peca.nome }}</strong><span>Grupo · {{ peca.grupo }}</span></p>
     } @else if (selecao(); as peca) {
-      <div class="painel destaque destaque--selecao">
+      <div class="destaque destaque--selecao">
         <strong>{{ peca.nome }}</strong><span>Selecionado · {{ peca.grupo }}</span>
       </div>
     }
-    @if (rastreio.ativo()) { <app-preview-gestos [gesto]="gesto()" /> }
     @if (medida(); as m) {
       <!-- Só com ?medir=1: ferramenta de quem mede, fora do leitor de tela. -->
-      <p class="painel medida" aria-hidden="true">{{ m.fps }} fps · {{ m.chamadas }} chamadas · {{ m.pecas }} peças · {{ m.lotes }} séries instanciadas</p>
+      <p class="medida" aria-hidden="true">{{ m.fps }} fps · {{ m.chamadas }} chamadas · {{ m.pecas }} peças · {{ m.lotes }} séries instanciadas</p>
     }
-
+    </div>
   `,
   styleUrl: './holograma-view.scss',
 })

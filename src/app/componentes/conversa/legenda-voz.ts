@@ -3,18 +3,21 @@ import { VozService } from '../../nucleo/voz.service';
 
 @Component({
   selector: 'app-legenda-voz',
+  host: { '[class.vazia]': 'compacta() && !transcricao() && !voz.trechoAtual()' },
   template: `<div #faixa class="faixa" role="region" aria-label="Legenda da fala" aria-live="off">
     <span class="quem">{{ transcricao() ? 'Você' : voz.trechoAtual() ? 'Jarvis' : '' }}</span>
     <p>{{ transcricao() || voz.trechoAtual() }}</p>
   </div>`,
   styles: `
     :host{display:block;flex-shrink:0;width:100%;max-width:60rem;align-self:center}
+    :host.vazia{display:none}
     .faixa{padding:.25rem .75rem;text-align:center;color:#dff4ff}
     .quem{display:block;height:1em;font:600 .6rem monospace;letter-spacing:.2em;text-transform:uppercase;color:#a6f8ff}
     p{margin:.35rem 0 0;height:3em;line-height:1.5;font-size:clamp(.85rem,1.2vw,1rem);overflow:hidden;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
   `,
 })
 export class LegendaVozComponent {
+  readonly compacta = input(false);
   readonly transcricao = input('');
   protected readonly voz = inject(VozService);
   private readonly faixa = viewChild.required<ElementRef<HTMLElement>>('faixa');

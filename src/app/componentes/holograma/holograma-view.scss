@@ -1,38 +1,45 @@
 @use '../../estilos/hud' as hud;
 
-// A camada ocupa o conteúdo inteiro, por baixo do palco: janelas abertas continuam por cima.
-:host{position:absolute;inset:0;z-index:4;display:block;overflow:hidden;color:hud.$texto;animation:acender .5s ease-out}
-.cena{position:absolute;inset:0;cursor:grab;mask-image:radial-gradient(ellipse 72% 70% at 50% 50%,#000 62%,transparent 100%)}
-.cena:active{cursor:grabbing}
-
-.painel{@include hud.moldura(12px);position:absolute;margin:0;padding:.85rem 1rem}
-.rotulo{margin:0 0 .45rem;@include hud.rotulo(.58rem)}
-.titulo{top:1rem;left:1rem;max-width:min(24rem,calc(100% - 2rem))}
-.nome{margin:0;font:600 1.05rem hud.$mono;letter-spacing:.12em;text-transform:uppercase;color:hud.$ciano-forte;@include hud.brilho-texto(hud.$ciano,.4)}
-.descricao{margin:.45rem 0 0;font-size:.78rem;line-height:1.45;color:#b9d3ea}
-.estado{display:flex;align-items:center;gap:.5rem;margin:.6rem 0 0;font:500 .66rem hud.$mono;letter-spacing:.16em;text-transform:uppercase;color:#9cefff}
-.estado--erro{color:hud.$erro}
-.pulso{width:6px;height:6px;border-radius:50%;background:hud.$ciano;box-shadow:0 0 10px hud.$azul-energia;animation:pulso 1s ease-in-out infinite}
-
-.destaque{left:1rem;bottom:1rem;display:flex;flex-direction:column;gap:.3rem;pointer-events:none}
-.destaque strong{font:600 .8rem hud.$mono;letter-spacing:.08em;color:hud.$ciano-forte}
-.destaque span{font:500 .6rem hud.$mono;letter-spacing:.18em;text-transform:uppercase;color:#a6bed8}
-.medida{right:1rem;bottom:1rem;padding:.4rem .6rem;pointer-events:none;font:500 .62rem hud.$mono;letter-spacing:.12em;color:#cdeaff}
-// Com a câmera no canto, o nome da peça passa para o lado dela.
-@media(min-width:701px){:host(.holograma--gestos) .destaque{left:13rem}}
-
-.botao{@include hud.botao(6px);min-height:44px;margin-top:.5rem}
-.botao:focus-visible{outline:2px solid #fff;outline-offset:-4px}
-.falha{position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);margin:0;color:hud.$erro;font:500 .75rem hud.$mono;letter-spacing:.1em}
-
-@keyframes acender{from{opacity:0}}
-@keyframes pulso{50%{opacity:.25}}
-@media(prefers-reduced-motion:reduce){:host,.pulso{animation:none}}
-@media(max-width:700px){
-  :host{position:relative;inset:auto;width:100%;min-height:56svh;align-self:stretch;justify-self:stretch}
-  .titulo{top:.5rem;left:.5rem;padding:.55rem .75rem}
-  .titulo .rotulo{display:none}
-  .nome{font-size:.9rem}
-  .destaque{bottom:.5rem;left:.5rem}
-  :host(.holograma--gestos) .destaque{left:9rem;max-width:calc(100% - 10rem)}
+// Três faixas reais: informações e câmera nunca disputam o mesmo espaço.
+:host {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  color: hud.$texto;
+  background: hud.$fundo;
+  animation: acender .35s ease-out;
+}
+.titulo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem 1.5rem;
+  padding: 1rem max(var(--respiro, 1rem), env(safe-area-inset-right)) .5rem max(var(--respiro, 1rem), env(safe-area-inset-left));
+}
+.identidade { min-width: 0; flex: 1 1 12rem; }
+.rotulo { margin: 0 0 .35rem; font: 500 .56rem hud.$mono; letter-spacing: .24em; text-transform: uppercase; color: #8fb6d8; }
+.nome { margin: 0; font: 500 clamp(.9rem, 1.2vw, 1.15rem) hud.$mono; letter-spacing: .1em; text-transform: uppercase; color: hud.$ciano-forte; overflow-wrap: anywhere; }
+.estado { display: flex; align-items: center; gap: .5rem; margin: 0; max-width: 32rem; font: 500 .66rem/1.5 hud.$mono; color: #a6bed8; overflow-wrap: anywhere; }
+.estado--erro { color: #ffadb8; }
+.pulso { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: hud.$ciano; animation: pulso 1s ease-in-out infinite; }
+.cena { position: relative; min-width: 0; min-height: 0; cursor: grab; }
+.cena:active { cursor: grabbing; }
+.leitura { display: flex; align-items: flex-end; flex-wrap: wrap; gap: .65rem 1rem; min-height: 2.5rem; padding: .4rem var(--respiro, 1rem) .65rem; }
+.destaque { display: flex; flex: 1 1 8rem; flex-direction: column; gap: .3rem; min-width: 0; margin: 0; pointer-events: none; overflow-wrap: anywhere; }
+.destaque strong { font: 500 .78rem hud.$mono; color: hud.$ciano-forte; }
+.destaque span { font: 500 .58rem hud.$mono; letter-spacing: .08em; text-transform: uppercase; color: #a6bed8; }
+.medida { margin: 0 0 0 auto; max-width: 100%; pointer-events: none; font: 500 .6rem/1.5 hud.$mono; color: #a6bed8; }
+.botao { @include hud.botao(6px); min-height: 44px; }
+.botao:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+.falha { position: absolute; inset: 50% 1rem auto; margin: 0; text-align: center; color: #ffadb8; font: 500 .8rem/1.5 hud.$mono; }
+@keyframes acender { from { opacity: 0; } }
+@keyframes pulso { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { :host, .pulso { animation: none; } }
+@media (max-width: 700px) {
+  .titulo { padding-block: .75rem .4rem; gap: .4rem; }
+  .estado { flex-basis: 100%; font-size: .6rem; }
+  .leitura { min-height: 2rem; }
 }

@@ -23,7 +23,6 @@ import {
   Raycaster,
   RingGeometry,
   Scene,
-  Sphere,
   Spherical,
   Vector2,
   Vector3,
@@ -49,6 +48,7 @@ import {
 } from '../../nucleo/holograma.modelos';
 import { FabricaDeGeometrias } from './geometrias-holograma';
 import { LoteDaSerie } from './lote-instanciado';
+import { calcularEnquadramento } from './enquadramento-holograma';
 
 /**
  * Acima de tantas peças, as cópias de um mesmo `rep`/`rad` passam a ser desenhadas num lote
@@ -115,8 +115,8 @@ export interface PontoNdc {
 }
 
 const BLOOM = {
-  completo: { forca: 0.6, raio: 0.35 },
-  reduzido: { forca: 0.45, raio: 0.25 },
+  completo: { forca: 0.28, raio: 0.2 },
+  reduzido: { forca: 0.16, raio: 0.15 },
 } as const;
 const ENTRADA_MS = 300;
 /** Quanto a inércia do giro perde por segundo (`e^(-k·dt)`). */
@@ -133,11 +133,11 @@ const OPACIDADE_PADRAO = 0.35;
  * dezenas de peças uma atrás da outra, 0.35 cheio somava acima de 1 e o objeto virava um borrão
  * branco. O contorno é que carrega a forma; a malha só tinge.
  */
-const PESO_DO_PREENCHIMENTO = 0.3;
+const PESO_DO_PREENCHIMENTO = 0.15;
 /** Só o que passa disso brilha: as linhas acendem, o preenchimento somado não. */
-const LIMIAR_DO_BLOOM = 0.45;
+const LIMIAR_DO_BLOOM = 0.75;
 const Y_DO_PISO = -2.4;
-// O `$fundo` da HUD: com a borda esfumada pela máscara do componente, a cena some no resto da tela.
+// Mesmo fundo da interface imersiva, sem máscara ou borda sobre o canvas.
 const FUNDO = 0x030a18;
 const CAMERA_INICIAL = new Vector3(6.5, 3.2, 8.5);
 const ALVO_INICIAL = new Vector3(0, -0.3, 0);
@@ -194,6 +194,10 @@ export class CenaHolograma {
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
   private readonly objeto = new Group();
+  private readonly piso = new Group();
+  private pisoPendente = false;
+  private largura = 0;
+  private altura = 0;
   private readonly aneis: Group[] = [];
   private readonly fixos: { dispose(): void }[] = [];
   private readonly fabrica: FabricaDeGeometrias;
@@ -251,7 +255,7 @@ export class CenaHolograma {
     this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opcoes.perfil.pixelRatioMaximo));
     this.fabrica = new FabricaDeGeometrias(opcoes.perfil.segmentos);
-    this.renderer.setClearColor(FUNDO, 1);
+    this.renderer.setClearColor(0x000000, 1);
     // Onde muitas peças se sobrepõem a soma aditiva passa de 1: o tone mapping (aplicado no
     // OutputPass) satura essa soma na cor da peça em vez de estourar em branco.
     this.renderer.toneMapping = ACESFilmicToneMapping;
@@ -262,8 +266,8 @@ export class CenaHolograma {
     tela.style.touchAction = 'none';
     host.appendChild(tela);
 
-    this.cena.background = new Color(FUNDO);
-    this.cena.fog = new FogExp2(FUNDO, 0.035);
+    this.cena.background = new Color(0x000000);
+    this.cena.fog = new FogExp2(0x000000, 0.02);
     this.camera.position.copy(CAMERA_INICIAL);
     this.cena.add(this.objeto);
     this.montarPiso();
@@ -289,7 +293,15 @@ export class CenaHolograma {
     const bloom = BLOOM[opcoes.perfil.bloom];
     this.bloom = new UnrealBloomPass(new Vector2(1, 1), bloom.forca, bloom.raio, LIMIAR_DO_BLOOM);
     this.composer.addPass(this.bloom);
-    this.composer.addPass(new OutputPass());
+    // O ACES escurece até o fundo. Somá-lo depois do tone mapping mantém o mesmo azul da
+    // interface e faz a névoa apagar as linhas nessa cor, sem retângulo ou máscara nas bordas.
+    const saida = new OutputPass();
+    saida.uniforms['fundoDaInterface'] = { value: new Color(FUNDO) };
+    saida.material.fragmentShader = saida.material.fragmentShader
+      .replace('void main() {', 'uniform vec3 fundoDaInterface;\nvoid main() {')
+      .replace('#ifdef SRGB_TRANSFER', 'gl_FragColor.rgb += fundoDaInterface;\n#ifdef SRGB_TRANSFER');
+    this.composer.addPass(saida);
+    this.fixos.push(saida);
 
     this.raio.params.Line.threshold = 0.06;
     tela.addEventListener('pointermove', this.aoMoverPonteiro);
@@ -316,7 +328,7 @@ export class CenaHolograma {
       direcao: dados.explosao ? new Vector3(...dados.explosao).normalize() : new Vector3(),
       direcaoPropria: dados.explosao !== null,
       nascimento: this.opcoes.movimentoReduzido ? -Infinity : performance.now(),
-      alvoContorno: Math.min(1, opacidade + 0.4),
+      alvoContorno: Math.min(0.7, opacidade + 0.2),
       destaque: 1,
     };
     // O filtro do momento vale para quem chega: "isola os pistões" durante a montagem segue isolando.
@@ -329,6 +341,7 @@ export class CenaHolograma {
     this.caixa.expandByPoint(base);
     this.caixa.getCenter(this.centro);
     for (const p of this.pecas) if (!p.direcaoPropria) direcaoPeloCentro(p, this.centro);
+    this.pisoPendente = true;
   }
 
   /** Larga o objeto atual e devolve à GPU geometrias e materiais. */
@@ -349,6 +362,9 @@ export class CenaHolograma {
     this.caixa.makeEmpty();
     this.centro.set(0, 0, 0);
     this.objeto.rotation.set(0, 0, 0);
+    this.piso.position.set(0, 0, 0);
+    this.piso.scale.setScalar(1);
+    this.pisoPendente = false;
     this.selecionada = null;
     this.destacar(null);
   }
@@ -369,12 +385,14 @@ export class CenaHolograma {
   explodir(fator: number, imediato = false): void {
     this.alvoExplosao = MathUtils.clamp(fator, 0, 1);
     if (imediato || this.opcoes.movimentoReduzido) this.fatorExplosao = this.alvoExplosao;
+    this.pisoPendente = true;
   }
 
   /** Gira o objeto (não a câmera) em volta de um eixo do mundo. */
   girarObjeto(eixo: EixoHolograma, radianos: number): void {
     if (!Number.isFinite(radianos)) return;
     this.objeto.rotation[eixo] += radianos;
+    this.pisoPendente = true;
     this.ultimaInteracao = performance.now();
   }
 
@@ -395,6 +413,7 @@ export class CenaHolograma {
     }
     if (this.selecionada && !this.selecionada.visivel) this.selecionada = null;
     if (this.destacada && !this.destacada.visivel) this.destacar(null);
+    this.pisoPendente = true;
   }
 
   /** Seleciona a peça pelo id que o servidor resolveu. */
@@ -414,28 +433,60 @@ export class CenaHolograma {
 
   /** Enquadra o objeto como está agora (já explodido, se for o caso), mantendo o ângulo da câmera. */
   centralizar(): void {
-    // Peça por peça, e não o grupo inteiro: o contorno de um lote tem a caixa de uma cópia só, na
-    // origem, e puxaria o enquadramento para o centro. A caixa do `InstancedMesh` cobre as cópias.
-    // As matrizes do lote só são escritas no quadro, e o enquadramento pode vir antes dele (a última
-    // peça e o `fim` no mesmo instante): com as cópias ainda na origem, a caixa encolheria.
-    const agora = performance.now();
-    for (const p of this.pecas) if (p.lote) this.animarPeca(p, agora, 0, null);
-    for (const lote of this.lotes) lote.publicar();
-    this.objeto.updateMatrixWorld();
-    const caixa = new Box3();
-    for (const p of this.pecas) if (p.raiz) caixa.expandByObject(p.raiz);
-    for (const lote of this.lotes) caixa.expandByObject(lote.malha);
+    this.enquadrar(this.camera.position.clone().sub(this.controles.target).normalize());
+  }
+
+  private enquadrar(direcao: Vector3): void {
+    // Usa a geometria em tamanho final e a explosão pedida, mesmo durante as animações de entrada.
+    const caixa = this.medirObjeto();
     if (caixa.isEmpty()) {
       this.voar(CAMERA_INICIAL, ALVO_INICIAL);
       return;
     }
-    const esfera = caixa.getBoundingSphere(new Sphere());
-    const meiaAbertura = MathUtils.degToRad(this.camera.fov / 2);
-    let distancia = (esfera.radius / Math.sin(meiaAbertura)) * 1.1;
-    if (this.camera.aspect < 1) distancia /= this.camera.aspect;
-    distancia = MathUtils.clamp(distancia, this.controles.minDistance, this.controles.maxDistance);
-    const direcao = this.camera.position.clone().sub(this.controles.target).normalize();
-    this.voar(esfera.center.clone().addScaledVector(direcao, distancia), esfera.center);
+    this.posicionarPiso(caixa);
+    // A base também precisa caber: sua caixa é plana e não inclui a varredura decorativa.
+    const raioDoPiso = this.piso.scale.x * 3.6;
+    const centroDoPiso = this.piso.position.clone().add(new Vector3(0, Y_DO_PISO * this.piso.scale.y, 0));
+    caixa.expandByPoint(centroDoPiso.clone().add(new Vector3(-raioDoPiso, 0, -raioDoPiso)));
+    caixa.expandByPoint(centroDoPiso.clone().add(new Vector3(raioDoPiso, 0, raioDoPiso)));
+    const quadro = calcularEnquadramento(caixa, this.camera.aspect, this.camera.fov, direcao);
+    this.controles.maxDistance = Math.max(24, quadro.distancia * 3);
+    this.camera.far = Math.max(200, this.controles.maxDistance + quadro.raio * 2);
+    (this.cena.fog as FogExp2).density = 0.06 / Math.max(1, quadro.raio);
+    this.camera.updateProjectionMatrix();
+    this.voar(quadro.posicao, quadro.alvo);
+  }
+
+  /** A mesma medição para avulsas e instâncias, sem depender do último quadro publicado na GPU. */
+  private medirObjeto(): Box3 {
+    this.objeto.updateMatrixWorld();
+    const caixa = new Box3();
+    const transformacao = new Matrix4();
+    const posicao = new Vector3();
+    const escala = new Vector3(1, 1, 1);
+    const limite = new Box3();
+    for (const p of this.pecas) {
+      if (!p.visivel) continue;
+      const geometria = this.fabrica.obter(p.dados);
+      const forma = geometria.malha ?? geometria.contorno;
+      if (!forma.boundingBox) forma.computeBoundingBox();
+      if (!forma.boundingBox) continue;
+      posicao.copy(p.base).addScaledVector(p.direcao, this.alvoExplosao * DISTANCIA_DA_EXPLOSAO);
+      transformacao.compose(posicao, p.giro, escala).premultiply(this.objeto.matrixWorld);
+      caixa.union(limite.copy(forma.boundingBox).applyMatrix4(transformacao));
+    }
+    return caixa;
+  }
+
+  private posicionarPiso(caixa: Box3): void {
+    this.pisoPendente = false;
+    if (caixa.isEmpty()) return;
+    const tamanho = caixa.getSize(new Vector3());
+    const centro = caixa.getCenter(new Vector3());
+    const escala = Math.max(0.65, Math.max(tamanho.x, tamanho.z) * 0.6) / 3.4;
+    const y = caixa.min.y - Math.max(0.06, tamanho.y * 0.03);
+    this.piso.scale.setScalar(escala);
+    this.piso.position.set(centro.x, y - Y_DO_PISO * escala, centro.z);
   }
 
   resetar(): void {
@@ -443,7 +494,7 @@ export class CenaHolograma {
     this.inercia.set(0, 0);
     this.objeto.rotation.set(0, 0, 0);
     this.selecionada = null;
-    this.voar(CAMERA_INICIAL, ALVO_INICIAL);
+    this.enquadrar(CAMERA_INICIAL.clone().sub(ALVO_INICIAL).normalize());
     this.ultimaInteracao = -Infinity;
   }
 
@@ -572,14 +623,23 @@ export class CenaHolograma {
   }
 
   private montarPiso(): void {
-    const grade = new PolarGridHelper(7, 16, 7, 96, 0x1d5677, 0x0e2c45);
+    this.cena.add(this.piso);
+    const grade = new PolarGridHelper(3.6, 12, 6, 96, 0x285a71, 0x163c52);
     grade.position.y = Y_DO_PISO;
     // O helper sempre cria um LineBasicMaterial; o tipo dele é que é o genérico de Line.
     const materialDaGrade = grade.material as LineBasicMaterial;
     materialDaGrade.transparent = true;
-    materialDaGrade.opacity = 0.45;
+    materialDaGrade.opacity = 0.25;
     materialDaGrade.depthWrite = false;
-    this.cena.add(grade);
+    // Atenuação radial nos vértices: a grade apaga antes de chegar à borda do palco.
+    const posicoes = grade.geometry.getAttribute('position');
+    const cores = grade.geometry.getAttribute('color');
+    for (let i = 0; i < posicoes.count; i++) {
+      const raio = Math.hypot(posicoes.getX(i), posicoes.getZ(i)) / 3.6;
+      const peso = 1 - MathUtils.smoothstep(raio, 0.45, 1);
+      cores.setXYZ(i, cores.getX(i) * peso, cores.getY(i) * peso, cores.getZ(i) * peso);
+    }
+    this.piso.add(grade);
     this.fixos.push(grade.geometry, materialDaGrade);
 
     for (const anel of ANEIS) {
@@ -588,7 +648,7 @@ export class CenaHolograma {
       grupo.rotation.x = -Math.PI / 2;
       grupo.userData['velocidade'] = anel.velocidade;
       const material = new MeshBasicMaterial({
-        color: anel.cor, transparent: true, opacity: 0.55, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
+        color: anel.cor, transparent: true, opacity: 0.28, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
       });
       this.fixos.push(material);
       const passo = (2 * Math.PI) / anel.arcos;
@@ -598,7 +658,7 @@ export class CenaHolograma {
         grupo.add(new Mesh(geometria, material));
       }
       this.aneis.push(grupo);
-      this.cena.add(grupo);
+      this.piso.add(grupo);
     }
   }
 
@@ -619,7 +679,7 @@ export class CenaHolograma {
     anel.position.y = Y_DO_PISO + 0.04;
     grupo.add(disco, anel);
     this.fixos.push(disco.geometry, materialDisco, anel.geometry, materialAnel);
-    this.cena.add(grupo);
+    this.piso.add(grupo);
     this.varredura = { grupo, anel, materialAnel, materialDisco };
   }
 
@@ -763,6 +823,9 @@ export class CenaHolograma {
     const largura = this.host.clientWidth;
     const altura = this.host.clientHeight;
     if (!largura || !altura) return;
+    const mudou = largura !== this.largura || altura !== this.altura;
+    this.largura = largura;
+    this.altura = altura;
     this.renderer.setSize(largura, altura, false);
     this.composer.setSize(largura, altura);
     if (this.opcoes.perfil.bloom === 'reduzido') {
@@ -772,6 +835,7 @@ export class CenaHolograma {
     }
     this.camera.aspect = largura / altura;
     this.camera.updateProjectionMatrix();
+    if (mudou && this.pecas.length) this.centralizar();
   }
 
   private readonly passo = (agora: number): void => {
@@ -779,6 +843,8 @@ export class CenaHolograma {
     const dt = Math.min(0.1, Math.max(0, (agora - this.anterior) / 1000));
     this.anterior = agora;
     const reduzido = this.opcoes.movimentoReduzido;
+
+    if (this.pisoPendente) this.posicionarPiso(this.medirObjeto());
 
     this.fatorExplosao += (this.alvoExplosao - this.fatorExplosao) * suave(dt, 7);
     if (Math.abs(this.alvoExplosao - this.fatorExplosao) < 1e-4) this.fatorExplosao = this.alvoExplosao;

@@ -11,6 +11,7 @@ import { LegendaVozComponent } from '../../componentes/conversa/legenda-voz';
 import { FerramentasHologramaComponent } from '../../componentes/holograma/ferramentas-holograma';
 import { PainelHudService } from '../../nucleo/painel-hud.service';
 import { HttpErrorResponse } from '@angular/common/http';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import { HologramaViewComponent } from '../../componentes/holograma/holograma-view';
@@ -62,9 +63,10 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
     InicializacaoComponent,
     HologramaViewComponent,
     RouterLink,
+    NgTemplateOutlet,
   ],
   templateUrl: './hud.page.html',
-  styleUrls: ['./hud.page.scss', './fileira.scss', './conversa.scss', './janelas.scss'],
+  styleUrls: ['./hud.page.scss', './fileira.scss', './conversa.scss', './janelas.scss', './imersivo.scss'],
 })
 export class HudPage implements OnInit, OnDestroy {
   protected readonly tela = inject(TelaService);
@@ -73,6 +75,7 @@ export class HudPage implements OnInit, OnDestroy {
   private readonly estadoTela = inject(TelaEstadoService);
   private readonly areaJanelas = viewChild<ElementRef<HTMLElement>>('areaJanelas');
   private readonly bandejaPlayer = viewChild<ElementRef<HTMLElement>>('bandejaPlayer');
+  private readonly atalhoFerramentas = viewChild<ElementRef<HTMLButtonElement>>('atalhoFerramentas');
 
   protected readonly conversa = inject(ConversaService);
   protected readonly painel = inject(PainelHudService);
@@ -87,7 +90,7 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly escutaDeResposta = inject(EscutaDeRespostaService);
   protected readonly inicio = inject(InicializacaoService);
   protected readonly holograma = inject(HologramaService);
-  private readonly comandosDoHolograma = inject(ComandosDoHologramaService);
+  protected readonly comandosDoHolograma = inject(ComandosDoHologramaService);
   /** Conta ao servidor como está o holograma; injetar já o liga. */
   private readonly estadoDoHolograma = inject(HologramaEstadoService);
   private readonly api = inject(JarvisApiService);
@@ -179,6 +182,14 @@ export class HudPage implements OnInit, OnDestroy {
   private ativa = true;
 
   constructor() {
+    let estavaNoHolograma = false;
+    afterRenderEffect(() => {
+      const aberto = this.holograma.aberto();
+      if (estavaNoHolograma && !aberto && !this.painel.ativo()) {
+        this.atalhoFerramentas()?.nativeElement.focus({ preventScroll: true });
+      }
+      estavaNoHolograma = aberto;
+    });
     afterRenderEffect((limpar) => {
       const area = this.areaJanelas()?.nativeElement;
       const bandeja = this.bandejaPlayer()?.nativeElement;
@@ -431,6 +442,11 @@ export class HudPage implements OnInit, OnDestroy {
     const abrindo = !this.holograma.aberto();
     this.holograma.alternar();
     if (abrindo && !this.holograma.pecas().length) this.painel.abrir('ferramentas');
+  }
+
+  protected sairDoHolograma(): void {
+    this.painel.fechar();
+    this.comandosDoHolograma.fechar();
   }
 
   protected consultarBriefing(): void {

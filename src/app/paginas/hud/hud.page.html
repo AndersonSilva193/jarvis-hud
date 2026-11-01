@@ -1,4 +1,4 @@
-<div class="hud">
+<div class="hud" [class.hud--holograma]="holograma.aberto()">
   @if (inicio.rodando()) {
     <app-inicializacao />
   }
@@ -8,12 +8,15 @@
   <header class="cabecalho">
     <h1 class="nome-hud"><a class="marca" routerLink="/">J.A.R.V.I.S.<span>ASSISTENTE PESSOAL</span></a></h1>
     <span class="conexao"><span class="luz" [class.luz--online]="eventos.status() === 'online'" aria-hidden="true"></span>{{ estadoDaConexao() }}</span>
+    @if (holograma.aberto()) { <ng-container [ngTemplateOutlet]="estadoJarvis" /> }
     <span class="sinal-voz" [class.sinal-voz--ligado]="escuta.disponivel && escuta.ligada()" [class.sinal-voz--ativo]="voz.falando() || escuta.ouvindo()">
       <span class="barras" aria-hidden="true"><i></i><i></i><i></i><i></i></span>{{ sinalDeVoz() }}
     </span>
     <span class="relogio" aria-hidden="true">{{ relogio() }}</span>
   </header>
-  <div class="estado-central">
+  @if (!holograma.aberto()) { <ng-container [ngTemplateOutlet]="estadoJarvis" /> }
+  <ng-template #estadoJarvis>
+  <div class="estado-central" [class.estado-central--resposta]="escutaDeResposta.fase() !== 'inativa'">
     <p class="falando" role="status" aria-live="polite"><span class="ponto" [class.ponto--ativo]="voz.falando() || escuta.ouvindo() || conversa.ocupada()" aria-hidden="true"></span>{{ estadoApresentacao() }}</p>
     @if (escutaDeResposta.fase() !== 'inativa') {
       @if (escutaDeResposta.motivo()) { <p class="motivo-resposta">{{ escutaDeResposta.motivo() }}</p> }
@@ -36,6 +39,7 @@
     }
     <div class="tracos" aria-hidden="true"></div>
   </div>
+  </ng-template>
   <div class="corpo-hud" [class.corpo-hud--painel]="painel.ativo() !== null">
   <div class="coluna-palco">
   <main class="conteudo" [class.conteudo--holograma]="holograma.aberto()" aria-label="Janelas do Jarvis">
@@ -52,7 +56,10 @@
       }
     </div>
   </main>
-  @if (concluidos().length) {
+  @if (concluidos().length && !holograma.aberto()) {
+    <ng-container [ngTemplateOutlet]="arquivoBriefing" />
+  }
+  <ng-template #arquivoBriefing>
     <section class="arquivo" aria-label="Arquivo do briefing">
       <p class="rotulo-arquivo">{{ player.restaurado() ? 'Último briefing' : 'Briefing' }} <span>· gerado em {{ geracaoBriefing() }}</span></p>
       <nav class="fileira" aria-label="Cards do briefing">
@@ -65,8 +72,8 @@
         }
       </nav>
     </section>
-  }
-  <app-legenda-voz [transcricao]="escuta.ditando() ? escuta.transcricao().slice(-voz.limiteLegenda()) : ''" />
+  </ng-template>
+  <app-legenda-voz [compacta]="holograma.aberto()" [transcricao]="escuta.ditando() ? escuta.transcricao().slice(-voz.limiteLegenda()) : ''" />
   @if (janelas.minimizadas().length) {
     <section class="bandeja" aria-label="Janelas minimizadas">
       @if (midia.bandeja()) { <div class="espaco-player" #bandejaPlayer></div> }
@@ -98,6 +105,12 @@
       </div>
       @if (cota.rotulo(); as rotulo) { <p class="cota-voz">{{ rotulo }}</p> }
       @if (holograma.aberto()) { <app-ferramentas-holograma /> }
+      @if (holograma.aberto() && concluidos().length) {
+        <details class="briefing-recolhido">
+          <summary>Cards do briefing</summary>
+          <ng-container [ngTemplateOutlet]="arquivoBriefing" />
+        </details>
+      }
     </section>
   </app-painel-hud>
   </div>
@@ -120,10 +133,17 @@
       @if (briefingGuardado()) { <span>Um briefing está disponível para consulta.</span> }
     </div>
     <div class="acoes" role="group" aria-label="Atalhos da HUD">
+      @if (holograma.aberto()) {
+        <button class="botao" type="button" [disabled]="!holograma.pecas().length" (click)="comandosDoHolograma.centralizar()">Centralizar</button>
+        <button class="botao" type="button" [disabled]="!holograma.pecas().length" [attr.aria-pressed]="comandosDoHolograma.explosao() > 0" (click)="comandosDoHolograma.alternarExplosao()">{{ comandosDoHolograma.explosao() > 0 ? 'Montar' : 'Explodir' }}</button>
+      }
       <span class="microfone-compacto">{{ sinalDeVoz() }}</span>
       @if (player.fase() === 'tocando' || voz.falando() || voz.preparando()) { <button class="botao" type="button" (click)="player.parar(true)">Parar fala</button> }
-      <button class="botao" type="button" aria-controls="painel-hud" [attr.aria-expanded]="painel.ativo() === 'conversa'" (click)="painel.alternar('conversa')">Conversa</button>
-      <button class="botao" type="button" aria-controls="painel-hud" [attr.aria-expanded]="painel.ativo() === 'ferramentas'" (click)="painel.alternar('ferramentas')">Ferramentas</button>
+      <button class="botao atalho-conversa" type="button" aria-controls="painel-hud" [attr.aria-expanded]="painel.ativo() === 'conversa'" (click)="painel.alternar('conversa')">Conversa</button>
+      <button #atalhoFerramentas class="botao" type="button" aria-controls="painel-hud" [attr.aria-expanded]="painel.ativo() === 'ferramentas'" (click)="painel.alternar('ferramentas')">Ferramentas</button>
+      @if (holograma.aberto()) {
+        <button class="botao sair-holograma" type="button" (click)="sairDoHolograma()">Sair do holograma</button>
+      }
     </div>
   </footer>
 </div>

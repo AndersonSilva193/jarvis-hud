@@ -62,21 +62,16 @@ import { GaleriaHologramaComponent } from './galeria-holograma';
     </details>
     <details open>
       <summary>Visualização</summary>
-      <div class="controles" role="group" aria-label="Controles do holograma">
-      <button class="botao botao--explodir" type="button" [attr.aria-pressed]="explosao() > 0" (click)="comandos.alternarExplosao()">
-        {{ explosao() > 0 ? 'Montar' : 'Explodir' }}
-      </button>
+      <div class="controles" role="group" aria-label="Ajustes da visualização">
       <label class="explosao">
         <span>Vista explodida</span>
         <input type="range" min="0" max="100" step="1" [value]="explosao()" [attr.aria-valuetext]="explosao() + '%'" (input)="aoExplodir($event)" />
         <output aria-hidden="true">{{ explosao() }}%</output>
       </label>
-      <button class="botao" type="button" (click)="comandos.centralizar()">Centralizar</button>
       <button class="botao" type="button" (click)="comandos.resetar()">Resetar</button>
       @if (comandos.selecao()) {
         <button class="botao" type="button" (click)="comandos.limparSelecao()">Limpar seleção</button>
       }
-      <button class="botao" type="button" (click)="comandos.fechar()">Fechar</button>
       </div>
     </details>
     <details>

@@ -1,0 +1,83 @@
+@use '../../estilos/hud' as hud;
+
+// O holograma tem seu próprio palco. O fundo é o mesmo usado pelo renderer.
+.hud--holograma {
+  --respiro: clamp(1rem, 2vw, 2rem);
+  padding: 0;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: hud.$fundo;
+
+  > .vinheta, > .grade, > .varredura, > .cantos { display: none; }
+
+  .cabecalho {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    gap: 1rem;
+    flex-shrink: 0;
+    padding: max(1rem, env(safe-area-inset-top)) max(var(--respiro), env(safe-area-inset-right)) 1rem max(var(--respiro), env(safe-area-inset-left));
+    border-bottom: 1px solid #193344;
+  }
+
+  .marca { font-size: .85rem; }
+  .marca span { display: none; }
+  .estado-central { min-width: 0; min-height: 0; }
+  .falando { font-size: .62rem; letter-spacing: .12em; overflow-wrap: anywhere; }
+  .tracos, .microfone-compacto { display: none; }
+  .sinal-voz { margin: 0; font-size: .55rem; }
+  .conexao, .relogio { font-size: .6rem; }
+
+  .corpo-hud { position: relative; flex: 1 1 0; min-height: 0; gap: 0; }
+  .coluna-palco { min-height: 0; gap: 0; overflow: hidden; }
+  .conteudo--holograma { min-height: 0; flex: 1 1 0; }
+  .orbe, .sondas { visibility: hidden; }
+  app-painel-hud { min-height: 0; }
+  app-legenda-voz { padding-inline: var(--respiro); }
+
+  .rodape {
+    margin: 0;
+    gap: .5rem;
+    padding: .65rem max(var(--respiro), env(safe-area-inset-right)) max(.65rem, env(safe-area-inset-bottom)) max(var(--respiro), env(safe-area-inset-left));
+    border-top: 1px solid #193344;
+    max-height: 40dvh;
+    overflow-y: auto;
+  }
+  .avisos:empty { display: none; }
+  .avisos { max-width: none; width: 100%; }
+  .acoes { width: 100%; margin: 0; justify-content: flex-start; gap: .5rem; }
+  .atalho-conversa { margin-left: auto; }
+  .botao:focus-visible { outline-offset: -4px; }
+  .sair-holograma { background: transparent; }
+  .bandeja { padding-inline: var(--respiro); max-height: 35dvh; overflow: auto; }
+  .briefing-recolhido { border-top: 1px solid #305a70; padding-top: .8rem; }
+  .briefing-recolhido summary { min-height: 44px; align-content: center; cursor: pointer; color: hud.$ciano-forte; font-size: .78rem; }
+  .briefing-recolhido .fileira { flex-direction: column; }
+  .briefing-recolhido .miniatura { flex: auto; max-width: none; width: 100%; }
+}
+
+@media (max-width: 1023px) {
+  .hud--holograma {
+    // O dialog é fixo no celular; seu host não cria uma segunda linha vazia no grid.
+    app-painel-hud { position: absolute; }
+    .cabecalho { grid-template-columns: auto 1fr auto; gap: .65rem; }
+    .relogio { display: none; }
+    .conexao { justify-self: end; grid-column: 3; }
+    .estado-central { grid-row: 2; grid-column: 1 / 3; text-align: left; }
+    .falando, .ouvindo-resposta, .opcoes-resposta { justify-content: flex-start; }
+    .sinal-voz { display: inline-flex; grid-row: 2; grid-column: 3; letter-spacing: .08em; }
+  }
+}
+
+@media (max-width: 700px) {
+  .hud--holograma {
+    .cabecalho { padding-block: max(.75rem, env(safe-area-inset-top)) .65rem; }
+    .acoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .atalho-conversa { margin-left: 0; }
+    .sair-holograma { grid-column: 1 / -1; }
+    .acoes .botao { padding-inline: .4rem; font-size: .6rem; }
+    .opcoes-resposta { gap: .25rem; }
+    .estado-central--resposta { grid-column: 1 / -1; grid-row: 3; }
+    .bandeja { max-height: 28dvh; }
+  }
+}

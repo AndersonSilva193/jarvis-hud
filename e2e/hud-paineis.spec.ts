@@ -120,7 +120,8 @@ test('recolher ferramentas preserva a cena e o controle do holograma', async ({ 
   await page.getByRole('button', { name: 'Fechar painel' }).click();
   await expect(canvas).toBeVisible();
   await expect(canvas).toHaveAttribute('data-instancia', 'original');
-  await expect(page.getByRole('button', { name: 'Explodir', exact: true })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Montar', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Centralizar', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
   await expect(page.getByLabel('Vista explodida')).toHaveValue('70');
   await expect(canvas).toHaveAttribute('data-instancia', 'original');

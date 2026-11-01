@@ -95,9 +95,13 @@ async function abrirEGerar(page: Page, objeto: string): Promise<void> {
 async function aindaResponde(page: Page): Promise<void> {
   const quadro = await page.evaluate(() => new Promise<boolean>((r) => requestAnimationFrame(() => r(true))));
   expect(quadro).toBe(true);
-  await page.getByRole('button', { name: 'Explodir' }).click();
-  await expect(page.getByRole('button', { name: 'Montar' })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Montar' }).click();
+  if (await page.getByRole('button', { name: 'Explodir' }).isEnabled()) {
+    await page.getByRole('button', { name: 'Explodir' }).click();
+    await expect(page.getByRole('button', { name: 'Montar' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Montar' }).click();
+  } else {
+    await expect(page.getByRole('button', { name: 'Centralizar' })).toBeDisabled();
+  }
   // Durante a geração o botão é "Cancelar"; fora dela, "Gerar".
   await expect(page.getByRole('button', { name: /^(Gerar|Cancelar)$/ })).toBeEnabled();
 }
