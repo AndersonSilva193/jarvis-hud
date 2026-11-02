@@ -8,9 +8,14 @@ type JanelaTeste = Window & {
 };
 
 async function emitir(page: Page, nome: string, dados: unknown): Promise<void> {
-  await page.evaluate(({ nome, dados }) => {
-    (window as JanelaTeste).sseTeste.dispatchEvent(new MessageEvent(nome, { data: JSON.stringify(dados) }));
-  }, { nome, dados });
+  await page.evaluate(
+    ({ nome, dados }) => {
+      (window as JanelaTeste).sseTeste.dispatchEvent(
+        new MessageEvent(nome, { data: JSON.stringify(dados) }),
+      );
+    },
+    { nome, dados },
+  );
 }
 
 test.beforeEach(async ({ page }) => {
@@ -35,21 +40,33 @@ test.beforeEach(async ({ page }) => {
       paused = true;
       onended: (() => void) | null = null;
       onerror: (() => void) | null = null;
-      constructor() { Object.assign(window, { audioTeste: this }); }
-      async play(): Promise<void> { this.paused = false; }
-      pause(): void { this.paused = true; }
+      constructor() {
+        Object.assign(window, { audioTeste: this });
+      }
+      async play(): Promise<void> {
+        this.paused = false;
+      }
+      pause(): void {
+        this.paused = true;
+      }
     }
     Object.assign(window, {
-      EventSource: FonteTeste, Audio: AudioTeste, AudioContext: undefined,
-      SpeechRecognition: undefined, webkitSpeechRecognition: undefined,
+      EventSource: FonteTeste,
+      Audio: AudioTeste,
+      AudioContext: undefined,
+      SpeechRecognition: undefined,
+      webkitSpeechRecognition: undefined,
     });
   });
-  await page.route('https://api.hud.test/**', async route => {
+  await page.route('https://api.hud.test/**', async (route) => {
     const caminho = new URL(route.request().url()).pathname;
     const corpo = caminho.endsWith('/historico')
       ? { sessao: 'teste', revisao: 0, trocas: [], emAndamento: null, ultima: null }
-      : caminho.endsWith('/sintetizar') ? { provedor: 'elevenlabs', url: '/api/voz/audio/teste' }
-      : caminho.endsWith('/galeria') ? [] : null;
+      : caminho.endsWith('/sintetizar')
+        ? { provedor: 'elevenlabs', url: '/api/voz/audio/teste' }
+        : caminho.endsWith('/galeria')
+          ? []
+          : null;
     await route.fulfill({ json: corpo });
   });
   await page.goto('/');
@@ -67,10 +84,11 @@ test('laterais reservam espaço, preservam rascunho e devolvem o foco', async ({
   const area = (await palco.boundingBox())!;
   const painel = (await dialogo.boundingBox())!;
   expect(painel.width).toBe(380);
-  expect(area.width).toBeLessThan(larguraInicial);
+  expect(area.width).toBeLessThan((await page.locator('.corpo-hud').boundingBox())!.width);
   expect(area.x + area.width).toBeLessThanOrEqual(painel.x);
   await page.getByRole('button', { name: 'Ferramentas', exact: true }).click();
-  await expect(page.getByLabel('Sua mensagem')).toBeHidden();
+  await expect(page.getByLabel('Sua mensagem')).toBeVisible();
+  await expect(page.locator('#mensagem-jarvis')).toHaveCount(1);
   await page.getByRole('button', { name: 'Conversa', exact: true }).click();
   await expect(page.getByLabel('Sua mensagem')).toHaveValue('Continuar estudando serotonina');
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -83,26 +101,55 @@ test('laterais reservam espaço, preservam rascunho e devolvem o foco', async ({
 
 test('pedido e fala não abrem o chat; legenda e resposta acompanham o áudio', async ({ page }) => {
   const resposta: RespostaConversa = {
-    id: 'r1', canal: 'hud', texto: 'Texto completo para consulta posterior.',
+    id: 'r1',
+    canal: 'hud',
+    texto: 'Texto completo para consulta posterior.',
     fala: 'Aqui está a molécula de serotonina, senhor. A visualização está pronta para explorar.',
-    anexos: [], confirmacao: null, erro: null, concluidoEm: '2026-10-30T23:00:00Z',
+    anexos: [],
+    confirmacao: null,
+    erro: null,
+    concluidoEm: '2026-10-30T23:00:00Z',
   };
-  await page.route('https://api.hud.test/api/conversa/historico', route => route.fulfill({
-    json: { sessao: 'teste', revisao: 1, trocas: [], emAndamento: null, ultima: resposta },
-  }));
-  await page.route('https://api.hud.test/api/conversa/ultima', route => route.fulfill({ json: resposta }));
-  await emitir(page, 'conversa.pensando', { id: 'r1', canal: 'hud', estado: 'processando' });
+  let concluida = false;
+  const pedido = {
+    id: 'r1',
+    canal: 'hud',
+    estado: 'processando',
+    texto: 'Mostre a molécula',
+    iniciadoEm: '',
+  };
+  await page.route('https://api.hud.test/api/conversa/historico', (route) =>
+    route.fulfill({
+      json: {
+        sessao: 'teste',
+        revisao: concluida ? 1 : 0,
+        trocas: [],
+        emAndamento: concluida ? null : pedido,
+        ultima: concluida ? resposta : null,
+      },
+    }),
+  );
+  await page.route('https://api.hud.test/api/conversa/ultima', (route) =>
+    route.fulfill({ json: concluida ? resposta : null }),
+  );
+  await emitir(page, 'conversa.pensando', pedido);
   await expect(page.locator('#painel-hud')).toBeHidden();
+  concluida = true;
   await emitir(page, 'conversa.resposta', resposta);
   const legenda = page.getByRole('region', { name: 'Legenda da fala' }).locator('p');
   await expect(legenda).toHaveText('Aqui');
   await expect(page.locator('#painel-hud')).toBeHidden();
   await page.getByRole('button', { name: 'Conversa', exact: true }).click();
   await expect(page.locator('app-dialogo-conversa .fala')).toHaveText('JarvisAqui');
-  await page.evaluate(() => { (window as JanelaTeste).audioTeste.currentTime = 6; });
+  await page.evaluate(() => {
+    (window as JanelaTeste).audioTeste.currentTime = 6;
+  });
   await expect(legenda).not.toHaveText('Aqui');
   await expect(page.locator('app-dialogo-conversa .fala')).not.toContainText(resposta.texto);
-  const altura = await legenda.evaluate(el => ({ altura: el.clientHeight, linha: Number.parseFloat(getComputedStyle(el).lineHeight) }));
+  const altura = await legenda.evaluate((el) => ({
+    altura: el.clientHeight,
+    linha: Number.parseFloat(getComputedStyle(el).lineHeight),
+  }));
   expect(altura.altura).toBeLessThanOrEqual(altura.linha * 2 + 1);
   await page.evaluate(() => (window as JanelaTeste).audioTeste.onended?.());
   await expect(page.locator('app-dialogo-conversa .fala')).toContainText(resposta.texto);
@@ -115,7 +162,7 @@ test('recolher ferramentas preserva a cena e o controle do holograma', async ({ 
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
   const canvas = page.locator('app-holograma-view canvas');
   await expect(canvas).toHaveCount(1);
-  await canvas.evaluate(el => el.setAttribute('data-instancia', 'original'));
+  await canvas.evaluate((el) => el.setAttribute('data-instancia', 'original'));
   await page.getByLabel('Vista explodida').fill('70');
   await page.getByRole('button', { name: 'Fechar painel' }).click();
   await expect(canvas).toBeVisible();
@@ -134,11 +181,11 @@ test('no celular o painel é modal, contém o foco e preserva o rascunho', async
   await page.getByRole('button', { name: 'Conversa', exact: true }).click();
   const dialogo = page.getByRole('dialog', { name: 'Conversa', exact: true });
   await expect(dialogo).toBeVisible();
-  expect(await dialogo.evaluate(el => el.matches(':modal'))).toBe(true);
+  expect(await dialogo.evaluate((el) => el.matches(':modal'))).toBe(true);
   await page.getByLabel('Sua mensagem').fill('Rascunho no celular');
   for (let i = 0; i < 8; i++) {
     await page.keyboard.press('Tab');
-    expect(await dialogo.evaluate(el => el.contains(document.activeElement))).toBe(true);
+    expect(await dialogo.evaluate((el) => el.contains(document.activeElement))).toBe(true);
   }
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.screenshot({ path: test.info().outputPath('conversa-mobile.png') });

@@ -1,8 +1,19 @@
-import { JanelaComponent } from '../../componentes/janela/janela';
+﻿import { JanelaComponent } from '../../componentes/janela/janela';
 import { ConteudoJanelaComponent } from '../../componentes/janela/conteudo-janela';
 import { TelaService } from '../../nucleo/tela.service';
 import { TelaEstadoService } from '../../nucleo/tela-estado.service';
-import { Component, OnDestroy, OnInit, computed, effect, inject, signal, afterRenderEffect, viewChild, ElementRef } from '@angular/core';
+import {
+  Component,
+  OnDestroy,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+  afterRenderEffect,
+  viewChild,
+  ElementRef,
+} from '@angular/core';
 import { ConversaService } from '../../nucleo/conversa.service';
 import { BarraConversaComponent } from '../../componentes/conversa/barra-conversa';
 import { DialogoConversaComponent } from '../../componentes/conversa/dialogo-conversa';
@@ -11,13 +22,21 @@ import { LegendaVozComponent } from '../../componentes/conversa/legenda-voz';
 import { FerramentasHologramaComponent } from '../../componentes/holograma/ferramentas-holograma';
 import { PainelHudService } from '../../nucleo/painel-hud.service';
 import { HttpErrorResponse } from '@angular/common/http';
-import { NgTemplateOutlet } from '@angular/common';
+import { NgOptimizedImage, NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import { HologramaViewComponent } from '../../componentes/holograma/holograma-view';
 import { InicializacaoComponent } from '../../componentes/inicializacao/inicializacao';
-import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
-import { SondasComponent } from '../../componentes/sondas/sondas';
+import { NucleoJarvisComponent } from '../../componentes/nucleo-jarvis/nucleo-jarvis';
+import { IconeHudComponent } from '../../componentes/icone-hud/icone-hud';
+import {
+  AgenteHudComponent,
+  AtividadesHudComponent,
+  CapacidadesHudComponent,
+  ExecucoesHudComponent,
+  MemoriaHudComponent,
+} from '../../componentes/paineis-agente/paineis-agente';
+import { AtividadeHudService, type EstadoJarvis } from '../../nucleo/atividade-hud.service';
 import { BriefingPlayerService } from '../../nucleo/briefing-player.service';
 import { normalizar, EscutaService, contem } from '../../nucleo/escuta.service';
 import { EscutaDeRespostaService } from '../../nucleo/escuta-de-resposta.service';
@@ -58,15 +77,29 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
     PainelHudComponent,
     LegendaVozComponent,
     FerramentasHologramaComponent,
-    OrbeComponent,
-    SondasComponent,
+    NucleoJarvisComponent,
+    IconeHudComponent,
+    AgenteHudComponent,
+    AtividadesHudComponent,
+    CapacidadesHudComponent,
+    ExecucoesHudComponent,
+    MemoriaHudComponent,
     InicializacaoComponent,
     HologramaViewComponent,
     RouterLink,
     NgTemplateOutlet,
+    NgOptimizedImage,
   ],
   templateUrl: './hud.page.html',
-  styleUrls: ['./hud.page.scss', './fileira.scss', './conversa.scss', './janelas.scss', './imersivo.scss'],
+  styleUrls: [
+    './hud.page.scss',
+    './fileira.scss',
+    './dashboard.scss',
+    './estudio.scss',
+    './estudio-dock.scss',
+    './instrumentos.scss',
+    './workspace.scss',
+  ],
 })
 export class HudPage implements OnInit, OnDestroy {
   protected readonly tela = inject(TelaService);
@@ -75,10 +108,20 @@ export class HudPage implements OnInit, OnDestroy {
   private readonly estadoTela = inject(TelaEstadoService);
   private readonly areaJanelas = viewChild<ElementRef<HTMLElement>>('areaJanelas');
   private readonly bandejaPlayer = viewChild<ElementRef<HTMLElement>>('bandejaPlayer');
-  private readonly atalhoFerramentas = viewChild<ElementRef<HTMLButtonElement>>('atalhoFerramentas');
+  private readonly atalhoFerramentas =
+    viewChild<ElementRef<HTMLButtonElement>>('atalhoFerramentas');
 
   protected readonly conversa = inject(ConversaService);
   protected readonly painel = inject(PainelHudService);
+  protected readonly tituloPainel = computed(
+    () =>
+      ({
+        conversa: 'Conversa',
+        ferramentas: 'Ferramentas',
+        memoria: 'Memória',
+        execucoes: 'Execuções',
+      })[this.painel.ativo() ?? 'conversa'],
+  );
   private readonly ditadoNoEditor = signal(false);
   protected readonly rascunho = signal('');
   protected readonly briefingGuardado = signal<Briefing | null>(null);
@@ -99,19 +142,51 @@ export class HudPage implements OnInit, OnDestroy {
   protected readonly erro = signal('');
   protected readonly tarefaComputer = signal<TarefaComputer | null>(null);
   protected readonly relogio = signal(agora());
-
-  protected async cancelarComputer(id: string): Promise<void> {
-    try { await this.api.cancelarTarefaComputer(id); }
-    catch { this.erro.set('Não consegui pedir a parada da tarefa no PC. Use o atalho local.'); }
+  protected readonly horaVisivel = computed(() => this.relogio().split(' · ')[1] ?? '');
+  protected readonly dataVisivel = computed(() => this.relogio().split(' · ')[0] ?? '');
+  protected readonly atividade = inject(AtividadeHudService);
+  protected readonly miniPlayerIsolado = computed(
+    () => !this.janelas.visiveis().length && !!this.midia.bandeja() && !this.holograma.aberto(),
+  );
+  protected readonly workspaceAtivo = computed(() => !this.orbeLivre() || this.miniPlayerIsolado());
+  protected readonly estadoNucleo = computed<EstadoJarvis>(() => {
+    if (this.voz.falando()) return 'falando';
+    if (this.conversa.ocupada()) return this.atividade.ferramenta() ? 'executando' : 'pensando';
+    if (this.player.fase() === 'gerando' || this.pedindo() || this.voz.preparando())
+      return 'pensando';
+    const tarefa = this.tarefaComputer();
+    if (tarefa?.estado === 'executando' || tarefa?.estado === 'pendente') return 'executando';
+    if (this.escuta.ouvindo()) return 'escutando';
+    return this.atividade.pulso() ?? 'repouso';
+  });
+  protected readonly rotuloNucleo = computed(
+    () =>
+      ({
+        repouso: 'SISTEMA EM ESPERA',
+        escutando: 'CANAL DE ESCUTA ATIVO',
+        pensando: 'PROCESSANDO SOLICITAÇÃO',
+        executando: 'ORQUESTRANDO FERRAMENTAS',
+        falando: 'TRANSMITINDO RESPOSTA',
+        concluido: 'RESPOSTA CONCLUÍDA',
+        erro: 'ATENÇÃO NECESSÁRIA',
+      })[this.estadoNucleo()],
+  );
+  protected prepararComando(texto: string): void {
+    this.rascunho.set(texto);
+    this.painel.abrir('conversa');
+    setTimeout(() => document.getElementById('mensagem-jarvis')?.focus(), 0);
+  }
+  protected focarJanela(evento: Event): void {
+    this.janelas.focar((evento.target as HTMLSelectElement).value);
   }
 
-  protected readonly estadoOrbe = computed<EstadoOrbe>(() => {
-    if (this.conversa.ocupada()) return 'pensando';
-    if (this.player.fase() === 'gerando') {
-      return 'gerando';
+  protected async cancelarComputer(id: string): Promise<void> {
+    try {
+      await this.api.cancelarTarefaComputer(id);
+    } catch {
+      this.erro.set('Não consegui pedir a parada da tarefa no PC. Use o atalho local.');
     }
-    return this.voz.falando() ? 'falando' : this.escuta.ouvindo() ? 'ouvindo' : 'ocioso';
-  });
+  }
 
   /** O selo do cabeçalho: se a ativação por voz está de pé, e se há som entrando ou saindo agora. */
   protected readonly sinalDeVoz = computed(() => {
@@ -139,9 +214,14 @@ export class HudPage implements OnInit, OnDestroy {
     }
   });
 
-  protected readonly blocoNoPalco = computed(() => this.player.selecionado() ?? this.player.atual());
+  protected readonly blocoNoPalco = computed(
+    () => this.player.selecionado() ?? this.player.atual(),
+  );
   /** Zero ou um: é lista para o `@for` dar identidade ao card e animar a entrada e a saída dele. */
-  protected readonly palco = computed(() => { const bloco = this.blocoNoPalco(); return bloco ? [bloco] : []; });
+  protected readonly palco = computed(() => {
+    const bloco = this.blocoNoPalco();
+    return bloco ? [bloco] : [];
+  });
   /** O briefing só aparece no palco quando a conversa não está usando a tela. */
   protected readonly briefingNoPalco = computed(() => (this.conversa.naTela() ? [] : this.palco()));
   /** Sem nada no palco o orbe cresce e assume o centro — é o Jarvis em repouso, sem card por cima. */
@@ -150,8 +230,13 @@ export class HudPage implements OnInit, OnDestroy {
   );
   /** Durante a abertura o orbe "se forma": escala, opacidade e desfoque, só com CSS. */
   protected readonly orbeFormando = computed(() => this.inicio.fase() === 'animando');
-  protected readonly concluidos = computed(() => this.player.blocos().slice(0, Math.max(0,this.player.indiceAtual())));
-  protected readonly geracaoBriefing = computed(() => { const b = this.player.briefing(); return b ? contextoBriefing(b).geracao : ''; });
+  protected readonly concluidos = computed(() =>
+    this.player.blocos().slice(0, Math.max(0, this.player.indiceAtual())),
+  );
+  protected readonly geracaoBriefing = computed(() => {
+    const b = this.player.briefing();
+    return b ? contextoBriefing(b).geracao : '';
+  });
   protected readonly estadoApresentacao = computed(() => {
     if (this.voz.falando()) return 'Falando';
     if (this.escutaDeResposta.fase() === 'ouvindo') return 'Ouvindo sua resposta';
@@ -162,17 +247,31 @@ export class HudPage implements OnInit, OnDestroy {
     // Na fase `gerando` quem tem o texto é a fila; aqui em cima fica só a decisão de qual estado mostrar.
     if (this.player.fase() === 'gerando') return this.player.legenda();
     if (this.pedindo()) return 'Preparando briefing';
+    const tarefa = this.tarefaComputer();
+    if (tarefa?.estado === 'executando' || tarefa?.estado === 'pendente')
+      return 'Executando tarefa no PC';
     if (this.escuta.ouvindo()) return this.escuta.ditando() ? 'Ouvindo sua mensagem' : 'Ouvindo';
+    if (this.atividade.pulso() === 'concluido') return 'Resposta concluída';
+    if (this.atividade.pulso() === 'erro') return 'Uma operação precisa de atenção';
     return 'Às suas ordens';
   });
-  protected consultarCard(bloco: Bloco): void { this.tela.consultar(bloco); }
+  protected consultarCard(bloco: Bloco): void {
+    this.tela.consultar(bloco);
+  }
   protected resumoCard(bloco: Bloco): string {
-    switch(bloco.tipo) {
-      case 'clima': return bloco.dados.temperaturaAtual + '° · ' + bloco.dados.cidade;
-      case 'lembretes': return bloco.dados.itens.length ? bloco.dados.itens.length + ' lembrete(s)' : 'Agenda livre';
-      case 'sistemas': return bloco.dados.sites.length + ' site(s) monitorado(s)';
-      case 'noticia': return bloco.dados.titulo;
-      default: return bloco.linhas[0] ?? bloco.rotulo;
+    switch (bloco.tipo) {
+      case 'clima':
+        return bloco.dados.temperaturaAtual + '° · ' + bloco.dados.cidade;
+      case 'lembretes':
+        return bloco.dados.itens.length
+          ? bloco.dados.itens.length + ' lembrete(s)'
+          : 'Agenda livre';
+      case 'sistemas':
+        return bloco.dados.sites.length + ' site(s) monitorado(s)';
+      case 'noticia':
+        return bloco.dados.titulo;
+      default:
+        return bloco.linhas[0] ?? bloco.rotulo;
     }
   }
 
@@ -209,10 +308,18 @@ export class HudPage implements OnInit, OnDestroy {
       window.addEventListener('resize', medir);
       window.addEventListener('scroll', medir, true);
       medir();
-      limpar(() => { observador.disconnect(); window.removeEventListener('resize', medir); window.removeEventListener('scroll', medir, true); });
+      limpar(() => {
+        observador.disconnect();
+        window.removeEventListener('resize', medir);
+        window.removeEventListener('scroll', medir, true);
+      });
     });
     effect(() => {
-      if (this.ditadoNoEditor() && this.escuta.ditando() && this.escutaDeResposta.fase() !== 'ouvindo') {
+      if (
+        this.ditadoNoEditor() &&
+        this.escuta.ditando() &&
+        this.escutaDeResposta.fase() !== 'ouvindo'
+      ) {
         this.rascunho.set(this.escuta.transcricao());
       }
     });
@@ -220,7 +327,7 @@ export class HudPage implements OnInit, OnDestroy {
     effect(() => {
       this.conversa.compondo.set(
         !!this.rascunho().trim() ||
-        (this.escuta.ditando() && this.escutaDeResposta.fase() !== 'ouvindo'),
+          (this.escuta.ditando() && this.escutaDeResposta.fase() !== 'ouvindo'),
       );
     });
   }
@@ -237,20 +344,34 @@ export class HudPage implements OnInit, OnDestroy {
     this.eventos.conectar({
       gerando: () => {
         this.escutaDeResposta.cancelar();
-        if (!this.conversa.naTela() && !this.conversa.chatAberto() && !this.escuta.ditando()) this.player.gerando();
+        if (!this.conversa.naTela() && !this.conversa.chatAberto() && !this.escuta.ditando())
+          this.player.gerando();
       },
       briefing: (briefing) => {
         this.escutaDeResposta.cancelar();
-        if (this.conversa.naTela() || this.conversa.chatAberto() || this.escuta.ditando()) this.briefingGuardado.set(briefing);
+        if (this.conversa.naTela() || this.conversa.chatAberto() || this.escuta.ditando())
+          this.briefingGuardado.set(briefing);
         else void this.player.tocar(briefing);
       },
       conectado: () => {
-        void this.conversa.recuperar(); this.estadoTela.reenviar(); this.estadoDoHolograma.reenviar();
-        void this.api.ultimaTarefaComputer().then(tarefa => this.tarefaComputer.set(tarefa))
-          .catch(() => { });
+        void this.conversa.recuperar();
+        this.estadoTela.reenviar();
+        this.estadoDoHolograma.reenviar();
+        void this.api
+          .ultimaTarefaComputer()
+          .then((tarefa) => {
+            this.tarefaComputer.set(tarefa);
+            this.atividade.receberComputer(tarefa, false);
+          })
+          .catch(() => {});
       },
-      card: card => this.tela.receber(card),
-      comando: comando => { this.tela.executar(comando); },
+      card: (card) => {
+        this.tela.receber(card);
+        this.atividade.receberCard(card.id, card.titulo);
+      },
+      comando: (comando) => {
+        this.tela.executar(comando);
+      },
       pensando: (pedido) => {
         this.escuta.cancelarDitado();
         this.conversa.pensando(pedido);
@@ -259,7 +380,10 @@ export class HudPage implements OnInit, OnDestroy {
       resposta: (resposta) => this.conversa.receber(resposta),
       erroConversa: (resposta) => this.conversa.receber(resposta),
       historico: () => void this.conversa.recuperar(),
-      tarefaComputer: tarefa => this.tarefaComputer.set(tarefa),
+      tarefaComputer: (tarefa) => {
+        this.tarefaComputer.set(tarefa);
+        this.atividade.receberComputer(tarefa, true);
+      },
       // O despertar por palmas achando a tela já aberta: só a frase curta, sem card nenhum.
       falar: (fala) => void this.voz.falar(fala.texto),
       holograma: (comando) => this.comandosDoHolograma.aplicar(comando),
@@ -287,7 +411,8 @@ export class HudPage implements OnInit, OnDestroy {
     // A escuta abre sozinha quando ficou ligada da última vez: num monitor 24 h, pedir um clique
     // a cada recarga não faz sentido. O que o clique traz é o destravar() da fala.
     this.escuta.escutar((frase) => this.aoOuvir(frase));
-    this.player.epilogo = (briefing, sinal) => this.escutaDeResposta.perguntarObservacoes(briefing, sinal);
+    this.player.epilogo = (briefing, sinal) =>
+      this.escutaDeResposta.perguntarObservacoes(briefing, sinal);
 
     window.addEventListener('keydown', this.aoTeclar);
     window.addEventListener('click', this.aoClicar);
@@ -392,7 +517,11 @@ export class HudPage implements OnInit, OnDestroy {
     const saudacao = normalizar(frase)
       .replace(/[^a-z ]/g, '')
       .trim();
-    if (/^(?:(?:bom dia|boa tarde|boa noite)(?: jarvis)?|jarvis (?:bom dia|boa tarde|boa noite))$/.test(saudacao)) {
+    if (
+      /^(?:(?:bom dia|boa tarde|boa noite)(?: jarvis)?|jarvis (?:bom dia|boa tarde|boa noite))$/.test(
+        saudacao,
+      )
+    ) {
       this.escutaDeResposta.registrarAtivacao();
       this.ultimaAtivacao = Date.now();
       this.conversa.mostrarBriefing();
@@ -409,7 +538,7 @@ export class HudPage implements OnInit, OnDestroy {
     this.escutaDeResposta.cancelar();
     this.voz.destravar();
     this.escuta.cancelarDitado();
-    if (this.tela.rapido(texto) || await this.conversa.enviar(texto)) {
+    if (this.tela.rapido(texto) || (await this.conversa.enviar(texto))) {
       if (comando === undefined && this.rascunho() === texto) this.rascunho.set('');
     }
   }
@@ -476,13 +605,29 @@ export class HudPage implements OnInit, OnDestroy {
     if (evento.defaultPrevented) return;
     if (evento.key === 'Escape') {
       if (evento.target instanceof Element && evento.target.closest('dialog[open]')) return;
-      if (this.painel.ativo()) { this.painel.fechar(); evento.preventDefault(); return; }
+      if (this.painel.ativo()) {
+        this.painel.fechar();
+        evento.preventDefault();
+        return;
+      }
       this.escutaDeResposta.cancelar();
       // Antes de tudo: quem apertou Esc durante a abertura quer a tela, não o filme.
-      if (this.inicio.rodando()) { this.inicio.cancelar(); evento.preventDefault(); return; }
+      if (this.inicio.rodando()) {
+        this.inicio.cancelar();
+        evento.preventDefault();
+        return;
+      }
       const foco = this.janelas.foco();
-      if (foco) { this.janelas.fechar(foco); evento.preventDefault(); return; }
-      if (this.holograma.aberto()) { this.comandosDoHolograma.fechar(); evento.preventDefault(); return; }
+      if (foco) {
+        this.janelas.fechar(foco);
+        evento.preventDefault();
+        return;
+      }
+      if (this.holograma.aberto()) {
+        this.comandosDoHolograma.fechar();
+        evento.preventDefault();
+        return;
+      }
       this.escuta.cancelarDitado();
       this.voz.parar();
       // Fechar a consulta antes de parar: o palco volta a ficar vazio e o orbe retoma o centro.
@@ -492,8 +637,14 @@ export class HudPage implements OnInit, OnDestroy {
       if (!this.rascunho().trim()) this.conversa.recolher();
       return;
     }
-    if (evento.target instanceof HTMLTextAreaElement && evento.target.id === 'mensagem-jarvis' &&
-        evento.key.length === 1 && !evento.ctrlKey && !evento.metaKey && !evento.altKey) {
+    if (
+      evento.target instanceof HTMLTextAreaElement &&
+      evento.target.id === 'mensagem-jarvis' &&
+      evento.key.length === 1 &&
+      !evento.ctrlKey &&
+      !evento.metaKey &&
+      !evento.altKey
+    ) {
       this.escutaDeResposta.cancelar();
     }
     if (

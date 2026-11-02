@@ -1,0 +1,116 @@
+﻿:host {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 140px;
+  color: #4be4ff;
+  isolation: isolate;
+  pointer-events: none;
+}
+.rosto-3d,
+.reserva {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.rosto-3d {
+  opacity: 0;
+  mix-blend-mode: screen;
+}
+.rosto-3d.carregado {
+  opacity: 1;
+}
+.reserva {
+  filter: drop-shadow(0 0 8px #00b8e288);
+}
+.reserva.oculta {
+  visibility: hidden;
+}
+.halo {
+  position: absolute;
+  inset: 0 -10%;
+  background: radial-gradient(ellipse at 50% 30%, #078bbb1c, transparent 58%);
+  border-radius: 50%;
+  z-index: -1;
+}
+.ondas {
+  position: absolute;
+  bottom: 2%;
+  left: 38%;
+  right: 38%;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  opacity: 0.4;
+}
+i {
+  width: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  max-height: 35px;
+  transition: height 0.12s linear;
+  box-shadow: 0 0 8px #28dcff55;
+}
+:host([data-estado='escutando']) i {
+  animation: escuta 1.5s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -60ms);
+}
+:host([data-estado='pensando']) .halo,
+:host([data-estado='executando']) .halo {
+  animation: pensar 2s ease-in-out infinite;
+}
+:host([data-estado='concluido']) {
+  color: #6fffd3;
+}
+:host([data-estado='erro']) {
+  color: #ff8d9d;
+}
+:host(.compacto) {
+  min-height: 0;
+}
+:host(.compacto) .ondas {
+  display: none;
+}
+@keyframes escuta {
+  50% {
+    transform: scaleY(2.8);
+    opacity: 0.45;
+  }
+}
+@keyframes pensar {
+  50% {
+    opacity: 0.4;
+    transform: scale(0.94);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  i {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.reserva {
+  inset: 8% 23% auto;
+  width: 54%;
+  height: auto;
+  mix-blend-mode: screen;
+}
+.mascara-reserva {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 184/285;
+}
+.mascara-reserva img {
+  position: absolute;
+  max-width: none;
+  width: 909%;
+  height: auto;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -18.4%);
+}

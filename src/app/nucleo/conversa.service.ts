@@ -5,6 +5,7 @@ import { ConfigStore } from './config.store';
 import { VozService } from './voz.service';
 import { BriefingPlayerService } from './briefing-player.service';
 import { PainelHudService } from './painel-hud.service';
+import { AtividadeHudService } from './atividade-hud.service';
 import type {
   HistoricoConversa,
   PedidoConversa,
@@ -20,6 +21,7 @@ export class ConversaService {
   private readonly config = inject(ConfigStore);
   private readonly voz = inject(VozService);
   private readonly player = inject(BriefingPlayerService);
+  private readonly atividade = inject(AtividadeHudService);
   readonly resposta = signal<RespostaConversa | null>(null);
   readonly trocas = signal<TrocaConversa[]>([]);
   readonly pendente = signal<string | null>(null);
@@ -115,7 +117,16 @@ export class ConversaService {
       const aceito = await this.api.enviarConversa(texto);
       if (!this.ativa || geracao !== this.geracao) return true;
       // O SSE pode concluir antes de chegar a resposta HTTP 202.
-      if (!this.encerradas.has(aceito.id)) this.guardarPendente(aceito.id);
+      if (!this.encerradas.has(aceito.id)) {
+        this.guardarPendente(aceito.id);
+        this.atividade.iniciar({
+          id: aceito.id,
+          canal: 'hud',
+          texto,
+          estado: 'aguardando',
+          iniciadoEm: '',
+        });
+      }
       return true;
     } catch (erro) {
       if (!this.ativa || geracao !== this.geracao) return false;
@@ -138,15 +149,17 @@ export class ConversaService {
     }
   }
 
-  pensando(pedido: PedidoConversa): void {
+  pensando(pedido: PedidoConversa, aoVivo = true): void {
     if (!this.ativa || pedido.canal !== 'hud' || this.encerradas.has(pedido.id)) return;
     this.consulta++;
+    this.atividade.iniciar(pedido, aoVivo);
     this.assumirPalco();
     this.guardarPendente(pedido.id);
     this.progresso.set(pedido.estado === 'aguardando' ? 'Aguardando a vez…' : 'Pensando…');
   }
   ferramenta(progresso: ProgressoConversa): void {
     if (!this.ativa || progresso.id !== this.pendente()) return;
+    this.atividade.observar(progresso);
     const etapas =
       Number.isInteger(progresso.passo) &&
       Number.isInteger(progresso.total) &&
@@ -159,6 +172,7 @@ export class ConversaService {
   receber(resposta: RespostaConversa, narrar = true): void {
     if (!this.ativa || resposta.canal !== 'hud' || this.encerradas.has(resposta.id)) return;
     this.consulta++; // Uma leitura anterior ao evento não pode sobrescrevê-lo.
+    this.atividade.responder(resposta, narrar);
     this.encerradas.add(resposta.id);
     this.incerto.set(false);
     this.resposta.set(resposta);
@@ -173,7 +187,10 @@ export class ConversaService {
       this.faladas.add(resposta.id);
       this.narrandoId.set(resposta.id);
       narracao = this.voz.falar(resposta.fala || resposta.texto).finally(() => {
-        if (this.narrandoId() === resposta.id) this.narrandoId.set(null);
+        if (this.narrandoId() === resposta.id) {
+          this.narrandoId.set(null);
+          if (this.ativa) this.atividade.finalizarNarracao(resposta.id);
+        }
       });
     }
     this.aoReceber?.(resposta, narracao);
@@ -206,6 +223,7 @@ export class ConversaService {
     const reiniciou = !!this.sessao && this.sessao !== h.sessao;
     this.sessao = h.sessao;
     this.revisao = h.revisao;
+    this.atividade.restaurar(h);
     this.trocas.set(h.trocas.slice(-10));
     const estavaIncerto = this.incerto();
     this.incerto.set(false);
@@ -218,7 +236,7 @@ export class ConversaService {
     this.guardarPendente(h.emAndamento?.id ?? null);
     if (h.emAndamento) {
       this.erro.set('');
-      this.pensando(h.emAndamento);
+      this.pensando(h.emAndamento, false);
     } else if (estavaIncerto && !esperado) {
       this.progresso.set('');
       this.erro.set(

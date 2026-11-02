@@ -1,149 +1,461 @@
-<div class="hud" [class.hud--holograma]="holograma.aberto()">
+﻿<div
+  class="hud"
+  [class.hud--holograma]="holograma.aberto()"
+  [class.hud--workspace]="workspaceAtivo()"
+>
   @if (inicio.rodando()) {
     <app-inicializacao />
   }
-  <div class="vinheta" aria-hidden="true"></div><div class="grade" aria-hidden="true"></div>
-  <div class="cantos" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-  <div class="varredura" aria-hidden="true"></div>
-  <header class="cabecalho">
-    <h1 class="nome-hud"><a class="marca" routerLink="/">J.A.R.V.I.S.<span>ASSISTENTE PESSOAL</span></a></h1>
-    <span class="conexao"><span class="luz" [class.luz--online]="eventos.status() === 'online'" aria-hidden="true"></span>{{ estadoDaConexao() }}</span>
-    @if (holograma.aberto()) { <ng-container [ngTemplateOutlet]="estadoJarvis" /> }
-    <span class="sinal-voz" [class.sinal-voz--ligado]="escuta.disponivel && escuta.ligada()" [class.sinal-voz--ativo]="voz.falando() || escuta.ouvindo()">
-      <span class="barras" aria-hidden="true"><i></i><i></i><i></i><i></i></span>{{ sinalDeVoz() }}
-    </span>
-    <span class="relogio" aria-hidden="true">{{ relogio() }}</span>
-  </header>
-  @if (!holograma.aberto()) { <ng-container [ngTemplateOutlet]="estadoJarvis" /> }
-  <ng-template #estadoJarvis>
-  <div class="estado-central" [class.estado-central--resposta]="escutaDeResposta.fase() !== 'inativa'">
-    <p class="falando" role="status" aria-live="polite"><span class="ponto" [class.ponto--ativo]="voz.falando() || escuta.ouvindo() || conversa.ocupada()" aria-hidden="true"></span>{{ estadoApresentacao() }}</p>
-    @if (escutaDeResposta.fase() !== 'inativa') {
-      @if (escutaDeResposta.motivo()) { <p class="motivo-resposta">{{ escutaDeResposta.motivo() }}</p> }
-      @if (escutaDeResposta.fase() === 'ouvindo') {
-        <p class="ouvindo-resposta">
-          <span class="ouvindo-resposta__pulso" aria-hidden="true"></span>Jarvis está ouvindo
-          @if (escuta.transcricao()) { <span class="parcial">{{ escuta.transcricao() }}</span> }
-        </p>
-      }
-      @if (escutaDeResposta.fase() === 'opcoes' && !escutaDeResposta.opcoes().length) {
-        <p class="motivo-resposta">{{ escuta.ligada() ? 'Diga Jarvis ou escreva para continuar.' : 'Escreva para continuar.' }}</p>
-      }
-      @if (escutaDeResposta.opcoes().length) {
-        <div class="opcoes-resposta" role="group" aria-label="Opções de resposta">
-          @for (opcao of escutaDeResposta.opcoes(); track $index) {
-            <button data-escuta-opcao type="button" (click)="escutaDeResposta.selecionarOpcao(opcao)">{{ opcao }}</button>
-          }
-        </div>
-      }
-    }
-    <div class="tracos" aria-hidden="true"></div>
+  <div class="ambiente" aria-hidden="true">
+    <img ngSrc="/ambiente/sala-controle-v2.png" fill priority sizes="100vw" alt="" />
   </div>
-  </ng-template>
-  <div class="corpo-hud" [class.corpo-hud--painel]="painel.ativo() !== null">
-  <div class="coluna-palco">
-  <main class="conteudo" [class.conteudo--holograma]="holograma.aberto()" aria-label="Janelas do Jarvis">
-    <app-orbe class="orbe" [class.orbe--livre]="orbeLivre()" [class.orbe--recuado]="holograma.aberto()" [class.orbe--formando]="orbeFormando()" [estado]="estadoOrbe()" [intensidade]="voz.intensidade()" />
-    <app-sondas class="sondas" [class.sondas--livre]="orbeLivre()" [class.sondas--recuado]="holograma.aberto()" [recuada]="!orbeLivre()" [estado]="estadoOrbe()" [escutaDisponivel]="escuta.disponivel" [escutaLigada]="escuta.ligada()" [ditando]="escuta.ditando()" [progresso]="conversa.progresso()" [rotuloVoz]="cota.rotulo()" />
-    @if (holograma.aberto()) {
-      <app-holograma-view />
-    }
-    <div class="palco" #areaJanelas>
-      @for (janela of janelas.janelas(); track janela.id) {
-        <app-janela [janela]="janela" [miniPlayer]="janela.estado === 'minimizada' && midia.bandeja() === janela.id">
-          <app-conteudo-janela [janela]="janela" [ocupada]="conversa.ocupada()" [narrandoId]="conversa.narrandoId()" [textoRevelado]="voz.textoRevelado()" (comando)="enviarTexto($event)" />
-        </app-janela>
-      }
+  <header class="cabecalho">
+    <h1>
+      <a class="marca" routerLink="/">JARVIS<span>AGENTE DE ORQUESTRAÇÃO</span></a>
+    </h1>
+
+    <div class="vinculo-central" aria-hidden="true">
+      <i></i><app-icone-hud nome="agente" /><i></i>
     </div>
-  </main>
-  @if (concluidos().length && !holograma.aberto()) {
-    <ng-container [ngTemplateOutlet]="arquivoBriefing" />
-  }
+    <div class="sistema">
+      <span class="conexao"
+        ><i [class.online]="eventos.status() === 'online'" aria-hidden="true"></i
+        >{{ estadoDaConexao() }}</span
+      ><time
+        ><strong>{{ horaVisivel() }}</strong
+        ><small>{{ dataVisivel() }}</small></time
+      >
+    </div>
+    <button
+      class="icone-botao atalho-conversa"
+      type="button"
+      aria-label="Conversa"
+      aria-controls="painel-hud"
+      [attr.aria-expanded]="painel.ativo() === 'conversa'"
+      (click)="painel.alternar('conversa')"
+    >
+      <app-icone-hud nome="conversa" />
+    </button>
+    <button
+      class="icone-botao"
+      type="button"
+      aria-label="Abrir memória"
+      aria-controls="painel-hud"
+      [attr.aria-expanded]="painel.ativo() === 'memoria'"
+      (click)="painel.alternar('memoria')"
+    >
+      <app-icone-hud nome="memoria" />
+    </button>
+    <a class="icone-botao configuracao" routerLink="/configuracao" aria-label="Configurar Jarvis"
+      ><app-icone-hud nome="config"
+    /></a>
+  </header>
+
+  <div class="corpo-hud" [class.corpo-hud--painel]="painel.ativo() !== null">
+    <div class="dashboard" [class.dashboard--workspace]="workspaceAtivo()">
+      <aside class="coluna-esquerda" aria-label="Operações do agente">
+        <app-agente-hud
+          (preparar)="prepararComando($event)"
+          [estado]="estadoApresentacao()"
+          [ferramentas]="atividade.ferramentas()"
+          [ativa]="atividade.ferramenta()?.nome ?? ''"
+        />
+        <app-atividades-hud
+          [expandivel]="true"
+          (expandir)="painel.abrir('execucoes')"
+          [itens]="atividade.atividades()"
+        />
+        <div class="identificador">
+          <span class="ponto"></span> JARVIS / AGENTE ÚNICO <span>HUD v2.0</span>
+        </div>
+      </aside>
+
+      <div class="coluna-palco">
+        <main
+          class="conteudo"
+          [class.conteudo--mini-player]="miniPlayerIsolado()"
+          [class.conteudo--workspace]="workspaceAtivo()"
+          [class.conteudo--holograma]="holograma.aberto()"
+          aria-label="Janelas do Jarvis"
+        >
+          <div class="apresentacao" [class.compacta]="workspaceAtivo()">
+            <div class="marcador-superior" aria-hidden="true">
+              NÚCLEO DE INTELIGÊNCIA <span>J / 01</span>
+            </div>
+            <app-nucleo-jarvis
+              class="orbe"
+              [class.orbe--livre]="orbeLivre()"
+              [class.orbe--formando]="orbeFormando()"
+              [estado]="estadoNucleo()"
+              [intensidade]="voz.intensidade()"
+              [compacto]="workspaceAtivo()"
+              [pausado]="holograma.aberto()"
+            />
+            <div class="identidade-central">
+              <p class="rotulo-nucleo">{{ rotuloNucleo() }}</p>
+              <h2>JARVIS</h2>
+              <p class="significado">Just A Rather Very Intelligent System</p>
+            </div>
+          </div>
+          <div
+            class="estado-central"
+            [class.estado-central--resposta]="escutaDeResposta.fase() !== 'inativa'"
+          >
+            <p class="falando" role="status" aria-live="polite">
+              <span
+                class="ponto"
+                [class.ponto--ativo]="voz.falando() || escuta.ouvindo() || conversa.ocupada()"
+                aria-hidden="true"
+              ></span
+              >{{ estadoApresentacao() }}
+            </p>
+            @if (escutaDeResposta.fase() !== 'inativa') {
+              @if (escutaDeResposta.motivo()) {
+                <p class="motivo-resposta">{{ escutaDeResposta.motivo() }}</p>
+              }
+              @if (escutaDeResposta.fase() === 'ouvindo') {
+                <p class="ouvindo-resposta">
+                  Jarvis está ouvindo
+                  @if (escuta.transcricao()) {
+                    <span class="parcial">{{ escuta.transcricao() }}</span>
+                  }
+                </p>
+              }
+              @if (escutaDeResposta.fase() === 'opcoes' && !escutaDeResposta.opcoes().length) {
+                <p class="motivo-resposta">
+                  {{
+                    escuta.ligada()
+                      ? 'Diga Jarvis ou escreva para continuar.'
+                      : 'Escreva para continuar.'
+                  }}
+                </p>
+              }
+              @if (escutaDeResposta.opcoes().length) {
+                <div class="opcoes-resposta" role="group" aria-label="Opções de resposta">
+                  @for (opcao of escutaDeResposta.opcoes(); track $index) {
+                    <button
+                      data-escuta-opcao
+                      type="button"
+                      (click)="escutaDeResposta.selecionarOpcao(opcao)"
+                    >
+                      {{ opcao }}
+                    </button>
+                  }
+                </div>
+              }
+            }
+          </div>
+          <div class="arena-workspace" [class.arena-workspace--aberta]="workspaceAtivo()">
+            @if (holograma.aberto()) {
+              <app-holograma-view />
+            }
+            <div class="palco" #areaJanelas [attr.data-foco]="janelas.foco()">
+              @for (janela of janelas.janelas(); track janela.id) {
+                <app-janela
+                  [class.janela-mobile-oculta]="
+                    janela.id !== janelas.foco() && midia.bandeja() !== janela.id
+                  "
+                  [janela]="janela"
+                  [miniPlayer]="janela.estado === 'minimizada' && midia.bandeja() === janela.id"
+                >
+                  <app-conteudo-janela
+                    [janela]="janela"
+                    [ocupada]="conversa.ocupada()"
+                    [narrandoId]="conversa.narrandoId()"
+                    [textoRevelado]="voz.textoRevelado()"
+                    (comando)="enviarTexto($event)"
+                  />
+                </app-janela>
+              }
+            </div>
+            @if (!janelas.visiveis().length && !holograma.aberto() && !miniPlayerIsolado()) {
+              <div class="workspace-vazio">
+                <app-icone-hud nome="workspace" />
+                <p>Seu espaço de trabalho.</p>
+                <small>Cards, gráficos e resultados criados pelo Jarvis aparecerão aqui.</small>
+              </div>
+            }
+          </div>
+        </main>
+        @if (janelas.visiveis().length > 1) {
+          <section class="seletor-janelas" aria-label="Resultados abertos">
+            <label for="resultado-em-foco">Resultado em foco</label
+            ><select id="resultado-em-foco" [value]="janelas.foco()" (change)="focarJanela($event)">
+              @for (janela of janelas.visiveis(); track janela.id) {
+                <option [value]="janela.id">{{ janela.titulo }}</option>
+              }
+            </select>
+          </section>
+        }
+        <app-legenda-voz
+          [compacta]="holograma.aberto()"
+          [transcricao]="escuta.ditando() ? escuta.transcricao().slice(-voz.limiteLegenda()) : ''"
+        />
+        @if (concluidos().length && !holograma.aberto()) {
+          <ng-container [ngTemplateOutlet]="arquivoBriefing" />
+        }
+        @if (janelas.minimizadas().length) {
+          <section class="bandeja" aria-label="Janelas minimizadas">
+            @if (midia.bandeja()) {
+              <div class="espaco-player" #bandejaPlayer></div>
+            }
+            <nav aria-label="Restaurar janelas">
+              @for (janela of janelas.minimizadas(); track janela.id) {
+                <button
+                  type="button"
+                  (click)="janelas.restaurar(janela.id)"
+                  [attr.aria-label]="'Restaurar ' + janela.titulo"
+                >
+                  {{ janela.titulo }} ↗
+                </button>
+                @if (
+                  (janela.tipo === 'video' || janela.tipo === 'musica') &&
+                  midia.bandeja() !== janela.id
+                ) {
+                  <button
+                    type="button"
+                    (click)="midia.mostrarBandeja(janela.id)"
+                    [attr.aria-label]="'Mostrar player de ' + janela.titulo"
+                  >
+                    ▶ Player
+                  </button>
+                }
+              }
+            </nav>
+          </section>
+        }
+        <div class="atividade-mobile">
+          <app-atividades-hud
+            [expandivel]="true"
+            (expandir)="painel.abrir('execucoes')"
+            [itens]="atividade.atividades()"
+            [limite]="1"
+          />
+        </div>
+      </div>
+
+      <aside class="coluna-direita" aria-label="Contexto e capacidades">
+        <app-memoria-hud [compacta]="true" (preparar)="prepararComando($event)" />
+        <app-capacidades-hud (preparar)="prepararComando($event)" />
+      </aside>
+    </div>
+
+    <app-painel-hud
+      [aberto]="painel.ativo() !== null"
+      [titulo]="tituloPainel()"
+      (fechar)="painel.fechar()"
+    >
+      <section [hidden]="painel.ativo() !== 'conversa'" aria-label="Conversa e histórico">
+        <p class="ajuda-painel">Conversa atual e últimas dez trocas · HUD e Telegram</p>
+        <app-dialogo-conversa
+          [trocas]="conversa.trocas()"
+          [resposta]="conversa.resposta()"
+          [ocultar]="conversa.cartao()?.id ?? ''"
+          [progresso]="conversa.progresso()"
+          [erro]="conversa.erro()"
+          [narrandoId]="conversa.narrandoId()"
+          [textoRevelado]="voz.textoRevelado()"
+        />
+        @if (painel.ativo() === 'conversa') {
+          <ng-container [ngTemplateOutlet]="editor" />
+        }
+        <button
+          class="botao limpar-conversa"
+          type="button"
+          [disabled]="conversa.ocupada()"
+          (click)="limparConversa()"
+        >
+          Limpar conversa
+        </button>
+      </section>
+      <section [hidden]="painel.ativo() !== 'ferramentas'" aria-label="Ajustes e ferramentas">
+        <h3>Controles</h3>
+        <ng-container [ngTemplateOutlet]="ferramentasGerais" /><app-capacidades-hud
+          (preparar)="prepararComando($event)"
+        />
+        @if (holograma.aberto()) {
+          <app-ferramentas-holograma />
+        }
+        @if (holograma.aberto() && concluidos().length) {
+          <details class="briefing-recolhido">
+            <summary>Cards do briefing</summary>
+            <ng-container [ngTemplateOutlet]="arquivoBriefing" />
+          </details>
+        }
+      </section>
+      <section [hidden]="painel.ativo() !== 'memoria'" aria-label="Consultar memória">
+        <app-memoria-hud (preparar)="prepararComando($event)" />
+      </section>
+      <section [hidden]="painel.ativo() !== 'execucoes'" aria-label="Acompanhamento de execuções">
+        <app-execucoes-hud [itens]="atividade.execucoes()" [computer]="atividade.computer()" />
+        <app-atividades-hud [itens]="atividade.atividades()" [limite]="50" />
+      </section>
+    </app-painel-hud>
+  </div>
+
+  <ng-template #ferramentasGerais>
+    <div class="ferramentas-gerais">
+      @if (escuta.disponivel) {
+        <button
+          class="botao microfone"
+          type="button"
+          [attr.aria-pressed]="escuta.ligada()"
+          (click)="alternarEscuta()"
+        >
+          Ativação por voz {{ escuta.ligada() ? 'ligada' : 'desligada' }}
+        </button>
+      }
+      <button
+        class="botao bom-dia"
+        type="button"
+        (click)="bomDia()"
+        [disabled]="pedindo() || conversa.ocupada()"
+      >
+        {{ pedindo() ? 'Preparando…' : 'Briefing' }}
+      </button>
+      @if (player.briefing() || briefingGuardado()) {
+        <button
+          class="botao"
+          type="button"
+          [disabled]="conversa.ocupada()"
+          (click)="consultarBriefing()"
+        >
+          Ver briefing
+        </button>
+      }
+      @if (player.fase() === 'tocando') {
+        <button class="botao" type="button" (click)="player.pular()">Próximo</button>
+      }
+      <button
+        class="botao"
+        type="button"
+        [attr.aria-pressed]="holograma.aberto()"
+        (click)="alternarHolograma()"
+      >
+        Holograma
+      </button>
+      <a class="elo" routerLink="/configuracao">Configuração</a>
+    </div>
+    @if (cota.rotulo(); as rotulo) {
+      <p class="cota-voz">{{ rotulo }}</p>
+    }
+  </ng-template>
   <ng-template #arquivoBriefing>
     <section class="arquivo" aria-label="Arquivo do briefing">
-      <p class="rotulo-arquivo">{{ player.restaurado() ? 'Último briefing' : 'Briefing' }} <span>· gerado em {{ geracaoBriefing() }}</span></p>
+      <p class="rotulo-arquivo">
+        {{ player.restaurado() ? 'Último briefing' : 'Briefing' }}
+        <span>· gerado em {{ geracaoBriefing() }}</span>
+      </p>
       <nav class="fileira" aria-label="Cards do briefing">
         @for (bloco of concluidos(); track bloco.id) {
-          <button class="miniatura" type="button" [class.miniatura--ativa]="tela.consultada(bloco)" [attr.aria-pressed]="tela.consultada(bloco)" (click)="consultarCard(bloco)">
-            <span class="rotulo-bloco">{{ bloco.rotulo }}</span>
-            <strong>{{ resumoCard(bloco) }}</strong>
-            <span class="mini-acao">{{ tela.consultada(bloco) ? 'Fechar' : 'Consultar' }} <span aria-hidden="true">↗</span></span>
+          <button
+            class="miniatura"
+            type="button"
+            [class.miniatura--ativa]="tela.consultada(bloco)"
+            [attr.aria-pressed]="tela.consultada(bloco)"
+            (click)="consultarCard(bloco)"
+          >
+            <span class="rotulo-bloco">{{ bloco.rotulo }}</span
+            ><strong>{{ resumoCard(bloco) }}</strong
+            ><span class="mini-acao">{{ tela.consultada(bloco) ? 'Fechar' : 'Consultar' }} ↗</span>
           </button>
         }
       </nav>
     </section>
   </ng-template>
-  <app-legenda-voz [compacta]="holograma.aberto()" [transcricao]="escuta.ditando() ? escuta.transcricao().slice(-voz.limiteLegenda()) : ''" />
-  @if (janelas.minimizadas().length) {
-    <section class="bandeja" aria-label="Janelas minimizadas">
-      @if (midia.bandeja()) { <div class="espaco-player" #bandejaPlayer></div> }
-      <nav aria-label="Restaurar janelas">@for (janela of janelas.minimizadas(); track janela.id) {
-        <button type="button" (click)="janelas.restaurar(janela.id)" [attr.aria-label]="'Restaurar ' + janela.titulo">{{ janela.titulo }} ↗</button>
-        @if ((janela.tipo === 'video' || janela.tipo === 'musica') && midia.bandeja() !== janela.id) {
-          <button type="button" (click)="midia.mostrarBandeja(janela.id)" [attr.aria-label]="'Mostrar player de ' + janela.titulo">▶ Player</button>
-        }
-      }</nav>
-    </section>
-  }
-  </div>
-  <app-painel-hud [aberto]="painel.ativo() !== null" [titulo]="painel.ativo() === 'conversa' ? 'Conversa' : 'Ferramentas'" (fechar)="painel.fechar()">
-    <section [hidden]="painel.ativo() !== 'conversa'" aria-label="Conversa e histórico">
-      <p class="ajuda-painel">Conversa atual e últimas dez trocas · HUD e Telegram</p>
-      <app-dialogo-conversa [trocas]="conversa.trocas()" [resposta]="conversa.resposta()" [ocultar]="conversa.cartao()?.id ?? ''" [progresso]="conversa.progresso()" [erro]="conversa.erro()" [narrandoId]="conversa.narrandoId()" [textoRevelado]="voz.textoRevelado()" />
-      <app-barra-conversa [(texto)]="rascunho" [embutida]="true" [ocupada]="conversa.ocupada()" [ditando]="escuta.ditando()" [vozDisponivel]="escuta.disponivel" (enviar)="enviarTexto()" (microfone)="ditar('', true)" (digitando)="aoDigitar()" />
-      <button class="botao limpar-conversa" type="button" [disabled]="conversa.ocupada()" (click)="limparConversa()">Limpar conversa</button>
-    </section>
-    <section [hidden]="painel.ativo() !== 'ferramentas'" aria-label="Central de ferramentas">
-      <h3 class="titulo-ferramentas">Geral</h3>
-      <div class="ferramentas-gerais">
-        @if (escuta.disponivel) { <button class="botao microfone" type="button" [attr.aria-pressed]="escuta.ligada()" (click)="alternarEscuta()">Ativação por voz {{ escuta.ligada() ? 'ligada' : 'desligada' }}</button> }
-        <button class="botao bom-dia" type="button" (click)="bomDia()" [disabled]="pedindo() || conversa.ocupada()">{{ pedindo() ? 'Preparando…' : 'Briefing' }}</button>
-        @if (player.briefing() || briefingGuardado()) { <button class="botao" type="button" [disabled]="conversa.ocupada()" (click)="consultarBriefing()">Ver briefing</button> }
-        @if (player.fase() === 'tocando') { <button class="botao" type="button" (click)="player.pular()">Próximo</button> }
-        <button class="botao" type="button" [attr.aria-pressed]="holograma.aberto()" (click)="alternarHolograma()">Holograma</button>
-        <a class="elo" routerLink="/configuracao" aria-label="Configurar Jarvis">Configuração</a>
-      </div>
-      @if (cota.rotulo(); as rotulo) { <p class="cota-voz">{{ rotulo }}</p> }
-      @if (holograma.aberto()) { <app-ferramentas-holograma /> }
-      @if (holograma.aberto() && concluidos().length) {
-        <details class="briefing-recolhido">
-          <summary>Cards do briefing</summary>
-          <ng-container [ngTemplateOutlet]="arquivoBriefing" />
-        </details>
-      }
-    </section>
-  </app-painel-hud>
-  </div>
+  <ng-template #editor
+    ><app-barra-conversa
+      [(texto)]="rascunho"
+      [embutida]="true"
+      [dock]="painel.ativo() !== 'conversa'"
+      [ocupada]="conversa.ocupada()"
+      [ditando]="escuta.ditando()"
+      [vozDisponivel]="escuta.disponivel"
+      (enviar)="enviarTexto()"
+      (microfone)="ditar('', true)"
+      (digitando)="aoDigitar()"
+  /></ng-template>
+
   <footer class="rodape">
     @if (tarefaComputer(); as tarefa) {
-      <div role="status" aria-live="polite">
+      <div class="tarefa-pc" role="status" aria-live="polite">
         Tarefa no PC: {{ tarefa.estado }} · {{ tarefa.ciclos }} ciclos · {{ tarefa.acoes }} ações
-        @if (tarefa.motivo) { <span>{{ tarefa.motivo }}</span> }
+        @if (tarefa.motivo) {
+          <span>{{ tarefa.motivo }}</span>
+        }
         @if (tarefa.estado === 'pendente' || tarefa.estado === 'executando') {
-          <button class="botao" type="button" (click)="cancelarComputer(tarefa.id)">Parar tarefa no PC</button>
+          <button class="botao" type="button" (click)="cancelarComputer(tarefa.id)">
+            Parar tarefa no PC
+          </button>
         }
       </div>
     }
     <div class="avisos" role="status">
-      @if (janelas.aviso()) { <span>{{ janelas.aviso() }}</span> }
-      @if (erro()) { <span class="erro">{{ erro() }}</span> }
-      @if (conversa.erro()) { <span class="erro erro-conversa">{{ conversa.erro() }}</span> }
-      @if (escuta.motivo() === 'permissao-negada') { <span class="erro">Microfone bloqueado pelo navegador</span> }
-      @if (escutaDeResposta.aviso()) { <span>{{ escutaDeResposta.aviso() }}</span> }
-      @if (briefingGuardado()) { <span>Um briefing está disponível para consulta.</span> }
+      @if (janelas.aviso()) {
+        <span>{{ janelas.aviso() }}</span>
+      }
+      @if (erro()) {
+        <span class="erro">{{ erro() }}</span>
+      }
+      @if (conversa.erro()) {
+        <span class="erro">{{ conversa.erro() }}</span>
+      }
+      @if (escuta.motivo() === 'permissao-negada') {
+        <span class="erro">Microfone bloqueado pelo navegador</span>
+      }
+      @if (escutaDeResposta.aviso()) {
+        <span>{{ escutaDeResposta.aviso() }}</span>
+      }
+      @if (briefingGuardado()) {
+        <span>Um briefing está disponível para consulta.</span>
+      }
     </div>
-    <div class="acoes" role="group" aria-label="Atalhos da HUD">
-      @if (holograma.aberto()) {
-        <button class="botao" type="button" [disabled]="!holograma.pecas().length" (click)="comandosDoHolograma.centralizar()">Centralizar</button>
-        <button class="botao" type="button" [disabled]="!holograma.pecas().length" [attr.aria-pressed]="comandosDoHolograma.explosao() > 0" (click)="comandosDoHolograma.alternarExplosao()">{{ comandosDoHolograma.explosao() > 0 ? 'Montar' : 'Explodir' }}</button>
+    <div class="dock">
+      <div class="status-voz">
+        <app-icone-hud nome="voz" /><span>{{ sinalDeVoz() }}</span>
+      </div>
+      @if (painel.ativo() !== 'conversa') {
+        <ng-container [ngTemplateOutlet]="editor" />
+      } @else {
+        <button class="botao voltar-comando" type="button" (click)="painel.fechar()">
+          Voltar ao painel
+        </button>
       }
-      <span class="microfone-compacto">{{ sinalDeVoz() }}</span>
-      @if (player.fase() === 'tocando' || voz.falando() || voz.preparando()) { <button class="botao" type="button" (click)="player.parar(true)">Parar fala</button> }
-      <button class="botao atalho-conversa" type="button" aria-controls="painel-hud" [attr.aria-expanded]="painel.ativo() === 'conversa'" (click)="painel.alternar('conversa')">Conversa</button>
-      <button #atalhoFerramentas class="botao" type="button" aria-controls="painel-hud" [attr.aria-expanded]="painel.ativo() === 'ferramentas'" (click)="painel.alternar('ferramentas')">Ferramentas</button>
-      @if (holograma.aberto()) {
-        <button class="botao sair-holograma" type="button" (click)="sairDoHolograma()">Sair do holograma</button>
-      }
+      <div class="acoes">
+        @if (player.fase() === 'tocando' || voz.falando() || voz.preparando()) {
+          <button class="botao" type="button" (click)="player.parar(true)">Parar fala</button>
+        }
+        <button
+          #atalhoFerramentas
+          class="botao atalho-ferramentas"
+          type="button"
+          aria-controls="painel-hud"
+          [attr.aria-expanded]="painel.ativo() === 'ferramentas'"
+          (click)="painel.alternar('ferramentas')"
+        >
+          <app-icone-hud nome="ferramentas" /><span>Ferramentas</span>
+        </button>
+        @if (holograma.aberto()) {
+          <button
+            class="botao"
+            type="button"
+            [disabled]="!holograma.pecas().length"
+            (click)="comandosDoHolograma.centralizar()"
+          >
+            Centralizar</button
+          ><button
+            class="botao"
+            type="button"
+            [disabled]="!holograma.pecas().length"
+            [attr.aria-pressed]="comandosDoHolograma.explosao() > 0"
+            (click)="comandosDoHolograma.alternarExplosao()"
+          >
+            {{ comandosDoHolograma.explosao() > 0 ? 'Montar' : 'Explodir' }}</button
+          ><button class="botao sair-holograma" type="button" (click)="sairDoHolograma()">
+            Sair do holograma
+          </button>
+        }
+      </div>
     </div>
   </footer>
 </div>

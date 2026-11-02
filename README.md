@@ -1,36 +1,30 @@
-# jarvis-hud
+﻿# Jarvis HUD — do assistente ao agente
 
-A tela de conversa e briefing do [Jarvis](../jarvis): fundo azul-escuro com grade, orbe de energia no centro e
-cards translúcidos que entram um por um enquanto o Jarvis lê cada bloco em voz alta. Feita para
-ficar aberta em tela cheia num monitor.
+HUD Angular 22 para um agente único que orquestra ferramentas. O painel usa rosto holográfico
+3D próprio, anéis ciano, atividades reais e uma barra permanente para comandos por texto ou voz.
+O rosto combina geometria própria com a textura do capacete fornecida na referência. A ambientação e a origem dos assets estão descritas em [visual-assets.md](visual-assets.md). O significado exibido é **Just A Rather Very Intelligent System**.
 
-A moldura é de instrumento: colchetes nos quatro cantos, uma varredura lenta de cima a baixo, o
-relógio no cabeçalho e, em volta do orbe, anéis que giram — tracejado por fora, escala de tiques
-por dentro e uma mira nos pontos cardeais. Os anéis aceleram e acendem conforme o estado (ouvindo,
-pensando, falando). Tudo isso para no `prefers-reduced-motion`.
+No desktop (1000 px ou mais), o painel reúne agente e atividades à esquerda, núcleo ao centro,
+memória e capacidades à direita. A HUD é um único ambiente, sem abas ou barras de navegação.
+Memória, ferramentas, conversa e execuções se expandem em painéis dentro desse mesmo espaço.
+Cards compactam o rosto e ampliam o palco;
+no celular, um seletor permite consultar uma janela por vez. O visualizador de objetos, seus
+gestos, galeria e controle remoto continuam disponíveis em Ferramentas → Holograma.
 
-O orbe é um **reator**: anel luminoso com núcleo escuro e uma coroa de arcos segmentados. Uma
-**onda de voz** atravessa a tela de borda a borda na altura dele, com espectro nas pontas e
-partículas no fundo; ela cresce com a energia real da fala (o mesmo `intensidade` que já movia o
-orbe) e respira enquanto o microfone capta. Em volta, quatro **sondas** ligadas ao anel por fios
-mostram o caminho de um pedido — entrada de áudio, transcrição, processamento e síntese de voz — e
-cada uma acende só quando a sua etapa acontece; o texto pequeno é o estado real (microfone,
-ferramenta em curso, provedor e cota de voz). As sondas apagam quando há card no palco e somem
-abaixo de 1100 px. No cabeçalho, o selo **Voz online / Voz em espera** diz se a ativação por voz
-está ligada, e as barras dele mexem enquanto há som entrando ou saindo.
+A conversa abre em uma lateral no desktop e em um diálogo modal no celular. O editor é único:
+fica na barra inferior ou dentro da conversa, preservando o rascunho. Atalhos de capacidades
+e memória preparam um comando para revisão, sem enviá-lo automaticamente.
 
-O palco tem **até seis janelas em destaque**, e respostas de conversa só entram quando têm **o que se olha**: um bloco do briefing, uma
-imagem ou arquivo anexado, um código de confirmação. Erros ficam em avisos compactos. Fala simples do Jarvis não vira card
-— ela é falada, aparece na legenda embaixo do orbe e fica no histórico. Para ler a conversa, abra o
-painel **Conversa**, que reúne a conversa atual e as últimas dez trocas; para conversar por texto o tempo todo, há o
-Telegram.
+Os painéis usam os contratos HTTP/SSE existentes. Ferramentas são identificadas quando observadas,
+e a atividade recente guarda até 50 eventos nesta sessão. A memória é consultada pelo próprio
+Jarvis: não existe ainda um navegador direto de registros nem catálogo remoto de skills.
+Histórico restaurado não repete efeitos de conclusão ou falas.
 
-Quando o bloco acaba de ser falado, o card desce para a fileira de baixo e vira miniatura; depois
-do último, o palco fica vazio e o orbe cresce e assume o centro — o Jarvis em repouso é um círculo
-livre, sem nada por cima.
+O rosto carrega Three.js separadamente, usa o perfil leve do aparelho, para em abas ocultas e
+respeita movimento reduzido. Há rosto 2D de reserva quando WebGL não está disponível; durante
+a visualização de objetos, a representação compacta do rosto fica estática.
 
-Angular 22 (standalone, zoneless, sem SSR). Nenhum segredo no build: a URL da API e o `HUD_TOKEN`
-são digitados na primeira tela e ficam no `localStorage` do navegador.
+Sem SSR ou segredos no build: URL da API e HUD_TOKEN são configurados no navegador.
 
 ## Google Sheets
 
@@ -303,13 +297,13 @@ npm run build       # build de produção
 
 ## Quando algo não aparece
 
-| Sintoma                          | Provável causa                                                                                                                                |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `token inválido` no rodapé       | `HUD_TOKEN` diferente do que está no `.env` do Jarvis                                                                                         |
-| `api fora do ar`                 | URL errada, Jarvis desligado, ou a origem não está em `HUD_ORIGEM`                                                                            |
-| Cards aparecem, mas ninguém fala | Falta o clique inicial (clique em **Briefing**) ou não há voz pt-BR no sistema                                                                 |
+| Sintoma                           | Provável causa                                                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `token inválido` no rodapé        | `HUD_TOKEN` diferente do que está no `.env` do Jarvis                                                                                         |
+| `api fora do ar`                  | URL errada, Jarvis desligado, ou a origem não está em `HUD_ORIGEM`                                                                            |
+| Cards aparecem, mas ninguém fala  | Falta o clique inicial (clique em **Briefing**) ou não há voz pt-BR no sistema                                                                |
 | Clicar **Briefing** não muda nada | Dentro de 60 s a API devolve o briefing anterior sem emitir SSE; o HUD toca o da resposta HTTP, então isso deveria funcionar — veja o console |
-| Card de notícia sem foto         | O feed não trouxe imagem, ou a CDN recusou o hotlink: o card tem estado próprio para isso                                                     |
+| Card de notícia sem foto          | O feed não trouxe imagem, ou a CDN recusou o hotlink: o card tem estado próprio para isso                                                     |
 
 ## Janelas e cards dirigidos pelo Jarvis
 

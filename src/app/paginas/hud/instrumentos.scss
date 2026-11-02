@@ -1,0 +1,28 @@
+.vinculo-central {
+  display: flex;
+  flex: 1;
+  min-width: 20px;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  color: #30b6d1;
+  opacity: 0.65;
+  pointer-events: none;
+}
+.vinculo-central i {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #2899b7);
+  width: min(130px, 10vw);
+}
+.vinculo-central i:last-child {
+  transform: rotate(180deg);
+}
+.vinculo-central app-icone-hud {
+  font-size: 23px;
+  filter: drop-shadow(0 0 5px #34dfff);
+}
+@media (max-width: 999px) {
+  .vinculo-central {
+    display: none;
+  }
+}
