@@ -45,13 +45,6 @@ afterEach(() => {
 describe('o palco do HUD', () => {
   beforeEach(() => {
     sessionStorage.clear();
-    vi.stubGlobal('HTMLDialogElement', HTMLDialogElement);
-    HTMLDialogElement.prototype.show = function () {
-      this.open = true;
-    };
-    HTMLDialogElement.prototype.close = function () {
-      this.open = false;
-    };
     // O jsdom não tem canvas; aqui o que se mede é o palco, não o desenho do orbe.
     vi.spyOn(OrbeComponent.prototype, 'ngAfterViewInit').mockImplementation(() => {});
     TestBed.configureTestingModule({
@@ -107,9 +100,7 @@ describe('o palco do HUD', () => {
     clima.click();
     tela.detectChanges();
     expect(tela.nativeElement.querySelector('.card-principal')).not.toBeNull();
-    expect(tela.nativeElement.querySelector('.card-principal .selo').textContent).toContain(
-      'CONSULTA',
-    );
+    expect(tela.nativeElement.querySelector('.selo').textContent).toContain('CONSULTA');
     expect(clima.getAttribute('aria-pressed')).toBe('true');
     expect(tela.nativeElement.querySelector('.orbe--livre')).toBeNull();
 
@@ -181,9 +172,7 @@ describe('o palco do HUD', () => {
   it('o diálogo só aparece com o chat aberto', () => {
     const tela = TestBed.createComponent(HudPage);
     tela.detectChanges();
-    expect(tela.nativeElement.querySelector('app-painel-hud').classList.contains('aberto')).toBe(
-      false,
-    );
+    expect(tela.nativeElement.querySelector('app-painel-hud').classList.contains('aberto')).toBe(false);
 
     tela.nativeElement.querySelector('[aria-controls="painel-hud"]').click();
     tela.detectChanges();
@@ -199,22 +188,12 @@ describe('o palco do HUD', () => {
     tela.componentInstance['rascunho'].set('Texto que ainda quero terminar');
     escuta.ditando.set(true);
     escuta.transcricao.set('Mostre a serotonina');
-    conversa.pensando({
-      id: 'voz-1',
-      canal: 'hud',
-      estado: 'processando',
-      texto: 'Mostre a serotonina',
-      iniciadoEm: '',
-    });
+    conversa.pensando({ id: 'voz-1', canal: 'hud', estado: 'processando', texto: 'Mostre a serotonina', iniciadoEm: '' });
     tela.detectChanges();
     expect(conversa.chatAberto()).toBe(false);
-    expect(tela.nativeElement.querySelector('app-painel-hud').classList.contains('aberto')).toBe(
-      false,
-    );
+    expect(tela.nativeElement.querySelector('app-painel-hud').classList.contains('aberto')).toBe(false);
     expect(tela.componentInstance['rascunho']()).toBe('Texto que ainda quero terminar');
-    expect(tela.nativeElement.querySelector('app-legenda-voz').textContent).toContain(
-      'Mostre a serotonina',
-    );
+    expect(tela.nativeElement.querySelector('app-legenda-voz').textContent).toContain('Mostre a serotonina');
   });
 
   it('interromper a narração para conversar mantém o card atual no palco', () => {
@@ -260,12 +239,8 @@ describe('o palco do HUD', () => {
     espera.motivo.set('confirmar o horário');
     espera.opcoes.set(['Agora', 'Mais tarde']);
     tela.detectChanges();
-    expect(tela.nativeElement.querySelector('.motivo-resposta').textContent).toContain(
-      'confirmar o horário',
-    );
-    expect(
-      tela.nativeElement.querySelector('[aria-label="Opções de resposta"] button').textContent,
-    ).toContain('Agora');
+    expect(tela.nativeElement.querySelector('.motivo-resposta').textContent).toContain('confirmar o horário');
+    expect(tela.nativeElement.querySelector('[aria-label="Opções de resposta"] button').textContent).toContain('Agora');
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(espera.fase()).toBe('inativa');
@@ -292,9 +267,7 @@ describe('o palco do HUD', () => {
     escuta.transcricao.set('amanhã às nove');
     tela.detectChanges();
     expect(tela.componentInstance['rascunho']()).toBe('');
-    expect(tela.nativeElement.querySelector('.falando').textContent).toContain(
-      'Ouvindo sua resposta',
-    );
+    expect(tela.nativeElement.querySelector('.falando').textContent).toContain('Ouvindo sua resposta');
     // A transcrição da resposta aparece no centro, com o indicador de escuta, e não na barra.
     const ouvindo = tela.nativeElement.querySelector('.ouvindo-resposta');
     expect(ouvindo.textContent).toContain('Jarvis está ouvindo');

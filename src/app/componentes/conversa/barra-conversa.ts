@@ -1,10 +1,8 @@
 import { Component, ElementRef, computed, input, model, output, viewChild } from '@angular/core';
-import { IconeHudComponent } from '../icone-hud/icone-hud';
 
 @Component({
   selector: 'app-barra-conversa',
-  imports: [IconeHudComponent],
-  host: { '[class.embutida]': 'embutida()', '[class.modo-dock]': 'dock()' },
+  host: { '[class.embutida]': 'embutida()' },
   template: ` <div class="barra" role="group" aria-label="Conversar com o Jarvis">
     <div class="compacta" [hidden]="expandida()">
       <button
@@ -32,39 +30,34 @@ import { IconeHudComponent } from '../icone-hud/icone-hud';
       <textarea
         #campo
         id="mensagem-jarvis"
-        [rows]="dock() ? 1 : 2"
+        rows="2"
         maxlength="8000"
         [value]="texto()"
         (input)="editar($event)"
         (keydown)="teclar($event)"
-        [placeholder]="dock() ? 'Fale ou digite…' : 'Escreva para o Jarvis…'"
+        placeholder="Escreva para o Jarvis…"
         aria-describedby="ajuda-conversa"
       ></textarea>
       <div class="acoes">
         @if (!embutida()) {
-          <button
-            type="button"
-            aria-label="Recolher conversa"
-            [disabled]="!!texto().trim() || ditando()"
-            (click)="aberta.set(false)"
-          >
-            Recolher
-          </button>
+        <button
+          type="button"
+          aria-label="Recolher conversa"
+          [disabled]="!!texto().trim() || ditando()"
+          (click)="aberta.set(false)"
+        >
+          Recolher
+        </button>
         }
         @if (vozDisponivel()) {
           <button
-            [class.microfone-dock]="dock()"
             type="button"
             (click)="microfone.emit()"
             [disabled]="ocupada()"
             [attr.aria-pressed]="ditando()"
             [attr.aria-label]="ditando() ? 'Cancelar ditado' : 'Ditar mensagem'"
           >
-            @if (dock()) {
-              <app-icone-hud nome="voz" />
-            } @else {
-              {{ ditando() ? 'Cancelar ditado' : 'Ditar' }}
-            }
+            {{ ditando() ? 'Cancelar ditado' : 'Ditar' }}
           </button>
         }
         <button
@@ -72,10 +65,7 @@ import { IconeHudComponent } from '../icone-hud/icone-hud';
           (click)="enviar.emit()"
           [disabled]="ocupada() || ditando() || !texto().trim()"
         >
-          @if (dock()) {
-            <app-icone-hud nome="automacao" />
-          }
-          {{ dock() ? 'Executar' : 'Enviar' }}
+          Enviar
         </button>
       </div>
       <p id="ajuda-conversa">
@@ -93,21 +83,10 @@ import { IconeHudComponent } from '../icone-hud/icone-hud';
     :host {
       display: block;
     }
-    :host.embutida .editor {
-      grid-template-columns: minmax(0, 1fr);
-      padding: 0.8rem;
-    }
-    :host.embutida .acoes {
-      justify-content: flex-end;
-      flex-wrap: wrap;
-    }
-    :host.embutida textarea {
-      font-size: 1rem;
-      min-height: 6rem;
-    }
-    :host.embutida button {
-      min-height: 44px;
-    }
+    :host.embutida .editor{grid-template-columns:minmax(0,1fr);padding:.8rem}
+    :host.embutida .acoes{justify-content:flex-end;flex-wrap:wrap}
+    :host.embutida textarea{font-size:1rem;min-height:6rem}
+    :host.embutida button{min-height:44px}
     [hidden] {
       display: none !important;
     }
@@ -233,151 +212,6 @@ import { IconeHudComponent } from '../icone-hud/icone-hud';
         min-height: 44px;
       }
     }
-    :host.modo-dock.embutida {
-      flex: 1;
-      min-width: 0;
-    }
-    :host.modo-dock.embutida .editor {
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      clip-path: none;
-      backdrop-filter: none;
-      gap: 0.5rem;
-    }
-    :host.modo-dock.embutida .rotulo,
-    :host.modo-dock.embutida #ajuda-conversa {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
-    :host.modo-dock.embutida textarea {
-      font:
-        14px/1.6 Arial,
-        sans-serif;
-      min-height: 46px;
-      height: 46px;
-      max-height: 110px;
-      padding: 11px 12px;
-      background: #03131e;
-      border: 1px solid #21566b;
-      border-radius: 5px;
-      resize: vertical;
-      color: #d7f5ff;
-      width: 100%;
-    }
-    :host.modo-dock.embutida .acoes {
-      display: flex;
-      flex-wrap: nowrap;
-      gap: 0.4rem;
-    }
-    :host.modo-dock.embutida button {
-      min-height: 44px;
-      clip-path: none;
-      border-radius: 4px;
-      letter-spacing: 0.03em;
-      text-transform: none;
-      font-size: 12px;
-      padding: 0.6rem 0.8rem;
-    }
-    :host.modo-dock.embutida button:last-child {
-      color: #9cf1ff;
-      background: #0c3549;
-      border-color: #3a9eb9;
-    }
-    @media (max-width: 600px) {
-      :host.modo-dock.embutida textarea {
-        font-size: 16px;
-      }
-      :host.modo-dock.embutida button {
-        padding: 0.6rem 0.7rem;
-      }
-    }
-    :host.modo-dock.embutida textarea {
-      background: transparent;
-      border: 0;
-      resize: none;
-      color: #d7f4ff;
-      font-size: 15px;
-      padding: 11px 6px;
-    }
-    :host.modo-dock.embutida textarea::placeholder {
-      color: #a0c4d8;
-      opacity: 1;
-    }
-    :host.modo-dock.embutida .acoes {
-      align-items: center;
-      gap: 20px;
-    }
-    :host.modo-dock.embutida .acoes .microfone-dock {
-      display: grid;
-      place-items: center;
-      width: 62px;
-      height: 62px;
-      min-height: 62px;
-      min-width: 62px;
-      padding: 12px;
-      border-radius: 50%;
-      border: 2px solid #4adfff;
-      background: radial-gradient(#073c55, #02131e 70%);
-      box-shadow:
-        0 0 0 5px #0a62843b,
-        0 0 18px #1bcfff66,
-        inset 0 0 13px #1683b966;
-      color: #62e9ff;
-      font-size: 27px;
-    }
-    :host.modo-dock.embutida .acoes .microfone-dock[aria-pressed='true'] {
-      border-color: #8bfff2;
-      color: #b8fff8;
-      box-shadow:
-        0 0 0 5px #117d8160,
-        0 0 25px #46ffdd88;
-    }
-    :host.modo-dock.embutida .acoes button:last-child {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      font-size: 14px;
-      color: #7eeeff;
-      border-radius: 14px;
-      background: linear-gradient(180deg, #073348b0, #031826);
-      padding: 10px 20px;
-      border-color: #237b9b;
-    }
-    :host.modo-dock.embutida .acoes button:last-child app-icone-hud {
-      font-size: 19px;
-    }
-    @media (max-width: 999px) {
-      :host.modo-dock.embutida .acoes {
-        gap: 10px;
-      }
-      :host.modo-dock.embutida .acoes .microfone-dock {
-        width: 48px;
-        min-width: 48px;
-        height: 48px;
-        min-height: 48px;
-        font-size: 22px;
-        padding: 9px;
-      }
-      :host.modo-dock.embutida .acoes button:last-child {
-        padding: 9px 12px;
-        font-size: 12px;
-      }
-      :host.modo-dock.embutida .acoes button:last-child app-icone-hud {
-        display: none;
-      }
-      :host.modo-dock.embutida textarea {
-        font-size: 16px;
-      }
-    }
   `,
 })
 export class BarraConversaComponent {
@@ -385,10 +219,7 @@ export class BarraConversaComponent {
   /** Quem guarda o estado é a página: a tela inteira muda conforme o chat está aberto ou não. */
   readonly aberta = model(false);
   readonly embutida = input(false);
-  readonly dock = input(false);
-  readonly expandida = computed(
-    () => this.embutida() || this.aberta() || this.ditando() || !!this.texto(),
-  );
+  readonly expandida = computed(() => this.embutida() || this.aberta() || this.ditando() || !!this.texto());
   private readonly campo = viewChild<ElementRef<HTMLTextAreaElement>>('campo');
   abrir(): void {
     this.aberta.set(true);

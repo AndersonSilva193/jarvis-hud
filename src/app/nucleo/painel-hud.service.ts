@@ -1,6 +1,6 @@
 import { Service, signal } from '@angular/core';
 
-export type PainelHud = 'conversa' | 'ferramentas' | 'memoria' | 'execucoes';
+export type PainelHud = 'conversa' | 'ferramentas';
 
 /** Uma única lateral, independente do ciclo de escuta e reprodução. */
 @Service()
