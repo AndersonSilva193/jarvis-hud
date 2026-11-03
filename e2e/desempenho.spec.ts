@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * FPS e chamadas de desenho de um objeto de 250 peças, com e sem os lotes instanciados — o "antes e
+ * FPS e chamadas de desenho de um objeto de 400 peças (o teto do servidor), com e sem os lotes instanciados — o "antes e
  * depois" do `LIMIAR_DE_INSTANCIAS`. Os números saem no console e no anexo do relatório; o teste só
  * exige o que não depende da máquina: que as séries virem lotes e que as chamadas caiam.
  *
@@ -15,16 +15,17 @@ const evento = (nome: string, dados: unknown) => `event:${nome}\ndata:${JSON.str
 
 interface Serie { id: string; forma: string; tamanho: number[]; cor: string; n: number; onde: (i: number) => number[]; rotacao?: (i: number) => number[] }
 
-/** Seis séries como as de um motor (dentes, parafusos, pistões, aletas, elos, válvulas) e 32 avulsas. */
+/** Seis séries como as de um motor (dentes, parafusos, pistões, aletas, elos, válvulas) e 92 avulsas. */
+const TOTAL = 400;
 const SERIES: Serie[] = [
   { id: 'dente', forma: 'box', tamanho: [0.18, 0.12, 0.3], cor: '#fbbf24', n: 60, onde: (i) => [Math.cos((i / 60) * 2 * Math.PI) * 2.2, -1.5, Math.sin((i / 60) * 2 * Math.PI) * 2.2], rotacao: (i) => [0, -(i * 6) % 180, 0] },
-  { id: 'parafuso', forma: 'cyl', tamanho: [0.05, 0.05, 0.3], cor: '#a78bfa', n: 40, onde: (i) => [Math.cos((i / 40) * 2 * Math.PI) * 1.6, 1.2, Math.sin((i / 40) * 2 * Math.PI) * 1.6] },
+  { id: 'parafuso', forma: 'cyl', tamanho: [0.05, 0.05, 0.3], cor: '#a78bfa', n: 60, onde: (i) => [Math.cos((i / 60) * 2 * Math.PI) * 1.6, 1.2, Math.sin((i / 40) * 2 * Math.PI) * 1.6] },
   { id: 'pistao', forma: 'cyl', tamanho: [0.28, 0.28, 0.5], cor: '#f472b6', n: 8, onde: (i) => [-1.4 + i * 0.4, 0.4, 0] },
-  { id: 'aleta', forma: 'box', tamanho: [0.04, 0.6, 1.2], cor: '#22d3ee', n: 30, onde: (i) => [-2.4 + i * 0.16, 2.2, 0] },
+  { id: 'aleta', forma: 'box', tamanho: [0.04, 0.6, 1.2], cor: '#22d3ee', n: 60, onde: (i) => [-2.4 + i * 0.08, 2.2, 0] },
   { id: 'elo', forma: 'tor', tamanho: [0.08, 0.02], cor: '#34d399', n: 60, onde: (i) => [-3 + i * 0.1, -2.2, 1.4], rotacao: (i) => [0, i % 2 ? 90 : 0, 0] },
-  { id: 'valvula', forma: 'cone', tamanho: [0.08, 0.3], cor: '#f87171', n: 20, onde: (i) => [-1.9 + i * 0.2, 1.7, -0.6] },
+  { id: 'valvula', forma: 'cone', tamanho: [0.08, 0.3], cor: '#f87171', n: 60, onde: (i) => [-1.9 + i * 0.065, 1.7, -0.6] },
 ];
-const AVULSAS = 250 - SERIES.reduce((soma, s) => soma + s.n, 0);
+const AVULSAS = TOTAL - SERIES.reduce((soma, s) => soma + s.n, 0);
 
 function pecas(): unknown[] {
   const lista: unknown[] = [];
@@ -41,9 +42,9 @@ function pecas(): unknown[] {
 }
 
 const STREAM =
-  evento('meta', { nome: 'Banco de prova', categoria: 'mecanica', descricao: 'Duzentas e cinquenta peças em séries.' }) +
+  evento('meta', { nome: 'Banco de prova', categoria: 'mecanica', descricao: 'Quatrocentas peças em séries.' }) +
   pecas().map((p) => evento('peca', p)).join('') +
-  evento('fim', { pecas: 250, avisos: 0, status: 'completo' });
+  evento('fim', { pecas: TOTAL, avisos: 0, status: 'completo' });
 
 interface Medida { fps: number; chamadas: number; pecas: number; lotes: number }
 
@@ -54,7 +55,7 @@ async function medir(page: Page, consulta: string): Promise<Medida[]> {
   await page.getByRole('button', { name: 'Holograma', exact: true }).click();
   await page.getByLabel('Gerar objeto').fill('banco de prova');
   await page.getByRole('button', { name: 'Gerar' }).click();
-  await expect(page.locator('app-holograma-view .estado')).toHaveText('250 peças', { timeout: 20_000 });
+  await expect(page.locator('app-holograma-view .estado')).toHaveText(`${TOTAL} peças`, { timeout: 20_000 });
   // A câmera enquadra e as entradas terminam; depois disso cada segundo é um quadro igual ao outro.
   await page.waitForTimeout(2_500);
   // As duas capturas lado a lado mostram que o lote desenha o mesmo que a peça avulsa.
@@ -71,7 +72,7 @@ async function medir(page: Page, consulta: string): Promise<Medida[]> {
 
 const mediana = (valores: number[]) => [...valores].sort((a, b) => a - b)[Math.floor(valores.length / 2)]!;
 
-test('250 peças: os lotes instanciados cortam as chamadas de desenho e o FPS não cai', async ({ page }) => {
+test('400 peças: os lotes instanciados cortam as chamadas de desenho e o FPS não cai', async ({ page }) => {
   test.setTimeout(150_000);
   const erros: string[] = []; page.on('pageerror', (e) => erros.push(e.message));
   await page.addInitScript(() => {
@@ -103,7 +104,7 @@ test('250 peças: os lotes instanciados cortam as chamadas de desenho e o FPS n�
     const antes = resumir(await medir(page, '?medir=1&instancias=0'));
     const depois = resumir(await medir(page, '?medir=1'));
     resultados[`cpu ${lentidao}x`] = { antes, depois };
-    console.log(`Holograma de 250 peças, CPU ${lentidao}x — antes: ${JSON.stringify(antes)} · depois: ${JSON.stringify(depois)}`);
+    console.log(`Holograma de ${TOTAL} peças, CPU ${lentidao}x — antes: ${JSON.stringify(antes)} · depois: ${JSON.stringify(depois)}`);
     expect(antes.lotes).toBe(0);
     expect(depois.lotes).toBe(SERIES.length);
     expect(depois.chamadas).toBeLessThan(antes.chamadas / 2);

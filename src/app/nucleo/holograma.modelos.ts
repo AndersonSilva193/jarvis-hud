@@ -314,7 +314,11 @@ export type ComandoHolograma = { rapido: boolean } & (
 );
 
 const SEM_COMPLEMENTO = ['abrir', 'fechar', 'parar', 'mostrar_tudo', 'resetar', 'cancelar_geracao'] as const;
-const MAX_ALVOS = 250;
+/**
+ * O teto de peças do servidor (`HologramaValidator.MAX_PECAS`). Tem de acompanhá-lo: o servidor não
+ * corta a lista de ids, e comando com mais alvos que isto é ignorado calado.
+ */
+export const MAX_ALVOS = 400;
 
 function ids(v: unknown): string[] | null {
   if (!Array.isArray(v) || v.length > MAX_ALVOS) return null;

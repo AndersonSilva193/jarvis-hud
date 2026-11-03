@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { lerComandoHolograma } from './holograma.modelos';
+import { lerComandoHolograma, MAX_ALVOS } from './holograma.modelos';
 
 describe('lerComandoHolograma', () => {
+  it('aceita filtro com tantos alvos quanto o teto de peças do servidor, e nenhum a mais', () => {
+    expect(MAX_ALVOS).toBe(400);
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `dente_${i + 1}`);
+    expect(lerComandoHolograma({ acao: 'esconder', dados: { grupos: [], pecas: ids(400) } }))
+      .toEqual({ acao: 'esconder', rapido: false, alvo: { grupos: [], pecas: ids(400) } });
+    expect(lerComandoHolograma({ acao: 'esconder', dados: { grupos: [], pecas: ids(401) } })).toBeNull();
+  });
+
   it('lê as ações com os complementos que o servidor resolveu', () => {
     expect(lerComandoHolograma({ acao: 'explodir', dados: { fator: 0.8 }, rapido: false }))
       .toEqual({ acao: 'explodir', rapido: false, fator: 0.8 });
