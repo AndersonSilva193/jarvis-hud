@@ -54,6 +54,7 @@ describe('o palco do HUD', () => {
           provide: JarvisApiService,
           useValue: {
             ultimoBriefing: async () => null,
+            modoIa: async () => null,
             baixarAnexo: async () => new Blob(['x'], { type: 'image/png' }),
           },
         },

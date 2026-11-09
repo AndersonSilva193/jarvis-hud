@@ -15,6 +15,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import { HologramaViewComponent } from '../../componentes/holograma/holograma-view';
+import { IndicadorModeloComponent } from '../../componentes/indicador-modelo/indicador-modelo';
 import { InicializacaoComponent } from '../../componentes/inicializacao/inicializacao';
 import { OrbeComponent, type EstadoOrbe } from '../../componentes/orbe/orbe';
 import { SondasComponent } from '../../componentes/sondas/sondas';
@@ -28,6 +29,7 @@ import { HologramaEstadoService } from '../../nucleo/holograma-estado.service';
 import { HologramaService } from '../../nucleo/holograma.service';
 import { InicializacaoService } from '../../nucleo/inicializacao.service';
 import { JarvisEventosService } from '../../nucleo/jarvis-eventos.service';
+import { ModoIaService } from '../../nucleo/modo-ia.service';
 import { VozService } from '../../nucleo/voz.service';
 import { VozCotaService } from '../../nucleo/voz-cota.service';
 import { contextoBriefing } from '../../nucleo/horario-briefing';
@@ -62,6 +64,7 @@ const DESCANSO_DA_ATIVACAO_MS = 3_000;
     SondasComponent,
     InicializacaoComponent,
     HologramaViewComponent,
+    IndicadorModeloComponent,
     RouterLink,
     NgTemplateOutlet,
   ],
@@ -94,6 +97,7 @@ export class HudPage implements OnInit, OnDestroy {
   /** Conta ao servidor como está o holograma; injetar já o liga. */
   private readonly estadoDoHolograma = inject(HologramaEstadoService);
   private readonly api = inject(JarvisApiService);
+  private readonly modoIa = inject(ModoIaService);
 
   protected readonly pedindo = signal(false);
   protected readonly erro = signal('');
@@ -263,6 +267,7 @@ export class HudPage implements OnInit, OnDestroy {
       // O despertar por palmas achando a tela já aberta: só a frase curta, sem card nenhum.
       falar: (fala) => void this.voz.falar(fala.texto),
       holograma: (comando) => this.comandosDoHolograma.aplicar(comando),
+      modoIa: (estado) => this.modoIa.receber(estado),
     });
 
     // Abriu com ?inicio=1, ou seja: o agente do PC acabou de acender esta tela por palmas ou por

@@ -8,6 +8,7 @@
   <header class="cabecalho">
     <h1 class="nome-hud"><a class="marca" routerLink="/">J.A.R.V.I.S.<span>ASSISTENTE PESSOAL</span></a></h1>
     <span class="conexao"><span class="luz" [class.luz--online]="eventos.status() === 'online'" aria-hidden="true"></span>{{ estadoDaConexao() }}</span>
+    <app-indicador-modelo />
     @if (holograma.aberto()) { <ng-container [ngTemplateOutlet]="estadoJarvis" /> }
     <span class="sinal-voz" [class.sinal-voz--ligado]="escuta.disponivel && escuta.ligada()" [class.sinal-voz--ativo]="voz.falando() || escuta.ouvindo()">
       <span class="barras" aria-hidden="true"><i></i><i></i><i></i><i></i></span>{{ sinalDeVoz() }}

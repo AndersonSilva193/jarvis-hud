@@ -9,6 +9,7 @@ import type { Introducao } from './inicializacao.modelos';
 import type { RespostaVoz, StatusVoz } from './voz.modelos';
 import type { EstadoDoHolograma } from './holograma.modelos';
 import type { EstadoTela } from './tela.modelos';
+import type { ModoIa } from './modo-ia.modelos';
 
 /** Por que uma tentativa de conexão não deu certo — o suficiente para a tela explicar. */
 export type ResultadoTeste = 'ok' | 'token-invalido' | 'api-inacessivel' | 'conteudo-misto';
@@ -209,6 +210,20 @@ export class JarvisApiService {
   iniciarGoogle(): Promise<{ url: string }> {
     return firstValueFrom(this.http.post<{ url: string }>(
       this.config.rota('/api/google/oauth/iniciar'), null, { headers: this.autorizacao() }));
+  }
+
+  /** O modo da IA e quem está pensando; quem chama valida o corpo com `lerModoIa`. */
+  modoIa(): Promise<unknown> {
+    return firstValueFrom(
+      this.http.get<unknown>(this.config.rota('/api/ia/modo'), { headers: this.autorizacao() }),
+    );
+  }
+
+  /** Só pede a troca: a confirmação chega pelo evento SSE `ia.modo`. */
+  definirModoIa(modo: ModoIa): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(this.config.rota('/api/ia/modo'), { modo }, { headers: this.autorizacao() }),
+    );
   }
 
   private autorizacao(): HttpHeaders {

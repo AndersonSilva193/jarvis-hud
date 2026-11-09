@@ -1,0 +1,158 @@
+@use '../../estilos/hud' as hud;
+
+// --tinta é a cor de quem está pensando: ciano no PC, azul-energia no Claude, âmbar no fallback.
+:host {
+  --tinta: #8fb6d8;
+  position: relative;
+  z-index: 40;
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.gatilho {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.75rem;
+  font: 500 0.62rem hud.$mono;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--tinta);
+  // Fundo quase preto de propósito: o azul-energia só passa de 4,5:1 sobre ele.
+  background: rgba(2, 8, 20, 0.85);
+  border: 1px solid color-mix(in srgb, var(--tinta) 45%, transparent);
+  border-radius: 0;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &:hover {
+    box-shadow: 0 0 14px color-mix(in srgb, var(--tinta) 30%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+}
+
+.gatilho--local {
+  --tinta: #{hud.$ciano};
+}
+
+.gatilho--claude {
+  --tinta: #{hud.$azul-energia};
+}
+
+.gatilho--fallback {
+  border-color: hud.$alerta;
+}
+
+.ponto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tinta);
+  box-shadow: 0 0 8px var(--tinta);
+}
+
+.atencao {
+  color: hud.$alerta;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.painel {
+  @include hud.moldura(8px);
+  position: absolute;
+  inset: calc(100% + 0.35rem) auto auto 0;
+  min-width: 11rem;
+  padding: 0.4rem;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+
+  &:not([hidden]) {
+    opacity: 1;
+    transform: none;
+    @starting-style {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+}
+
+.nota {
+  margin: 0.2rem 0.4rem 0.45rem;
+  font: 500 0.6rem hud.$mono;
+  letter-spacing: 0.08em;
+  color: hud.$alerta;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  font: 500 0.64rem hud.$mono;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-align: left;
+  color: hud.$texto;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+
+  // A marca do modo atual: um quadrado aceso à esquerda, vazio nos outros.
+  &::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border: 1px solid hud.$ciano-fraco;
+  }
+
+  &[aria-checked='true']::before {
+    background: hud.$ciano;
+    border-color: hud.$ciano;
+  }
+
+  &:hover,
+  &:focus-visible {
+    border-color: hud.$ciano-fraco;
+    background: rgba(95, 242, 255, 0.08);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: -2px;
+  }
+}
+
+// Sem espaço quando vazio; logo abaixo do selo quando há o que avisar.
+.aviso {
+  position: absolute;
+  inset: calc(100% + 0.3rem) auto auto 0;
+  margin: 0;
+  white-space: nowrap;
+  font: 500 0.6rem hud.$mono;
+  letter-spacing: 0.08em;
+  color: hud.$alerta;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gatilho,
+  .painel {
+    transition: none;
+  }
+}

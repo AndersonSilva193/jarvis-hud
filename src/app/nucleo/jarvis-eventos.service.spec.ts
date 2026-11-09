@@ -97,4 +97,13 @@ describe('SSE de conversa', () => {
     fonte.emitir('tela.comando', { acao: 'pausar', alvo: 'c123', valor: '' }); expect(ouvintes.comando).toHaveBeenCalledWith({ acao: 'pausar', alvo: 'c123', valor: '' });
     fonte.emitir('tela.comando', { acao: 'executar_script', valor: 'alert(1)' }); expect(ouvintes.comando).toHaveBeenCalledTimes(1);
   });
+  it('entrega ia.modo validado e descarta o que foge do contrato', () => {
+    const modoIa = vi.fn();
+    eventos.conectar({ ...ouvintes, modoIa });
+    const fonte = Fonte.criadas[0];
+    fonte.emitir('ia.modo', { modo: 'AUTO', provedorEfetivo: 'claude', modelo: 'Haiku', motivoFallback: 'PC sem VRAM livre' });
+    expect(modoIa).toHaveBeenCalledWith({ modo: 'AUTO', provedorEfetivo: 'claude', modelo: 'Haiku', motivoFallback: 'PC sem VRAM livre' });
+    fonte.emitir('ia.modo', { modo: 'TURBO', provedorEfetivo: 'local', modelo: 'Qwen 9B' });
+    expect(modoIa).toHaveBeenCalledOnce();
+  });
 });

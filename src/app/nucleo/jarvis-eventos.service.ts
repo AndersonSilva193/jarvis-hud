@@ -6,6 +6,7 @@ import type { PedidoConversa, ProgressoConversa, RespostaConversa } from './conv
 import type { Briefing } from './briefing.modelos';
 import { lerCardTela, lerComandoTela, type CardTela, type ComandoTela } from './tela.modelos';
 import { lerComandoHolograma, type ComandoHolograma } from './holograma.modelos';
+import { lerModoIa, type EstadoModoIa } from './modo-ia.modelos';
 
 export type StatusConexao = 'desligado' | 'conectando' | 'online' | 'reconectando';
 
@@ -28,6 +29,8 @@ export interface OuvintesDoBriefing {
   falar?: (fala: FalaDaTela) => void;
   /** Uma ordem do Jarvis para a cena do holograma (Fase 6). */
   holograma?: (comando: ComandoHolograma) => void;
+  /** Qual IA está pensando agora; é a única coisa que muda o indicador depois do GET inicial. */
+  modoIa?: (estado: EstadoModoIa) => void;
 }
 
 /** O corpo do evento `voz.falar`. */
@@ -131,6 +134,7 @@ export class JarvisEventosService {
     receber<unknown>('tela.comando', dados => { const comando = lerComandoTela(dados); if (comando) this.ouvintes?.comando?.(comando); });
     receber<unknown>('voz.falar', dados => { const fala = lerFalaDaTela(dados); if (fala) this.ouvintes?.falar?.(fala); });
     receber<unknown>('holograma.comando', dados => { const comando = lerComandoHolograma(dados); if (comando) this.ouvintes?.holograma?.(comando); });
+    receber<unknown>('ia.modo', dados => { const estado = lerModoIa(dados); if (estado) this.ouvintes?.modoIa?.(estado); });
 
     fonte.onerror = () => {
       if (this.fonte !== fonte) return;
